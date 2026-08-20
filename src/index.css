@@ -343,6 +343,13 @@ table {
   margin-bottom: 1.5rem;
 }
 
+.summary-cards-single,
+.summary-cards:has(> .summary-card:only-child) {
+  grid-template-columns: 1fr;
+  max-width: 320px;
+  width: 100%;
+}
+
 .summary-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);

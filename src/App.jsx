@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
+import CloudSyncModal from './components/CloudSyncModal';
+import { isCloudConfigured, initFirebase } from './services/firebase';
 import OverviewPage from './pages/OverviewPage';
 import ExamesPage from './pages/ExamesPage';
 import FluxoCaixaPage from './pages/FluxoCaixaPage';
@@ -13,6 +15,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [prefillDetalhe, setPrefillDetalhe] = useState(null);
+  const [cloudModalOpen, setCloudModalOpen] = useState(false);
+  const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    initFirebase();
+    setCloudConnected(isCloudConfigured());
+  }, []);
 
   const handleNavigateToDetalhes = (examData) => {
     setPrefillDetalhe(examData);
@@ -70,6 +80,16 @@ export default function App() {
             <div className="sidebar-logo" style={{ width: '32px', height: '32px', fontSize: 'var(--text-sm)' }}>ED</div>
             <span className="sidebar-brand-name" style={{ fontSize: 'var(--text-base)' }}>Endodiagnose</span>
           </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: 'var(--text-xs)' }}
+            onClick={() => setCloudModalOpen(true)}
+            title="Nuvem & Backup"
+          >
+            <span>{cloudConnected ? '🟢' : '☁️'}</span>
+            <span>{cloudConnected ? 'Nuvem' : 'Backup'}</span>
+          </button>
         </header>
 
         <Sidebar
@@ -77,12 +97,26 @@ export default function App() {
           onTabChange={setActiveTab}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          onOpenCloudModal={() => setCloudModalOpen(true)}
+          isCloudConnected={cloudConnected}
         />
-        <main className="main-content" key={activeTab}>
+        <main className="main-content" key={`${activeTab}-${refreshKey}`}>
           <ErrorBoundary>
             {renderPage()}
           </ErrorBoundary>
         </main>
+
+        <CloudSyncModal
+          isOpen={cloudModalOpen}
+          onClose={() => {
+            setCloudModalOpen(false);
+            setCloudConnected(isCloudConfigured());
+          }}
+          onDataUpdated={() => {
+            setRefreshKey((k) => k + 1);
+            setCloudConnected(isCloudConfigured());
+          }}
+        />
       </div>
     </ErrorBoundary>
   );

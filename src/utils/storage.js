@@ -1,5 +1,6 @@
 // Storage utility for Clínica Endodiagnose Dashboard
-// Uses localStorage for persistence
+// Uses localStorage for persistence with optional Firebase Cloud Firestore synchronization
+import { saveToCloud, deleteFromCloud } from '../services/firebase';
 
 const STORAGE_KEYS = {
   exames: 'endodiagnose_exames',
@@ -87,11 +88,31 @@ export function setData(module, data) {
   localStorage.setItem(STORAGE_KEYS[module], JSON.stringify(data));
 }
 
+export const MODULE_KEYS = Object.keys(STORAGE_KEYS);
+
+export function getAllData() {
+  const result = {};
+  MODULE_KEYS.forEach((m) => {
+    result[m] = getData(m);
+  });
+  return result;
+}
+
+export function restoreAllData(allData) {
+  if (!allData || typeof allData !== 'object') return;
+  MODULE_KEYS.forEach((m) => {
+    if (Array.isArray(allData[m])) {
+      setData(m, allData[m]);
+    }
+  });
+}
+
 export function addItem(module, item) {
   const data = getData(module);
   const newItem = { ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
   data.push(newItem);
   setData(module, data);
+  saveToCloud(module, newItem);
   return newItem;
 }
 
@@ -101,6 +122,7 @@ export function updateItem(module, id, updates) {
   if (index === -1) return null;
   data[index] = { ...data[index], ...updates, updatedAt: new Date().toISOString() };
   setData(module, data);
+  saveToCloud(module, data[index]);
   return data[index];
 }
 
@@ -108,6 +130,7 @@ export function deleteItem(module, id) {
   const data = getData(module);
   const filtered = data.filter((item) => item.id !== id);
   setData(module, filtered);
+  deleteFromCloud(module, id);
   return filtered;
 }
 

@@ -79,7 +79,7 @@ const navItems = [
   },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, isOpen, onClose }) {
+export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, isCloudConnected }) {
   const handleItemClick = (id) => {
     onTabChange(id);
     if (onClose) onClose();
@@ -123,6 +123,30 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose }) {
             </button>
           ))}
         </nav>
+
+        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-subtle)' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              background: isCloudConnected ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface-elevated)',
+              borderColor: isCloudConnected ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)',
+              color: isCloudConnected ? 'var(--accent-emerald)' : 'var(--text-primary)',
+            }}
+            onClick={() => {
+              if (onClose) onClose();
+              if (onOpenCloudModal) onOpenCloudModal();
+            }}
+          >
+            <span>{isCloudConnected ? '🟢' : '☁️'}</span>
+            <span>{isCloudConnected ? 'Nuvem Conectada' : 'Salvar na Nuvem'}</span>
+          </button>
+        </div>
 
         <div className="sidebar-footer">
           Clínica Endodiagnose © {new Date().getFullYear()}

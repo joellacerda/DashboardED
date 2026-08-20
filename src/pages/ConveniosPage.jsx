@@ -227,7 +227,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       </div>
 
       <div className="page-container">
-        <div className="summary-cards">
+        <div className="summary-cards summary-cards-single">
           <div className="summary-card card-accent-blue">
             <div className="summary-card-header">
               <span className="summary-card-label">Exames no Período</span>
@@ -235,24 +235,6 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
             </div>
             <div className="summary-card-value">{filtered.length}</div>
             <div className="summary-card-footer">{period.label}</div>
-          </div>
-          <div className="summary-card card-accent-purple">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Convênios Diferentes</span>
-              <div className="summary-card-icon purple">📋</div>
-            </div>
-            <div className="summary-card-value">{conveniosOptions.length}</div>
-            <div className="summary-card-footer">Convênios parceiros</div>
-          </div>
-          <div className="summary-card card-accent-emerald">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Procedimentos Distintos</span>
-              <div className="summary-card-icon">🩺</div>
-            </div>
-            <div className="summary-card-value">
-              {new Set(filtered.map((e) => e.exame)).size}
-            </div>
-            <div className="summary-card-footer">Tipos de exames no período</div>
           </div>
         </div>
 

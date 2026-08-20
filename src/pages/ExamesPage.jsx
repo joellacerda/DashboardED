@@ -174,7 +174,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       </div>
 
       <div className="page-container">
-        <div className="summary-cards">
+        <div className="summary-cards summary-cards-single">
           <div className="summary-card card-accent-emerald">
             <div className="summary-card-header">
               <span className="summary-card-label">Exames no Período</span>
