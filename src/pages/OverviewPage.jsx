@@ -115,7 +115,7 @@ export default function OverviewPage() {
       </div>
 
       <div className="page-container">
-        <div className="summary-cards">
+        <div className="summary-cards summary-cards-compact">
           <div className="summary-card card-accent-emerald">
             <div className="summary-card-header">
               <span className="summary-card-label">Exames no Período</span>
@@ -125,13 +125,13 @@ export default function OverviewPage() {
               {examesParticularesInPeriod.length + examesConvenioInPeriod.length}
             </div>
             <div className="summary-card-footer">
-              {examesParticularesInPeriod.length} particulares | {examesConvenioInPeriod.length} convênios
+              {examesParticularesInPeriod.length} particulares · {examesConvenioInPeriod.length} convênios
             </div>
           </div>
 
           <div className="summary-card card-accent-blue">
             <div className="summary-card-header">
-              <span className="summary-card-label">Saldo Período (16-15)</span>
+              <span className="summary-card-label">Saldo do Período</span>
               <div className="summary-card-icon blue">💰</div>
             </div>
             <div className={`summary-card-value ${saldo >= 0 ? 'value-positive' : 'value-negative'}`}>
@@ -140,35 +140,19 @@ export default function OverviewPage() {
             <div className="summary-card-footer">{period.label}</div>
           </div>
 
-          <div className="summary-card card-accent-emerald">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Taxa Clínica no Período</span>
-              <div className="summary-card-icon">🏥</div>
-            </div>
-            <div className="summary-card-value value-positive">{formatCurrency(totalClinica)}</div>
-            <div className="summary-card-footer">Entrada integral no período</div>
-          </div>
-
           <div className="summary-card card-accent-amber">
             <div className="summary-card-header">
-              <span className="summary-card-label">Acessórios & Biópsias</span>
+              <span className="summary-card-label">Receita Clínica</span>
               <div className="summary-card-icon amber">🩺</div>
             </div>
             <div className="summary-card-value value-positive">
-              {formatCurrency(totalAcessorios + totalBiopsia)}
+              {formatCurrency(totalClinica + totalAcessorios + totalBiopsia + totalHonorariosPeriodo)}
             </div>
-            <div className="summary-card-footer">
-              Acess: {formatCurrency(totalAcessorios)} | Bióp: {formatCurrency(totalBiopsia)}
+            <div className="summary-card-footer summary-card-footer-detailed">
+              <span>Clínica: {formatCurrency(totalClinica)}</span>
+              <span>Acess/Bióp: {formatCurrency(totalAcessorios + totalBiopsia)}</span>
+              <span>Honorários: {formatCurrency(totalHonorariosPeriodo)}</span>
             </div>
-          </div>
-
-          <div className="summary-card card-accent-purple">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Honorários no Período</span>
-              <div className="summary-card-icon purple">👨‍⚕️</div>
-            </div>
-            <div className="summary-card-value">{formatCurrency(totalHonorariosPeriodo)}</div>
-            <div className="summary-card-footer">Parcelas caídas no período</div>
           </div>
         </div>
 
