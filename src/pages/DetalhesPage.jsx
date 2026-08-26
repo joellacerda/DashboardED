@@ -467,11 +467,13 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     { key: 'paciente', label: 'Paciente' },
     { key: 'tipoExame', label: 'Tipo de Exame' },
     { key: 'medico', label: 'Médico' },
-    { key: 'formaPagamento', label: 'Forma Pagamento', accessor: (item) => {
-      const pags = migrateLegacyPayment(item);
-      if (pags.length === 1) return `${pags[0].forma} ${pags[0].parcelas}x`;
-      return pags.map((p) => `${p.forma} ${p.parcelas}x`).join(' + ');
-    }},
+    {
+      key: 'formaPagamento', label: 'Forma Pagamento', accessor: (item) => {
+        const pags = migrateLegacyPayment(item);
+        if (pags.length === 1) return `${pags[0].forma} ${pags[0].parcelas}x`;
+        return pags.map((p) => `${p.forma} ${p.parcelas}x`).join(' + ');
+      }
+    },
     {
       key: 'valorPagamento', label: 'Pagamento', accessor: (item) =>
         isDateInPeriod(item.data, period) ? formatCurrency(item.valorPagamento) : '—'
@@ -500,10 +502,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       key: 'valorBiopsia', label: 'Biópsia', accessor: (item) =>
         isDateInPeriod(item.data, period) ? formatCurrency(item.valorBiopsia) : '—'
     },
-    { key: 'numParcelas', label: 'Parcelas', accessor: (item) => {
-      const pags = migrateLegacyPayment(item);
-      return pags.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
-    }},
+    {
+      key: 'numParcelas', label: 'Parcelas', accessor: (item) => {
+        const pags = migrateLegacyPayment(item);
+        return pags.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
+      }
+    },
     { key: 'honorariosMedicos', label: 'Hon. Total', accessor: (item) => formatCurrency(item.honorariosMedicos) },
     {
       key: 'honorarioMensal', label: 'Hon. no Período', accessor: (item) =>
@@ -551,7 +555,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               <div className="summary-card-icon">🏥</div>
             </div>
             <div className="summary-card-value value-positive">{formatCurrency(totalClinicaPeriodo)}</div>
-            <div className="summary-card-footer">Entra no período do exame</div>
           </div>
           <div className="summary-card card-accent-purple">
             <div className="summary-card-header">
@@ -559,7 +562,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               <div className="summary-card-icon purple">👨‍⚕️</div>
             </div>
             <div className="summary-card-value">{formatCurrency(totalHonorariosPeriodo)}</div>
-            <div className="summary-card-footer">Parcelas caídas no período</div>
           </div>
           <div className="summary-card card-accent-blue">
             <div className="summary-card-header">
@@ -567,7 +569,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               <div className="summary-card-icon blue">💳</div>
             </div>
             <div className="summary-card-value">{formatCurrency(totalPagamento)}</div>
-            <div className="summary-card-footer">{examsInPeriod.length} exame(s) realizados no período</div>
           </div>
           <div className="summary-card card-accent-red">
             <div className="summary-card-header">

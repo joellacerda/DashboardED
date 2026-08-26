@@ -7,6 +7,7 @@ export const DEFAULT_EXAMES = [
   'PLASMA DE ARGÔNIO',
   'ECOENDOSCOPIA',
   'ESD',
+  'RETORNO',
 ];
 
 export function roundCurrency(value) {

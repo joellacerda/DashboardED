@@ -234,7 +234,6 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               <div className="summary-card-icon blue">🏢</div>
             </div>
             <div className="summary-card-value">{filtered.length}</div>
-            <div className="summary-card-footer">{period.label}</div>
           </div>
         </div>
 

@@ -125,7 +125,7 @@ export default function OverviewPage() {
               {examesParticularesInPeriod.length + examesConvenioInPeriod.length}
             </div>
             <div className="summary-card-footer">
-              {examesParticularesInPeriod.length} particulares · {examesConvenioInPeriod.length} convênios
+              {examesParticularesInPeriod.length} particulares · {examesConvenioInPeriod.length} por convênio
             </div>
           </div>
 
@@ -137,7 +137,6 @@ export default function OverviewPage() {
             <div className={`summary-card-value ${saldo >= 0 ? 'value-positive' : 'value-negative'}`}>
               {formatCurrency(saldo)}
             </div>
-            <div className="summary-card-footer">{period.label}</div>
           </div>
 
           <div className="summary-card card-accent-amber">
@@ -146,12 +145,7 @@ export default function OverviewPage() {
               <div className="summary-card-icon amber">🩺</div>
             </div>
             <div className="summary-card-value value-positive">
-              {formatCurrency(totalClinica + totalAcessorios + totalBiopsia + totalHonorariosPeriodo)}
-            </div>
-            <div className="summary-card-footer summary-card-footer-detailed">
-              <span>Clínica: {formatCurrency(totalClinica)}</span>
-              <span>Acess/Bióp: {formatCurrency(totalAcessorios + totalBiopsia)}</span>
-              <span>Honorários: {formatCurrency(totalHonorariosPeriodo)}</span>
+              {formatCurrency(totalClinica)}
             </div>
           </div>
         </div>
@@ -208,7 +202,7 @@ export default function OverviewPage() {
           </div>
 
           <div className="chart-card">
-            <h3 className="chart-card-title">Fluxo de Caixa — Período Selecionado ({period.label})</h3>
+            <h3 className="chart-card-title">Fluxo de Caixa</h3>
             <div className="bar-chart">
               <div className="bar-row">
                 <span className="bar-label">Entradas</span>

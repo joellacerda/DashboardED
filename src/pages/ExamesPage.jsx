@@ -181,7 +181,6 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
               <div className="summary-card-icon">🏥</div>
             </div>
             <div className="summary-card-value">{filtered.length}</div>
-            <div className="summary-card-footer">{period.label}</div>
           </div>
         </div>
 
