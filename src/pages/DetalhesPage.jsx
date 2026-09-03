@@ -94,17 +94,17 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   const medicosOptions = useMemo(() => {
     const list = getData('medicos') || [];
-    const set = new Set(list.map((m) => m.nome.trim()));
+    const set = new Set(list.map((m) => m.nome.trim().toUpperCase()));
 
     const exames = getData('exames') || [];
     const detalhes = getData('detalhesExames') || [];
 
     exames.forEach((e) => {
-      if (e.medico && e.medico.trim()) set.add(e.medico.trim());
+      if (e.medico && e.medico.trim()) set.add(e.medico.trim().toUpperCase());
     });
     detalhes.forEach((d) => {
-      if (d.medico && d.medico.trim()) set.add(d.medico.trim());
-      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim());
+      if (d.medico && d.medico.trim()) set.add(d.medico.trim().toUpperCase());
+      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -116,10 +116,10 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     const detalhes = getData('detalhesExames') || [];
 
     exames.forEach((e) => {
-      if (e.exame && e.exame.trim()) set.add(e.exame.trim());
+      if (e.exame && e.exame.trim()) set.add(e.exame.trim().toUpperCase());
     });
     detalhes.forEach((d) => {
-      if (d.tipoExame && d.tipoExame.trim()) set.add(d.tipoExame.trim());
+      if (d.tipoExame && d.tipoExame.trim()) set.add(d.tipoExame.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -238,10 +238,11 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     const valorTaxa = Number(detalheItem.taxaClinica || 0);
     const keyTaxa = `${detalheItem.id}_taxa`;
     const existingTaxa = fluxoList.find((f) => f.detalheId === keyTaxa || f.detalheId === detalheItem.id);
+    const pacienteNome = detalheItem.paciente ? detalheItem.paciente.trim().toUpperCase() : '';
 
     const entryTaxa = {
       data: detalheItem.data,
-      nome: `Taxa Clínica — ${detalheItem.paciente}`,
+      nome: `TAXA DE CLÍNICA — ${pacienteNome}`,
       tipo: 'entrada',
       categoria: 'Exames / Procedimentos',
       valor: valorTaxa,
@@ -265,7 +266,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
     const entryAcess = {
       data: detalheItem.data,
-      nome: `Valor de Acessórios — ${detalheItem.paciente}`,
+      nome: `VALOR DE ACESSÓRIOS — ${pacienteNome}`,
       tipo: 'entrada',
       categoria: 'Venda de Materiais',
       valor: valorAcess,
@@ -289,7 +290,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
     const entryBiop = {
       data: detalheItem.data,
-      nome: `Biópsia — ${detalheItem.paciente}`,
+      nome: `BIÓPSIA — ${pacienteNome}`,
       tipo: 'entrada',
       categoria: 'Exames / Procedimentos',
       valor: valorBiop,
@@ -326,6 +327,10 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
     const sanitizedForm = {
       ...form,
+      paciente: form.paciente.trim().toUpperCase(),
+      tipoExame: form.tipoExame.trim().toUpperCase(),
+      medico: form.medico.trim().toUpperCase(),
+      medico2: form.medico2 ? form.medico2.trim().toUpperCase() : '',
       pagamentos: sanitizedPagamentos,
       // Derived fields for backward compatibility and quick display
       valorPagamento: roundCurrency(totalPag),
@@ -590,6 +595,9 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                   className="search-input"
                   placeholder="Buscar paciente, exame..."
                   value={search}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -647,13 +655,13 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                           title={!isExamInThisPeriod ? 'Exame de outro período — parcela de honorários cai neste período' : undefined}
                         >
                           <td>{formatDate(item.data)}</td>
-                          <td>{item.paciente}</td>
-                          <td>{item.tipoExame}</td>
+                          <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
+                          <td>{item.tipoExame ? item.tipoExame.toUpperCase() : ''}</td>
                           <td>
-                            <div style={{ fontWeight: 500 }}>{item.medico}</div>
+                            <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
                             {item.medico2 && (
                               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)' }}>
-                                👥 c/ {item.medico2} (
+                                👥 c/ {item.medico2.toUpperCase()} (
                                 {item.divisaoTipo === 'valor'
                                   ? `${formatCurrency(item.valorMedico1)} / ${formatCurrency(item.valorMedico2)}`
                                   : `${item.porcentagemMedico1 ?? 50}% / ${item.porcentagemMedico2 ?? 50}%`}
@@ -710,13 +718,13 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: 1.3 }}>
                                 {item.divisaoTipo === 'valor' ? (
                                   <>
-                                    <div>{item.medico}: {formatCurrency(item.valorMedico1)}</div>
-                                    <div>{item.medico2}: {formatCurrency(item.valorMedico2)}</div>
+                                    <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(item.valorMedico1)}</div>
+                                    <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(item.valorMedico2)}</div>
                                   </>
                                 ) : (
                                   <>
-                                    <div>{item.medico} ({item.porcentagemMedico1 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico1) ?? 50)) / 100))}</div>
-                                    <div>{item.medico2} ({item.porcentagemMedico2 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico2) ?? 50)) / 100))}</div>
+                                    <div>{item.medico ? item.medico.toUpperCase() : ''} ({item.porcentagemMedico1 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico1) ?? 50)) / 100))}</div>
+                                    <div>{item.medico2 ? item.medico2.toUpperCase() : ''} ({item.porcentagemMedico2 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico2) ?? 50)) / 100))}</div>
                                   </>
                                 )}
                               </div>
@@ -733,8 +741,8 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                             </div>
                             {honNoPeriodo > 0 && (item.temDivisao || item.medico2) && (
                               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: '0.2rem', lineHeight: 1.3 }}>
-                                <div>{item.medico}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}</div>
-                                <div>{item.medico2}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}</div>
+                                <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}</div>
+                                <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}</div>
                               </div>
                             )}
                           </td>
@@ -798,7 +806,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
           </>
         }
       >
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">Data <span className="required">*</span></label>
@@ -811,7 +819,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                 required
                 placeholder="Selecione ou digite o médico"
                 value={form.medico}
-                onChange={(val) => updateField('medico', val)}
+                onChange={(val) => updateField('medico', val.toUpperCase())}
               />
             </div>
 
@@ -845,7 +853,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                     required={form.temDivisao}
                     placeholder="Selecione ou digite o 2º médico"
                     value={form.medico2}
-                    onChange={(val) => updateField('medico2', val)}
+                    onChange={(val) => updateField('medico2', val.toUpperCase())}
                   />
                 </div>
 
@@ -958,7 +966,17 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             )}
             <div className="input-group full-width">
               <label className="input-label">Paciente <span className="required">*</span></label>
-              <input type="text" className="input-field" required placeholder="Nome do paciente" value={form.paciente} onChange={(e) => updateField('paciente', e.target.value)} />
+              <input
+                type="text"
+                className="input-field"
+                required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Nome do paciente"
+                value={form.paciente}
+                onChange={(e) => updateField('paciente', e.target.value.toUpperCase())}
+              />
             </div>
             <div className="input-group full-width">
               <label className="input-label">Tipo de Exame <span className="required">*</span></label>
@@ -967,7 +985,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                 required
                 placeholder="Selecione ou digite o tipo de exame"
                 value={form.tipoExame}
-                onChange={(val) => updateField('tipoExame', val)}
+                onChange={(val) => updateField('tipoExame', val.toUpperCase())}
               />
             </div>
             {/* === SEÇÃO DE PAGAMENTOS DINÂMICA === */}

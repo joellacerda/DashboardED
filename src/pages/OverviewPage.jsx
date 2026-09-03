@@ -79,7 +79,7 @@ export default function OverviewPage() {
   const examCountByDoctor = {};
   allExamsCombined.forEach((e) => {
     if (e.medico && e.medico.trim()) {
-      const doc = e.medico.trim();
+      const doc = e.medico.trim().toUpperCase();
       examCountByDoctor[doc] = (examCountByDoctor[doc] || 0) + 1;
     }
   });

@@ -85,21 +85,21 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
 
   const medicosOptions = useMemo(() => {
     const list = getData('medicos') || [];
-    const set = new Set(list.map((m) => m.nome.trim()));
+    const set = new Set(list.map((m) => m.nome.trim().toUpperCase()));
 
     const exames = getData('exames') || [];
     const detalhes = getData('detalhesExames') || [];
     const convs = getData('examesConvenio') || [];
 
     exames.forEach((e) => {
-      if (e.medico && e.medico.trim()) set.add(e.medico.trim());
+      if (e.medico && e.medico.trim()) set.add(e.medico.trim().toUpperCase());
     });
     detalhes.forEach((d) => {
-      if (d.medico && d.medico.trim()) set.add(d.medico.trim());
-      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim());
+      if (d.medico && d.medico.trim()) set.add(d.medico.trim().toUpperCase());
+      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim().toUpperCase());
     });
     convs.forEach((c) => {
-      if (c.medico && c.medico.trim()) set.add(c.medico.trim());
+      if (c.medico && c.medico.trim()) set.add(c.medico.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -108,7 +108,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const conveniosOptions = useMemo(() => {
     const set = new Set(DEFAULT_CONVENIOS);
     data.forEach((item) => {
-      if (item.convenio && item.convenio.trim()) set.add(item.convenio.trim());
+      if (item.convenio && item.convenio.trim()) set.add(item.convenio.trim().toUpperCase());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
@@ -116,7 +116,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const examesOptions = useMemo(() => {
     const set = new Set(DEFAULT_EXAMES);
     data.forEach((item) => {
-      if (item.exame && item.exame.trim()) set.add(item.exame.trim());
+      if (item.exame && item.exame.trim()) set.add(item.exame.trim().toUpperCase());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
@@ -163,10 +163,17 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const handleSave = (e) => {
     e.preventDefault();
     if (!form.data || !form.paciente || !form.medico || !form.convenio || !form.exame) return;
+    const sanitizedForm = {
+      ...form,
+      medico: form.medico.trim().toUpperCase(),
+      paciente: form.paciente.trim().toUpperCase(),
+      convenio: form.convenio.trim().toUpperCase(),
+      exame: form.exame.trim().toUpperCase(),
+    };
     if (editId) {
-      updateItem('examesConvenio', editId, form);
+      updateItem('examesConvenio', editId, sanitizedForm);
     } else {
-      addItem('examesConvenio', form);
+      addItem('examesConvenio', sanitizedForm);
     }
     refresh();
     setModalOpen(false);
@@ -180,9 +187,12 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   };
 
   const openFluxoModal = (item) => {
+    const pNome = item.paciente ? item.paciente.trim().toUpperCase() : '';
+    const cNome = item.convenio ? item.convenio.trim().toUpperCase() : '';
+    const eNome = item.exame ? item.exame.trim().toUpperCase() : '';
     setFluxoForm({
       data: getTodayISO(),
-      nome: `Repasse Convênio ${item.convenio} — ${item.paciente} (${item.exame})`,
+      nome: `REPASSE CONVÊNIO ${cNome} — ${pNome} (${eNome})`,
       categoria: 'Convênios / Repasses',
       tipo: 'entrada',
       valor: '',
@@ -193,7 +203,10 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const handleSaveFluxo = (e) => {
     e.preventDefault();
     if (!fluxoForm.data || !fluxoForm.nome || !fluxoForm.valor) return;
-    addItem('fluxoCaixa', fluxoForm);
+    addItem('fluxoCaixa', {
+      ...fluxoForm,
+      nome: fluxoForm.nome.trim().toUpperCase(),
+    });
     setFluxoModalOpen(false);
     if (onNavigateToFluxo) onNavigateToFluxo();
   };
@@ -261,6 +274,9 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                   className="search-input"
                   placeholder="Buscar paciente, médico, convênio..."
                   value={search}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -297,12 +313,12 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                   filtered.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
-                      <td style={{ fontWeight: 600 }}>{item.paciente}</td>
-                      <td>{item.medico}</td>
+                      <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
+                      <td>{item.medico ? item.medico.toUpperCase() : ''}</td>
                       <td>
-                        <span className="badge badge-info">{item.convenio}</span>
+                        <span className="badge badge-info">{item.convenio ? item.convenio.toUpperCase() : ''}</span>
                       </td>
-                      <td>{item.exame}</td>
+                      <td>{item.exame ? item.exame.toUpperCase() : ''}</td>
                       <td>
                         <div className="action-buttons">
                           <button
@@ -358,7 +374,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
           </>
         }
       >
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">
@@ -382,7 +398,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 required
                 placeholder="Selecione ou digite o médico"
                 value={form.medico}
-                onChange={(val) => setForm({ ...form, medico: val })}
+                onChange={(val) => setForm({ ...form, medico: val.toUpperCase() })}
               />
             </div>
 
@@ -394,9 +410,12 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 type="text"
                 className="input-field"
                 required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Nome completo do paciente"
                 value={form.paciente}
-                onChange={(e) => setForm({ ...form, paciente: e.target.value })}
+                onChange={(e) => setForm({ ...form, paciente: e.target.value.toUpperCase() })}
               />
             </div>
 
@@ -409,7 +428,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 required
                 placeholder="Nome do convênio (ex: Unimed)"
                 value={form.convenio}
-                onChange={(val) => setForm({ ...form, convenio: val })}
+                onChange={(val) => setForm({ ...form, convenio: val.toUpperCase() })}
               />
             </div>
 
@@ -422,7 +441,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 required
                 placeholder="Selecione ou digite o procedimento"
                 value={form.exame}
-                onChange={(val) => setForm({ ...form, exame: val })}
+                onChange={(val) => setForm({ ...form, exame: val.toUpperCase() })}
               />
             </div>
           </div>
@@ -445,7 +464,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
           </>
         }
       >
-        <form onSubmit={handleSaveFluxo}>
+        <form onSubmit={handleSaveFluxo} autoComplete="off">
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             💡 Utilize este atalho para registrar o valor líquido recebido do convênio no Fluxo de Caixa da clínica.
           </div>
@@ -485,8 +504,11 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 type="text"
                 className="input-field"
                 required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={fluxoForm.nome}
-                onChange={(e) => setFluxoForm({ ...fluxoForm, nome: e.target.value })}
+                onChange={(e) => setFluxoForm({ ...fluxoForm, nome: e.target.value.toUpperCase() })}
               />
             </div>
             <div className="input-group">

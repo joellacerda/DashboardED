@@ -133,13 +133,35 @@ export default function FluxoCaixaPage() {
     setModalOpen(true);
   };
 
+function formatDescricao(nome) {
+  if (!nome) return '';
+  let res = nome;
+  if (/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i.test(res)) {
+    res = res.replace(/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i, 'TAXA DE CLÍNICA — ');
+  }
+  if (/^bi[oó]psia\s*—\s*/i.test(res)) {
+    res = res.replace(/^bi[oó]psia\s*—\s*/i, 'BIÓPSIA — ');
+  }
+  if (/^valor\s+de\s+acess[oó]rios\s*—\s*/i.test(res)) {
+    res = res.replace(/^valor\s+de\s+acess[oó]rios\s*—\s*/i, 'VALOR DE ACESSÓRIOS — ');
+  }
+  if (/^repasse\s+conv[eê]nio\s*/i.test(res)) {
+    res = res.replace(/^repasse\s+conv[eê]nio\s*/i, 'REPASSE CONVÊNIO ');
+  }
+  return res;
+}
+
   const handleSave = (e) => {
     e.preventDefault();
     if (!form.data || !form.nome || !form.valor) return;
+    const sanitizedForm = {
+      ...form,
+      nome: formatDescricao(form.nome.trim().toUpperCase()),
+    };
     if (editId) {
-      updateItem('fluxoCaixa', editId, form);
+      updateItem('fluxoCaixa', editId, sanitizedForm);
     } else {
-      addItem('fluxoCaixa', form);
+      addItem('fluxoCaixa', sanitizedForm);
     }
     refresh();
     setModalOpen(false);
@@ -271,6 +293,9 @@ export default function FluxoCaixaPage() {
                   className="search-input"
                   placeholder="Buscar descrição ou categoria..."
                   value={search}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -306,7 +331,7 @@ export default function FluxoCaixaPage() {
                   filtered.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
-                      <td style={{ fontWeight: 500 }}>{item.nome}</td>
+                      <td style={{ fontWeight: 500 }}>{formatDescricao(item.nome)}</td>
                       <td>
                         <span
                           className="badge"
@@ -376,7 +401,7 @@ export default function FluxoCaixaPage() {
           </>
         }
       >
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">Data <span className="required">*</span></label>
@@ -425,9 +450,12 @@ export default function FluxoCaixaPage() {
                 type="text"
                 className="input-field"
                 required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Nome ou descrição da movimentação"
                 value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                onChange={(e) => setForm({ ...form, nome: e.target.value.toUpperCase() })}
               />
             </div>
             <div className="input-group full-width">

@@ -56,18 +56,18 @@ export default function RepassePage() {
 
   // --- Merge registered doctors with doctors found in exam records ---
   const allDoctors = useMemo(() => {
-    const list = [...medicosList];
-    const registeredNames = new Set(list.map((m) => m.nome.trim().toLowerCase()));
+    const list = medicosList.map((m) => ({ ...m, nome: m.nome.trim().toUpperCase() }));
+    const registeredNames = new Set(list.map((m) => m.nome.trim().toUpperCase()));
 
     // Collect from exam records
     detalhesExames.forEach((e) => {
-      if (e.medico && !registeredNames.has(e.medico.trim().toLowerCase())) {
-        registeredNames.add(e.medico.trim().toLowerCase());
-        list.push({ id: `auto_${e.medico}`, nome: e.medico.trim(), socio: true, auto: true });
+      if (e.medico && !registeredNames.has(e.medico.trim().toUpperCase())) {
+        registeredNames.add(e.medico.trim().toUpperCase());
+        list.push({ id: `auto_${e.medico.trim().toUpperCase()}`, nome: e.medico.trim().toUpperCase(), socio: true, auto: true });
       }
-      if (e.medico2 && !registeredNames.has(e.medico2.trim().toLowerCase())) {
-        registeredNames.add(e.medico2.trim().toLowerCase());
-        list.push({ id: `auto_${e.medico2}`, nome: e.medico2.trim(), socio: true, auto: true });
+      if (e.medico2 && !registeredNames.has(e.medico2.trim().toUpperCase())) {
+        registeredNames.add(e.medico2.trim().toUpperCase());
+        list.push({ id: `auto_${e.medico2.trim().toUpperCase()}`, nome: e.medico2.trim().toUpperCase(), socio: true, auto: true });
       }
     });
 
@@ -203,12 +203,13 @@ export default function RepassePage() {
     if (!newMedicoNome.trim()) return;
 
     const currentMedicos = getData('medicos');
-    if (currentMedicos.some((m) => m.nome.trim().toLowerCase() === newMedicoNome.trim().toLowerCase())) {
+    const nomeUpper = newMedicoNome.trim().toUpperCase();
+    if (currentMedicos.some((m) => m.nome.trim().toUpperCase() === nomeUpper)) {
       alert('Médico já cadastrado!');
       return;
     }
 
-    addItem('medicos', { nome: newMedicoNome.trim(), socio: newMedicoSocio });
+    addItem('medicos', { nome: nomeUpper, socio: newMedicoSocio });
     setNewMedicoNome('');
     refreshAll();
   };
@@ -471,7 +472,7 @@ export default function RepassePage() {
           </>
         }
       >
-        <form onSubmit={handleSaveAjuste}>
+        <form onSubmit={handleSaveAjuste} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group full-width">
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
@@ -549,16 +550,19 @@ export default function RepassePage() {
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <form onSubmit={handleAddMedico} style={{ background: 'var(--bg-surface-elevated)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+          <form onSubmit={handleAddMedico} autoComplete="off" style={{ background: 'var(--bg-surface-elevated)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
             <h4 style={{ marginBottom: '0.75rem', fontSize: 'var(--text-sm)' }}>+ Cadastrar Novo Médico</h4>
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="text"
                 className="input-field"
-                placeholder="Nome do médico (ex: Dr. Oliveira)"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Nome do médico (ex: DR. OLIVEIRA)"
                 style={{ flex: 1, minWidth: '200px' }}
                 value={newMedicoNome}
-                onChange={(e) => setNewMedicoNome(e.target.value)}
+                onChange={(e) => setNewMedicoNome(e.target.value.toUpperCase())}
               />
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: 'var(--text-xs)', cursor: 'pointer' }}>
                 <input

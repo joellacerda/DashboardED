@@ -155,6 +155,9 @@ export default function FolhaPage() {
                   className="search-input"
                   placeholder="Buscar funcionário..."
                   value={search}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -249,11 +252,21 @@ export default function FolhaPage() {
           </>
         }
       >
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group full-width">
               <label className="input-label">Nome <span className="required">*</span></label>
-              <input type="text" className="input-field" required placeholder="Nome do funcionário" value={form.nome} onChange={(e) => updateField('nome', e.target.value)} />
+              <input
+                type="text"
+                className="input-field"
+                required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Nome do funcionário"
+                value={form.nome}
+                onChange={(e) => updateField('nome', e.target.value.toUpperCase())}
+              />
             </div>
             <div className="input-group">
               <label className="input-label">Salário Base (R$) <span className="required">*</span></label>

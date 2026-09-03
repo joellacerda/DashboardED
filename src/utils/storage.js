@@ -17,15 +17,49 @@ function migrateLegacyData() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
 
+    // Migrate in medicos (convert doctor names to uppercase)
+    const rawMedicos = localStorage.getItem(STORAGE_KEYS.medicos);
+    if (rawMedicos) {
+      const parsed = JSON.parse(rawMedicos);
+      let changed = false;
+      const updated = parsed.map((m) => {
+        if (m.nome && m.nome !== m.nome.toUpperCase()) {
+          changed = true;
+          const up = { ...m, nome: m.nome.toUpperCase() };
+          saveToCloud('medicos', up);
+          return up;
+        }
+        return m;
+      });
+      if (changed) {
+        localStorage.setItem(STORAGE_KEYS.medicos, JSON.stringify(updated));
+      }
+    }
+
     // Migrate in examesConvenio
     const rawConvenios = localStorage.getItem(STORAGE_KEYS.examesConvenio);
-    if (rawConvenios && rawConvenios.includes('BRADESCO 421715')) {
+    if (rawConvenios) {
       const parsed = JSON.parse(rawConvenios);
       let changed = false;
       const updated = parsed.map((item) => {
-        if (item.convenio === 'BRADESCO 421715') {
+        let itemChanged = false;
+        let cItem = { ...item };
+        if (cItem.convenio === 'BRADESCO 421715') {
+          cItem.convenio = 'BRADESCO';
+          itemChanged = true;
+        }
+        if (cItem.medico && cItem.medico !== cItem.medico.toUpperCase()) {
+          cItem.medico = cItem.medico.toUpperCase();
+          itemChanged = true;
+        }
+        if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
+          cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        if (itemChanged) {
           changed = true;
-          return { ...item, convenio: 'BRADESCO' };
+          saveToCloud('examesConvenio', cItem);
+          return cItem;
         }
         return item;
       });
@@ -36,13 +70,40 @@ function migrateLegacyData() {
 
     // Migrate in fluxoCaixa
     const rawFluxo = localStorage.getItem(STORAGE_KEYS.fluxoCaixa);
-    if (rawFluxo && rawFluxo.includes('BRADESCO 421715')) {
+    if (rawFluxo) {
       const parsed = JSON.parse(rawFluxo);
       let changed = false;
       const updated = parsed.map((item) => {
-        if (item.nome && item.nome.includes('BRADESCO 421715')) {
+        let itemChanged = false;
+        let cItem = { ...item };
+        if (cItem.nome && cItem.nome.includes('BRADESCO 421715')) {
+          cItem.nome = cItem.nome.replaceAll('BRADESCO 421715', 'BRADESCO');
+          itemChanged = true;
+        }
+        // Normalize Taxa Clínica / Biópsia / Valor de Acessórios / Repasse Convênio to uppercase
+        if (cItem.nome) {
+          let newNome = cItem.nome;
+          if (/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i.test(newNome)) {
+            newNome = newNome.replace(/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i, 'TAXA DE CLÍNICA — ');
+          }
+          if (/^bi[oó]psia\s*—\s*/i.test(newNome)) {
+            newNome = newNome.replace(/^bi[oó]psia\s*—\s*/i, 'BIÓPSIA — ');
+          }
+          if (/^valor\s+de\s+acess[oó]rios\s*—\s*/i.test(newNome)) {
+            newNome = newNome.replace(/^valor\s+de\s+acess[oó]rios\s*—\s*/i, 'VALOR DE ACESSÓRIOS — ');
+          }
+          if (/^repasse\s+conv[eê]nio\s*/i.test(newNome)) {
+            newNome = newNome.replace(/^repasse\s+conv[eê]nio\s*/i, 'REPASSE CONVÊNIO ');
+          }
+          if (newNome !== cItem.nome) {
+            cItem.nome = newNome;
+            itemChanged = true;
+          }
+        }
+        if (itemChanged) {
           changed = true;
-          return { ...item, nome: item.nome.replaceAll('BRADESCO 421715', 'BRADESCO') };
+          saveToCloud('fluxoCaixa', cItem);
+          return cItem;
         }
         return item;
       });
@@ -51,20 +112,67 @@ function migrateLegacyData() {
       }
     }
 
-    // Migrate in exames / detalhesExames if applicable
+    // Migrate in exames
     const rawExames = localStorage.getItem(STORAGE_KEYS.exames);
-    if (rawExames && rawExames.includes('BRADESCO 421715')) {
+    if (rawExames) {
       const parsed = JSON.parse(rawExames);
       let changed = false;
       const updated = parsed.map((item) => {
-        if (item.convenio === 'BRADESCO 421715') {
+        let itemChanged = false;
+        let cItem = { ...item };
+        if (cItem.convenio === 'BRADESCO 421715') {
+          cItem.convenio = 'BRADESCO';
+          itemChanged = true;
+        }
+        if (cItem.medico && cItem.medico !== cItem.medico.toUpperCase()) {
+          cItem.medico = cItem.medico.toUpperCase();
+          itemChanged = true;
+        }
+        if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
+          cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        if (itemChanged) {
           changed = true;
-          return { ...item, convenio: 'BRADESCO' };
+          saveToCloud('exames', cItem);
+          return cItem;
         }
         return item;
       });
       if (changed) {
         localStorage.setItem(STORAGE_KEYS.exames, JSON.stringify(updated));
+      }
+    }
+
+    // Migrate in detalhesExames
+    const rawDetalhes = localStorage.getItem(STORAGE_KEYS.detalhesExames);
+    if (rawDetalhes) {
+      const parsed = JSON.parse(rawDetalhes);
+      let changed = false;
+      const updated = parsed.map((item) => {
+        let itemChanged = false;
+        let cItem = { ...item };
+        if (cItem.medico && cItem.medico !== cItem.medico.toUpperCase()) {
+          cItem.medico = cItem.medico.toUpperCase();
+          itemChanged = true;
+        }
+        if (cItem.medico2 && cItem.medico2 !== cItem.medico2.toUpperCase()) {
+          cItem.medico2 = cItem.medico2.toUpperCase();
+          itemChanged = true;
+        }
+        if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
+          cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        if (itemChanged) {
+          changed = true;
+          saveToCloud('detalhesExames', cItem);
+          return cItem;
+        }
+        return item;
+      });
+      if (changed) {
+        localStorage.setItem(STORAGE_KEYS.detalhesExames, JSON.stringify(updated));
       }
     }
   } catch (err) {

@@ -120,13 +120,22 @@ export default function AutoCompleteInput({
         ref={inputRef}
         type="text"
         id={id}
-        name={name}
+        name={name || "no-autofill"}
         className={className}
         required={required}
         disabled={disabled}
         placeholder={placeholder}
         value={value || ''}
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-form-type="other"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={isOpen}
         onChange={(e) => {
           onChange(e.target.value);
           setIsOpen(true);

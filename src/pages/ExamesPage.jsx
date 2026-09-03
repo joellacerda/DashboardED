@@ -80,17 +80,17 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
   const medicosOptions = useMemo(() => {
     const list = getData('medicos') || [];
-    const set = new Set(list.map((m) => m.nome.trim()));
+    const set = new Set(list.map((m) => m.nome.trim().toUpperCase()));
 
     const exames = getData('exames') || [];
     const detalhes = getData('detalhesExames') || [];
 
     exames.forEach((e) => {
-      if (e.medico && e.medico.trim()) set.add(e.medico.trim());
+      if (e.medico && e.medico.trim()) set.add(e.medico.trim().toUpperCase());
     });
     detalhes.forEach((d) => {
-      if (d.medico && d.medico.trim()) set.add(d.medico.trim());
-      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim());
+      if (d.medico && d.medico.trim()) set.add(d.medico.trim().toUpperCase());
+      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -99,7 +99,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
   const examesOptions = useMemo(() => {
     const set = new Set(DEFAULT_EXAMES);
     data.forEach((e) => {
-      if (e.exame && e.exame.trim()) set.add(e.exame.trim());
+      if (e.exame && e.exame.trim()) set.add(e.exame.trim().toUpperCase());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
@@ -120,9 +120,15 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     e.preventDefault();
     if (!form.data || !form.paciente || !form.exame || !form.medico) return;
     const isNew = !editId;
+    const sanitizedForm = {
+      ...form,
+      paciente: form.paciente.trim().toUpperCase(),
+      medico: form.medico.trim().toUpperCase(),
+      exame: form.exame.trim().toUpperCase(),
+    };
     const savedItem = editId
-      ? updateItem('exames', editId, form)
-      : addItem('exames', form);
+      ? updateItem('exames', editId, sanitizedForm)
+      : addItem('exames', sanitizedForm);
 
     refresh();
     setModalOpen(false);
@@ -130,10 +136,10 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     if (isNew && onNavigateToDetalhes) {
       onNavigateToDetalhes({
         id: savedItem?.id,
-        data: form.data,
-        paciente: form.paciente,
-        tipoExame: form.exame,
-        medico: form.medico,
+        data: sanitizedForm.data,
+        paciente: sanitizedForm.paciente,
+        tipoExame: sanitizedForm.exame,
+        medico: sanitizedForm.medico,
       });
     }
   };
@@ -195,6 +201,9 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                   className="search-input"
                   placeholder="Buscar paciente, exame..."
                   value={search}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -229,9 +238,9 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                   filtered.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
-                      <td>{item.paciente}</td>
-                      <td>{item.exame}</td>
-                      <td>{item.medico}</td>
+                      <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
+                      <td>{item.exame ? item.exame.toUpperCase() : ''}</td>
+                      <td>{item.medico ? item.medico.toUpperCase() : ''}</td>
                       <td>
                         <div className="action-buttons">
                           <button
@@ -295,7 +304,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
           </>
         }
       >
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">
@@ -318,7 +327,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                 required
                 placeholder="Selecione ou digite o médico"
                 value={form.medico}
-                onChange={(val) => setForm({ ...form, medico: val })}
+                onChange={(val) => setForm({ ...form, medico: val.toUpperCase() })}
               />
             </div>
             <div className="input-group full-width">
@@ -329,9 +338,12 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                 type="text"
                 className="input-field"
                 required
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Nome completo do paciente"
                 value={form.paciente}
-                onChange={(e) => setForm({ ...form, paciente: e.target.value })}
+                onChange={(e) => setForm({ ...form, paciente: e.target.value.toUpperCase() })}
               />
             </div>
             <div className="input-group full-width">
@@ -343,7 +355,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                 required
                 placeholder="Selecione ou digite o exame"
                 value={form.exame}
-                onChange={(val) => setForm({ ...form, exame: val })}
+                onChange={(val) => setForm({ ...form, exame: val.toUpperCase() })}
               />
             </div>
           </div>
