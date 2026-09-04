@@ -17,6 +17,8 @@ import {
   exportCSV,
   exportPDF,
   DEFAULT_EXAMES,
+  examePermiteComplementar,
+  PROCEDIMENTOS_COMPLEMENTARES,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -29,6 +31,7 @@ const emptyForm = {
   data: '',
   paciente: '',
   tipoExame: '',
+  procedimentoComplementar: '',
   medico: '',
   pagamentos: [{ ...emptyPagamento }],
   temDivisao: false,
@@ -79,6 +82,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
         data: examDate,
         paciente: prefillData.paciente || '',
         tipoExame: prefillData.tipoExame || '',
+        procedimentoComplementar: prefillData.procedimentoComplementar || '',
         medico: prefillData.medico || '',
       });
       if (prefillData.data) {
@@ -137,6 +141,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
         (e) =>
           (e.paciente || '').toLowerCase().includes(q) ||
           (e.tipoExame || '').toLowerCase().includes(q) ||
+          (e.procedimentoComplementar || '').toLowerCase().includes(q) ||
           (e.medico || '').toLowerCase().includes(q) ||
           (e.formaPagamento || '').toLowerCase().includes(q) ||
           (e.pagamentos || []).some((p) => (p.forma || '').toLowerCase().includes(q))
@@ -210,6 +215,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       data: item.data || '',
       paciente: item.paciente || '',
       tipoExame: item.tipoExame || '',
+      procedimentoComplementar: item.procedimentoComplementar || '',
       medico: item.medico || '',
       pagamentos,
       temDivisao: !!(item.temDivisao || item.medico2),
@@ -325,10 +331,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       ? sanitizedPagamentos[0].forma
       : 'Misto';
 
+    const allowsCompl = examePermiteComplementar(form.tipoExame);
     const sanitizedForm = {
       ...form,
       paciente: form.paciente.trim().toUpperCase(),
       tipoExame: form.tipoExame.trim().toUpperCase(),
+      procedimentoComplementar: allowsCompl ? (form.procedimentoComplementar || '') : '',
       medico: form.medico.trim().toUpperCase(),
       medico2: form.medico2 ? form.medico2.trim().toUpperCase() : '',
       pagamentos: sanitizedPagamentos,
@@ -356,6 +364,27 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     }
     if (savedItem) {
       syncFluxoCaixaEntries(savedItem);
+
+      // Two-way sync: Also update corresponding exam in exames
+      const examesList = getData('exames') || [];
+      const matchingExames = examesList.filter(
+        (e) =>
+          e.id === savedItem.id ||
+          (e.data === savedItem.data &&
+            e.paciente &&
+            e.paciente.trim().toUpperCase() === savedItem.paciente.trim().toUpperCase())
+      );
+      if (matchingExames.length > 0) {
+        matchingExames.forEach((ex) => {
+          updateItem('exames', ex.id, {
+            data: savedItem.data,
+            paciente: savedItem.paciente,
+            medico: savedItem.medico,
+            exame: savedItem.tipoExame,
+            procedimentoComplementar: savedItem.procedimentoComplementar || '',
+          });
+        });
+      }
     }
     refresh();
     setModalOpen(false);
@@ -470,7 +499,13 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const exportColumns = [
     { key: 'data', label: 'Data', accessor: (item) => formatDate(item.data) },
     { key: 'paciente', label: 'Paciente' },
-    { key: 'tipoExame', label: 'Tipo de Exame' },
+    {
+      key: 'tipoExame', label: 'Tipo de Exame', accessor: (item) => {
+        const base = item.tipoExame ? item.tipoExame.toUpperCase() : '';
+        const compl = item.procedimentoComplementar ? ` + ${item.procedimentoComplementar}` : '';
+        return `${base}${compl}`;
+      }
+    },
     { key: 'medico', label: 'Médico' },
     {
       key: 'formaPagamento', label: 'Forma Pagamento', accessor: (item) => {
@@ -656,7 +691,14 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                         >
                           <td>{formatDate(item.data)}</td>
                           <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
-                          <td>{item.tipoExame ? item.tipoExame.toUpperCase() : ''}</td>
+                          <td>
+                            {item.tipoExame ? item.tipoExame.toUpperCase() : ''}
+                            {item.procedimentoComplementar && (
+                              <span className="badge badge-info" style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}>
+                                + {item.procedimentoComplementar}
+                              </span>
+                            )}
+                          </td>
                           <td>
                             <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
                             {item.medico2 && (
@@ -985,9 +1027,32 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                 required
                 placeholder="Selecione ou digite o tipo de exame"
                 value={form.tipoExame}
-                onChange={(val) => updateField('tipoExame', val.toUpperCase())}
+                onChange={(val) => {
+                  const upper = val.toUpperCase();
+                  setForm((f) => ({
+                    ...f,
+                    tipoExame: upper,
+                    procedimentoComplementar: examePermiteComplementar(upper) ? f.procedimentoComplementar : '',
+                  }));
+                }}
               />
             </div>
+
+            {examePermiteComplementar(form.tipoExame) && (
+              <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
+                <label className="input-label">Procedimento Complementar</label>
+                <select
+                  className="input-field"
+                  value={form.procedimentoComplementar || ''}
+                  onChange={(e) => updateField('procedimentoComplementar', e.target.value)}
+                >
+                  <option value="">Nenhum</option>
+                  {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => (
+                    <option key={proc} value={proc}>{proc}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {/* === SEÇÃO DE PAGAMENTOS DINÂMICA === */}
             <div className="full-width pagamentos-section">
               <div className="pagamentos-header">

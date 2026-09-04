@@ -10,6 +10,10 @@ import {
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
   isDateInPeriod,
+  examePermiteComplementar,
+  PROCEDIMENTOS_COMPLEMENTARES,
+  normalizeProcedimentosComplementares,
+  formatProcedimentosComplementares,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -51,6 +55,7 @@ const emptyForm = {
   medico: '',
   convenio: '',
   exame: '',
+  procedimentoComplementar: '',
 };
 
 const columns = [
@@ -58,7 +63,13 @@ const columns = [
   { key: 'paciente', label: 'Paciente' },
   { key: 'medico', label: 'Médico Realizante' },
   { key: 'convenio', label: 'Convênio' },
-  { key: 'exame', label: 'Exame' },
+  {
+    key: 'exame', label: 'Exame', accessor: (item) => {
+      const base = item.exame ? item.exame.toUpperCase() : '';
+      const compl = formatProcedimentosComplementares(item.procedimentoComplementar);
+      return compl ? `${base} + ${compl}` : base;
+    }
+  },
 ];
 
 export default function ConveniosPage({ onNavigateToFluxo }) {
@@ -129,6 +140,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
         (e) =>
           (e.paciente || '').toLowerCase().includes(q) ||
           (e.exame || '').toLowerCase().includes(q) ||
+          (e.procedimentoComplementar || '').toLowerCase().includes(q) ||
           (e.medico || '').toLowerCase().includes(q) ||
           (e.convenio || '').toLowerCase().includes(q)
       );
@@ -156,6 +168,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       medico: item.medico || '',
       convenio: item.convenio || '',
       exame: item.exame || '',
+      procedimentoComplementar: item.procedimentoComplementar || '',
     });
     setModalOpen(true);
   };
@@ -163,12 +176,14 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const handleSave = (e) => {
     e.preventDefault();
     if (!form.data || !form.paciente || !form.medico || !form.convenio || !form.exame) return;
+    const allowsCompl = examePermiteComplementar(form.exame);
     const sanitizedForm = {
       ...form,
       medico: form.medico.trim().toUpperCase(),
       paciente: form.paciente.trim().toUpperCase(),
       convenio: form.convenio.trim().toUpperCase(),
       exame: form.exame.trim().toUpperCase(),
+      procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
     };
     if (editId) {
       updateItem('examesConvenio', editId, sanitizedForm);
@@ -190,9 +205,11 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
     const pNome = item.paciente ? item.paciente.trim().toUpperCase() : '';
     const cNome = item.convenio ? item.convenio.trim().toUpperCase() : '';
     const eNome = item.exame ? item.exame.trim().toUpperCase() : '';
+    const compl = formatProcedimentosComplementares(item.procedimentoComplementar);
+    const complStr = compl ? ` + ${compl}` : '';
     setFluxoForm({
       data: getTodayISO(),
-      nome: `REPASSE CONVÊNIO ${cNome} — ${pNome} (${eNome})`,
+      nome: `REPASSE CONVÊNIO ${cNome} — ${pNome} (${eNome}${complStr})`,
       categoria: 'Convênios / Repasses',
       tipo: 'entrada',
       valor: '',
@@ -318,7 +335,18 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                       <td>
                         <span className="badge badge-info">{item.convenio ? item.convenio.toUpperCase() : ''}</span>
                       </td>
-                      <td>{item.exame ? item.exame.toUpperCase() : ''}</td>
+                      <td>
+                        {item.exame ? item.exame.toUpperCase() : ''}
+                        {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => (
+                          <span
+                            key={proc}
+                            className="badge badge-info"
+                            style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
+                          >
+                            + {proc}
+                          </span>
+                        ))}
+                      </td>
                       <td>
                         <div className="action-buttons">
                           <button
@@ -441,9 +469,52 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                 required
                 placeholder="Selecione ou digite o procedimento"
                 value={form.exame}
-                onChange={(val) => setForm({ ...form, exame: val.toUpperCase() })}
+                onChange={(val) => setForm({ ...form, exame: val.toUpperCase(), procedimentoComplementar: examePermiteComplementar(val) ? form.procedimentoComplementar : '' })}
               />
             </div>
+
+            {examePermiteComplementar(form.exame) && (
+              <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
+                <label className="input-label">Procedimentos Complementares</label>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                  {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => {
+                    const currentList = normalizeProcedimentosComplementares(form.procedimentoComplementar);
+                    const isChecked = currentList.includes(proc);
+                    return (
+                      <label
+                        key={proc}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          cursor: 'pointer',
+                          fontSize: 'var(--text-sm)',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updatedList;
+                            if (e.target.checked) {
+                              updatedList = [...currentList, proc];
+                            } else {
+                              updatedList = currentList.filter((p) => p !== proc);
+                            }
+                            setForm({
+                              ...form,
+                              procedimentoComplementar: formatProcedimentosComplementares(updatedList),
+                            });
+                          }}
+                        />
+                        <span>{proc}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </Modal>

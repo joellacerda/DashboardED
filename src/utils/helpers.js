@@ -2,13 +2,47 @@ export const DEFAULT_EXAMES = [
   'CONSULTA',
   'ENDOSCOPIA',
   'COLONOSCOPIA',
-  'POLIPECTOMIA',
-  'MUCOSECTOMIA',
   'PLASMA DE ARGÔNIO',
   'ECOENDOSCOPIA',
   'ESD',
   'RETORNO',
 ];
+
+// Exams that can have a complementary procedure (polipectomia/mucosectomia)
+export const EXAMES_COM_COMPLEMENTAR = ['COLONOSCOPIA', 'ENDOSCOPIA'];
+export const PROCEDIMENTOS_COMPLEMENTARES = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
+
+// Check if an exam type supports complementary procedures
+export function examePermiteComplementar(tipoExame) {
+  if (!tipoExame) return false;
+  const clean = tipoExame.trim().toUpperCase();
+  return (
+    EXAMES_COM_COMPLEMENTAR.includes(clean) ||
+    clean.includes('COLONOSCOPIA') ||
+    clean.includes('ENDOSCOPIA')
+  );
+}
+
+// Convert string or array of procedimentos into a normalized array: ['POLIPECTOMIA', 'MUCOSECTOMIA']
+export function normalizeProcedimentosComplementares(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val
+      .map((item) => String(item).trim().toUpperCase())
+      .filter((p) => PROCEDIMENTOS_COMPLEMENTARES.includes(p));
+  }
+  const str = String(val).toUpperCase();
+  const list = [];
+  if (str.includes('POLIPECTOMIA')) list.push('POLIPECTOMIA');
+  if (str.includes('MUCOSECTOMIA')) list.push('MUCOSECTOMIA');
+  return list;
+}
+
+// Format procedimentos complementares for display / storage: 'POLIPECTOMIA + MUCOSECTOMIA'
+export function formatProcedimentosComplementares(val) {
+  const list = normalizeProcedimentosComplementares(val);
+  return list.join(' + ');
+}
 
 export function roundCurrency(value) {
   const num = Number(value) || 0;

@@ -41,6 +41,7 @@ function migrateLegacyData() {
     if (rawConvenios) {
       const parsed = JSON.parse(rawConvenios);
       let changed = false;
+      const PROC_COMPL_CONV = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
         let cItem = { ...item };
@@ -54,6 +55,11 @@ function migrateLegacyData() {
         }
         if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
           cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        // Clear exam type if it was a standalone complementary procedure
+        if (cItem.exame && PROC_COMPL_CONV.includes(cItem.exame.trim().toUpperCase())) {
+          cItem.exame = '';
           itemChanged = true;
         }
         if (itemChanged) {
@@ -112,11 +118,12 @@ function migrateLegacyData() {
       }
     }
 
-    // Migrate in exames
+    // Migrate in exames — clear exam type for standalone POLIPECTOMIA/MUCOSECTOMIA
     const rawExames = localStorage.getItem(STORAGE_KEYS.exames);
     if (rawExames) {
       const parsed = JSON.parse(rawExames);
       let changed = false;
+      const PROC_COMPLEMENTARES = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
         let cItem = { ...item };
@@ -130,6 +137,11 @@ function migrateLegacyData() {
         }
         if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
           cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        // Clear exam type if it was a standalone complementary procedure
+        if (cItem.exame && PROC_COMPLEMENTARES.includes(cItem.exame.trim().toUpperCase())) {
+          cItem.exame = '';
           itemChanged = true;
         }
         if (itemChanged) {
@@ -149,6 +161,7 @@ function migrateLegacyData() {
     if (rawDetalhes) {
       const parsed = JSON.parse(rawDetalhes);
       let changed = false;
+      const PROC_COMPL_DET = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
         let cItem = { ...item };
@@ -162,6 +175,11 @@ function migrateLegacyData() {
         }
         if (cItem.paciente && cItem.paciente !== cItem.paciente.toUpperCase()) {
           cItem.paciente = cItem.paciente.toUpperCase();
+          itemChanged = true;
+        }
+        // Clear exam type if it was a standalone complementary procedure
+        if (cItem.tipoExame && PROC_COMPL_DET.includes(cItem.tipoExame.trim().toUpperCase())) {
+          cItem.tipoExame = '';
           itemChanged = true;
         }
         if (itemChanged) {
@@ -183,7 +201,6 @@ function migrateLegacyData() {
 migrateLegacyData();
 
 export function getData(module) {
-  migrateLegacyData();
   try {
     const raw = localStorage.getItem(STORAGE_KEYS[module]);
     return raw ? JSON.parse(raw) : [];
@@ -217,7 +234,11 @@ export function restoreAllData(allData) {
 
 export function addItem(module, item) {
   const data = getData(module);
-  const newItem = { ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  const newItem = {
+    ...item,
+    id: item.id || crypto.randomUUID(),
+    createdAt: item.createdAt || new Date().toISOString(),
+  };
   data.push(newItem);
   setData(module, data);
   saveToCloud(module, newItem);

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getData, addItem, updateItem, deleteItem } from '../utils/storage';
+import { getData, addItem, updateItem, deleteItem, getItem } from '../utils/storage';
 import {
   formatDate,
   getTodayISO,
@@ -9,18 +9,28 @@ import {
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
   isDateInPeriod,
+  examePermiteComplementar,
+  PROCEDIMENTOS_COMPLEMENTARES,
+  normalizeProcedimentosComplementares,
+  formatProcedimentosComplementares,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
 
-const emptyForm = { data: '', paciente: '', exame: '', medico: '' };
+const emptyForm = { data: '', paciente: '', exame: '', medico: '', procedimentoComplementar: '' };
 
 const columns = [
   { key: 'data', label: 'Data', accessor: (item) => formatDate(item.data) },
   { key: 'paciente', label: 'Paciente' },
-  { key: 'exame', label: 'Exame' },
+  {
+    key: 'exame', label: 'Exame', accessor: (item) => {
+      const base = item.exame ? item.exame.toUpperCase() : '';
+      const compl = formatProcedimentosComplementares(item.procedimentoComplementar);
+      return compl ? `${base} + ${compl}` : base;
+    }
+  },
   { key: 'medico', label: 'Médico' },
 ];
 
@@ -40,6 +50,25 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     const examesList = data || [];
     const detalhesList = getData('detalhesExames') || [];
 
+    const getMatchedDetalhe = (e) =>
+      detalhesList.find(
+        (d) =>
+          d.id === e.id ||
+          (d.data === e.data &&
+            d.paciente &&
+            e.paciente &&
+            d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase())
+      );
+
+    const mergedExames = examesList.map((e) => {
+      const match = getMatchedDetalhe(e);
+      return {
+        ...e,
+        exame: e.exame || match?.tipoExame || '',
+        procedimentoComplementar: e.procedimentoComplementar || match?.procedimentoComplementar || '',
+      };
+    });
+
     const isMatched = (d) =>
       examesList.some(
         (e) =>
@@ -57,11 +86,12 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         data: d.data,
         paciente: d.paciente || '',
         exame: d.tipoExame || '',
+        procedimentoComplementar: d.procedimentoComplementar || '',
         medico: d.medico || '',
         isDetailOnly: true,
       }));
 
-    return [...examesList, ...standalone];
+    return [...mergedExames, ...standalone];
   }, [data, modalOpen]);
 
   const filtered = useMemo(() => {
@@ -72,6 +102,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         (e) =>
           (e.paciente || '').toLowerCase().includes(q) ||
           (e.exame || '').toLowerCase().includes(q) ||
+          (e.procedimentoComplementar || '').toLowerCase().includes(q) ||
           (e.medico || '').toLowerCase().includes(q)
       );
     }
@@ -112,7 +143,13 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
   const openEdit = (item) => {
     setEditId(item.id);
-    setForm({ data: item.data, paciente: item.paciente, exame: item.exame, medico: item.medico });
+    setForm({
+      data: item.data,
+      paciente: item.paciente,
+      exame: item.exame,
+      medico: item.medico,
+      procedimentoComplementar: item.procedimentoComplementar || '',
+    });
     setModalOpen(true);
   };
 
@@ -120,15 +157,58 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     e.preventDefault();
     if (!form.data || !form.paciente || !form.exame || !form.medico) return;
     const isNew = !editId;
+    const exameUpper = form.exame.trim().toUpperCase();
+    const complUpper = examePermiteComplementar(exameUpper)
+      ? formatProcedimentosComplementares(form.procedimentoComplementar)
+      : '';
     const sanitizedForm = {
       ...form,
       paciente: form.paciente.trim().toUpperCase(),
       medico: form.medico.trim().toUpperCase(),
-      exame: form.exame.trim().toUpperCase(),
+      exame: exameUpper,
+      procedimentoComplementar: complUpper,
     };
-    const savedItem = editId
-      ? updateItem('exames', editId, sanitizedForm)
-      : addItem('exames', sanitizedForm);
+
+    let savedItem = null;
+    if (editId) {
+      const existingInExames = getItem('exames', editId);
+      if (existingInExames) {
+        savedItem = updateItem('exames', editId, sanitizedForm);
+      } else {
+        const existingInDetalhes = getItem('detalhesExames', editId);
+        if (existingInDetalhes) {
+          updateItem('detalhesExames', editId, {
+            data: sanitizedForm.data,
+            paciente: sanitizedForm.paciente,
+            medico: sanitizedForm.medico,
+            tipoExame: sanitizedForm.exame,
+            procedimentoComplementar: sanitizedForm.procedimentoComplementar,
+          });
+        }
+        savedItem = addItem('exames', { ...sanitizedForm, id: editId });
+      }
+
+      // Also sync matching record in detalhesExames by ID or (data + paciente)
+      const detalhesList = getData('detalhesExames') || [];
+      const matchingDetalhes = detalhesList.filter(
+        (d) =>
+          d.id === editId ||
+          (d.data === sanitizedForm.data &&
+            d.paciente &&
+            d.paciente.trim().toUpperCase() === sanitizedForm.paciente)
+      );
+      matchingDetalhes.forEach((det) => {
+        updateItem('detalhesExames', det.id, {
+          data: sanitizedForm.data,
+          paciente: sanitizedForm.paciente,
+          medico: sanitizedForm.medico,
+          tipoExame: sanitizedForm.exame,
+          procedimentoComplementar: sanitizedForm.procedimentoComplementar,
+        });
+      });
+    } else {
+      savedItem = addItem('exames', sanitizedForm);
+    }
 
     refresh();
     setModalOpen(false);
@@ -140,13 +220,21 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         paciente: sanitizedForm.paciente,
         tipoExame: sanitizedForm.exame,
         medico: sanitizedForm.medico,
+        procedimentoComplementar: sanitizedForm.procedimentoComplementar,
       });
     }
   };
 
   const handleDelete = () => {
     if (deleteId) {
-      deleteItem('exames', deleteId);
+      const existingInExames = getItem('exames', deleteId);
+      if (existingInExames) {
+        deleteItem('exames', deleteId);
+      }
+      const existingInDetalhes = getItem('detalhesExames', deleteId);
+      if (existingInDetalhes) {
+        deleteItem('detalhesExames', deleteId);
+      }
       refresh();
     }
   };
@@ -239,7 +327,18 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
                       <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
-                      <td>{item.exame ? item.exame.toUpperCase() : ''}</td>
+                      <td>
+                        {item.exame ? item.exame.toUpperCase() : ''}
+                        {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => (
+                          <span
+                            key={proc}
+                            className="badge badge-info"
+                            style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
+                          >
+                            + {proc}
+                          </span>
+                        ))}
+                      </td>
                       <td>{item.medico ? item.medico.toUpperCase() : ''}</td>
                       <td>
                         <div className="action-buttons">
@@ -252,6 +351,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                                   paciente: item.paciente,
                                   tipoExame: item.exame,
                                   medico: item.medico,
+                                  procedimentoComplementar: item.procedimentoComplementar || '',
                                 });
                               }
                             }}
@@ -355,9 +455,52 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                 required
                 placeholder="Selecione ou digite o exame"
                 value={form.exame}
-                onChange={(val) => setForm({ ...form, exame: val.toUpperCase() })}
+                onChange={(val) => setForm({ ...form, exame: val.toUpperCase(), procedimentoComplementar: examePermiteComplementar(val) ? form.procedimentoComplementar : '' })}
               />
             </div>
+
+            {examePermiteComplementar(form.exame) && (
+              <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
+                <label className="input-label">Procedimentos Complementares</label>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                  {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => {
+                    const currentList = normalizeProcedimentosComplementares(form.procedimentoComplementar);
+                    const isChecked = currentList.includes(proc);
+                    return (
+                      <label
+                        key={proc}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          cursor: 'pointer',
+                          fontSize: 'var(--text-sm)',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updatedList;
+                            if (e.target.checked) {
+                              updatedList = [...currentList, proc];
+                            } else {
+                              updatedList = currentList.filter((p) => p !== proc);
+                            }
+                            setForm({
+                              ...form,
+                              procedimentoComplementar: formatProcedimentosComplementares(updatedList),
+                            });
+                          }}
+                        />
+                        <span>{proc}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </Modal>

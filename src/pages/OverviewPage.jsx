@@ -57,9 +57,21 @@ export default function OverviewPage() {
   const standaloneDetalhesInPeriod = detalhesNoPeriodo.filter((d) => !isMatchedInParticulares(d));
 
   const allExamsCombined = [
-    ...examesParticularesInPeriod.map((e) => ({ exame: e.exame, medico: e.medico })),
-    ...examesConvenioInPeriod.map((e) => ({ exame: e.exame, medico: e.medico })),
-    ...standaloneDetalhesInPeriod.map((d) => ({ exame: d.tipoExame, medico: d.medico })),
+    ...examesParticularesInPeriod.map((e) => ({
+      exame: e.exame,
+      procedimentoComplementar: e.procedimentoComplementar,
+      medico: e.medico,
+    })),
+    ...examesConvenioInPeriod.map((e) => ({
+      exame: e.exame,
+      procedimentoComplementar: e.procedimentoComplementar,
+      medico: e.medico,
+    })),
+    ...standaloneDetalhesInPeriod.map((d) => ({
+      exame: d.tipoExame,
+      procedimentoComplementar: d.procedimentoComplementar,
+      medico: d.medico,
+    })),
   ];
 
   const examCountByType = {};
@@ -67,6 +79,10 @@ export default function OverviewPage() {
     if (e.exame && e.exame.trim()) {
       const type = e.exame.trim().toUpperCase();
       examCountByType[type] = (examCountByType[type] || 0) + 1;
+    }
+    if (e.procedimentoComplementar && e.procedimentoComplementar.trim()) {
+      const compl = e.procedimentoComplementar.trim().toUpperCase();
+      examCountByType[compl] = (examCountByType[compl] || 0) + 1;
     }
   });
 
