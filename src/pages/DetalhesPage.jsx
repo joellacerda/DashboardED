@@ -19,6 +19,8 @@ import {
   DEFAULT_EXAMES,
   examePermiteComplementar,
   PROCEDIMENTOS_COMPLEMENTARES,
+  normalizeProcedimentosComplementares,
+  formatProcedimentosComplementares,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -692,12 +694,20 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                           <td>{formatDate(item.data)}</td>
                           <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
                           <td>
-                            {item.tipoExame ? item.tipoExame.toUpperCase() : ''}
-                            {item.procedimentoComplementar && (
-                              <span className="badge badge-info" style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}>
-                                + {item.procedimentoComplementar}
-                              </span>
-                            )}
+                            {item.exame ? item.exame.toUpperCase() : ''}
+                            {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
+                              const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
+                              return (
+                                <span
+                                  key={proc}
+                                  className="badge badge-info"
+                                  style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
+                                  title={proc}
+                                >
+                                  {tagLabel}
+                                </span>
+                              );
+                            })}
                           </td>
                           <td>
                             <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
@@ -1041,16 +1051,45 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             {examePermiteComplementar(form.tipoExame) && (
               <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
                 <label className="input-label">Procedimento Complementar</label>
-                <select
-                  className="input-field"
-                  value={form.procedimentoComplementar || ''}
-                  onChange={(e) => updateField('procedimentoComplementar', e.target.value)}
-                >
-                  <option value="">Nenhum</option>
-                  {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => (
-                    <option key={proc} value={proc}>{proc}</option>
-                  ))}
-                </select>
+                {examePermiteComplementar(form.tipoExame) && (
+                  <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
+                    <label className="input-label">Procedimentos Complementares</label>
+                    <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                      {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => {
+                        const currentList = normalizeProcedimentosComplementares(form.procedimentoComplementar);
+                        const isChecked = currentList.includes(proc);
+                        return (
+                          <label
+                            key={proc}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.45rem',
+                              cursor: 'pointer',
+                              fontSize: 'var(--text-sm)',
+                              userSelect: 'none',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let updatedList;
+                                if (e.target.checked) {
+                                  updatedList = [...currentList, proc];
+                                } else {
+                                  updatedList = currentList.filter((p) => p !== proc);
+                                }
+                                updateField('procedimentoComplementar', formatProcedimentosComplementares(updatedList));
+                              }}
+                            />
+                            <span>{proc}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {/* === SEÇÃO DE PAGAMENTOS DINÂMICA === */}

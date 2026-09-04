@@ -337,15 +337,19 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                       </td>
                       <td>
                         {item.exame ? item.exame.toUpperCase() : ''}
-                        {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => (
-                          <span
-                            key={proc}
-                            className="badge badge-info"
-                            style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
-                          >
-                            + {proc}
-                          </span>
-                        ))}
+                        {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
+                          const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
+                          return (
+                            <span
+                              key={proc}
+                              className="badge badge-info"
+                              style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
+                              title={proc}
+                            >
+                              {tagLabel}
+                            </span>
+                          );
+                        })}
                       </td>
                       <td>
                         <div className="action-buttons">
