@@ -12,6 +12,7 @@ import {
   getHonorarioMedicoInPeriod,
   examHasInstallmentInPeriod,
   getInstallmentLabel,
+  getInstallmentLabels,
   migrateLegacyPayment,
   isCreditCardPayment,
   exportCSV,
@@ -83,7 +84,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
         ...emptyForm,
         data: examDate,
         paciente: prefillData.paciente || '',
-        tipoExame: prefillData.tipoExame || '',
+        tipoExame: prefillData.tipoExame || prefillData.exame || '',
         procedimentoComplementar: prefillData.procedimentoComplementar || '',
         medico: prefillData.medico || '',
       });
@@ -126,6 +127,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     });
     detalhes.forEach((d) => {
       if (d.tipoExame && d.tipoExame.trim()) set.add(d.tipoExame.trim().toUpperCase());
+      if (d.exame && d.exame.trim()) set.add(d.exame.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -142,7 +144,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       items = items.filter(
         (e) =>
           (e.paciente || '').toLowerCase().includes(q) ||
-          (e.tipoExame || '').toLowerCase().includes(q) ||
+          (e.tipoExame || e.exame || '').toLowerCase().includes(q) ||
           (e.procedimentoComplementar || '').toLowerCase().includes(q) ||
           (e.medico || '').toLowerCase().includes(q) ||
           (e.formaPagamento || '').toLowerCase().includes(q) ||
@@ -216,7 +218,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     setForm({
       data: item.data || '',
       paciente: item.paciente || '',
-      tipoExame: item.tipoExame || '',
+      tipoExame: item.tipoExame || item.exame || '',
       procedimentoComplementar: item.procedimentoComplementar || '',
       medico: item.medico || '',
       pagamentos,
@@ -503,7 +505,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     { key: 'paciente', label: 'Paciente' },
     {
       key: 'tipoExame', label: 'Tipo de Exame', accessor: (item) => {
-        const base = item.tipoExame ? item.tipoExame.toUpperCase() : '';
+        const base = (item.tipoExame || item.exame || '').toUpperCase();
         const compl = formatProcedimentosComplementares(item.procedimentoComplementar);
         return compl ? `${base} + ${compl}` : base;
       }
@@ -694,7 +696,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                           <td>{formatDate(item.data)}</td>
                           <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
                           <td>
-                            {item.exame ? item.exame.toUpperCase() : ''}
+                            {(item.tipoExame || item.exame || '').toUpperCase()}
                             {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
                               const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
                               return (
@@ -798,8 +800,10 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                               </div>
                             )}
                           </td>
-                          <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                            {getInstallmentLabel(item.data, pags, item.formaPagamento)}
+                          <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                            {getInstallmentLabels(item.data, pags, item.formaPagamento).map((label, idx) => (
+                              <div key={idx} style={{ whiteSpace: 'nowrap' }}>{label}</div>
+                            ))}
                           </td>
                           <td>
                             <div className="action-buttons">

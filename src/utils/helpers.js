@@ -350,7 +350,7 @@ export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
  * @param {string} [formaPagamento] - Single payment method (legacy)
  * @returns {string}
  */
-export function getInstallmentLabel(examDate, numParcelasOrPagamentos, formaPagamento) {
+export function getInstallmentLabels(examDate, numParcelasOrPagamentos, formaPagamento) {
   const months = [
     'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
     'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
@@ -368,22 +368,26 @@ export function getInstallmentLabel(examDate, numParcelasOrPagamentos, formaPaga
 
   // Multi-payment: receives pagamentos array directly
   if (Array.isArray(numParcelasOrPagamentos) && numParcelasOrPagamentos.length > 0) {
-    const parts = numParcelasOrPagamentos.map((pag) => {
+    return numParcelasOrPagamentos.map((pag) => {
       const n = Math.max(1, Number(pag.parcelas) || 1);
       const periods = getInstallmentPeriods(examDate, n, pag.forma);
       const range = formatPeriodRange(periods, n);
       return `${pag.forma}: ${n}x ${range}`;
     });
-    return parts.join(' | ');
   }
 
   // Legacy single-payment
   const n = Math.max(1, Number(numParcelasOrPagamentos) || 1);
   const isCredit = isCreditCardPayment(formaPagamento, n);
-  if (n <= 1 && !isCredit) return '—';
+  if (n <= 1 && !isCredit) return ['—'];
 
   const periods = getInstallmentPeriods(examDate, n, formaPagamento);
-  return formatPeriodRange(periods, n);
+  return [formatPeriodRange(periods, n)];
+}
+
+export function getInstallmentLabel(examDate, numParcelasOrPagamentos, formaPagamento) {
+  const labels = getInstallmentLabels(examDate, numParcelasOrPagamentos, formaPagamento);
+  return labels.join(' | ');
 }
 
 /**
