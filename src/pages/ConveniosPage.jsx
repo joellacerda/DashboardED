@@ -149,8 +149,10 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       items = items.filter((e) => e.convenio === convenioFilter);
     }
     return items.sort((a, b) => {
+      const dateCompare = (b.data || '').localeCompare(a.data || '');
+      if (dateCompare !== 0) return dateCompare;
       if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);
-      return (b.data || '').localeCompare(a.data || '');
+      return (a.paciente || '').localeCompare(b.paciente || '');
     });
   }, [data, search, period, convenioFilter]);
 

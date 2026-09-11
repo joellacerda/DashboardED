@@ -338,7 +338,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       ...form,
       paciente: form.paciente.trim().toUpperCase(),
       tipoExame: form.tipoExame.trim().toUpperCase(),
-      procedimentoComplementar: allowsCompl ? (form.procedimentoComplementar || '') : '',
+      procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
       medico: form.medico.trim().toUpperCase(),
       medico2: form.medico2 ? form.medico2.trim().toUpperCase() : '',
       pagamentos: sanitizedPagamentos,
@@ -504,8 +504,8 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     {
       key: 'tipoExame', label: 'Tipo de Exame', accessor: (item) => {
         const base = item.tipoExame ? item.tipoExame.toUpperCase() : '';
-        const compl = item.procedimentoComplementar ? ` + ${item.procedimentoComplementar}` : '';
-        return `${base}${compl}`;
+        const compl = formatProcedimentosComplementares(item.procedimentoComplementar);
+        return compl ? `${base} + ${compl}` : base;
       }
     },
     { key: 'medico', label: 'Médico' },
@@ -1050,46 +1050,41 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
             {examePermiteComplementar(form.tipoExame) && (
               <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
-                <label className="input-label">Procedimento Complementar</label>
-                {examePermiteComplementar(form.tipoExame) && (
-                  <div className="input-group full-width" style={{ marginTop: '-0.25rem' }}>
-                    <label className="input-label">Procedimentos Complementares</label>
-                    <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
-                      {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => {
-                        const currentList = normalizeProcedimentosComplementares(form.procedimentoComplementar);
-                        const isChecked = currentList.includes(proc);
-                        return (
-                          <label
-                            key={proc}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.45rem',
-                              cursor: 'pointer',
-                              fontSize: 'var(--text-sm)',
-                              userSelect: 'none',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                let updatedList;
-                                if (e.target.checked) {
-                                  updatedList = [...currentList, proc];
-                                } else {
-                                  updatedList = currentList.filter((p) => p !== proc);
-                                }
-                                updateField('procedimentoComplementar', formatProcedimentosComplementares(updatedList));
-                              }}
-                            />
-                            <span>{proc}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <label className="input-label">Procedimentos Complementares</label>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                  {PROCEDIMENTOS_COMPLEMENTARES.map((proc) => {
+                    const currentList = normalizeProcedimentosComplementares(form.procedimentoComplementar);
+                    const isChecked = currentList.includes(proc);
+                    return (
+                      <label
+                        key={proc}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          cursor: 'pointer',
+                          fontSize: 'var(--text-sm)',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updatedList;
+                            if (e.target.checked) {
+                              updatedList = [...currentList, proc];
+                            } else {
+                              updatedList = currentList.filter((p) => p !== proc);
+                            }
+                            updateField('procedimentoComplementar', formatProcedimentosComplementares(updatedList));
+                          }}
+                        />
+                        <span>{proc}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {/* === SEÇÃO DE PAGAMENTOS DINÂMICA === */}

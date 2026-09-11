@@ -6,6 +6,7 @@ import {
   navigateAcquisitionPeriod,
   isDateInPeriod,
   getHonorarioInPeriod,
+  normalizeProcedimentosComplementares,
 } from '../utils/helpers';
 
 export default function OverviewPage() {
@@ -80,10 +81,9 @@ export default function OverviewPage() {
       const type = e.exame.trim().toUpperCase();
       examCountByType[type] = (examCountByType[type] || 0) + 1;
     }
-    if (e.procedimentoComplementar && e.procedimentoComplementar.trim()) {
-      const compl = e.procedimentoComplementar.trim().toUpperCase();
-      examCountByType[compl] = (examCountByType[compl] || 0) + 1;
-    }
+    normalizeProcedimentosComplementares(e.procedimentoComplementar).forEach((proc) => {
+      examCountByType[proc] = (examCountByType[proc] || 0) + 1;
+    });
   });
 
   const examTypes = Object.entries(examCountByType)
