@@ -45,13 +45,22 @@ const emptyForm = {
   valorMedico1: '',
   valorMedico2: '',
   valorRetidoTaxas: '',
+  notaFiscalPercentual: 15,
   valorNotaFiscal: '',
   valorAnestesista: '',
   taxaClinica: '',
   valorAcessorios: '',
+  acessorioParaMedico: false,
   valorBiopsia: '',
   honorariosMedicos: '',
 };
+
+function calcNotaFiscalFromPercent(pagamentos, percentual) {
+  const totalPag = (pagamentos || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const pct = Number(percentual);
+  if (isNaN(pct) || pct <= 0 || totalPag <= 0) return 0;
+  return roundCurrency((totalPag * pct) / 100);
+}
 
 function calcAutoHonorarios(f) {
   const pagamentos = f.pagamentos || [];
@@ -63,7 +72,10 @@ function calcAutoHonorarios(f) {
   const acess = Number(f.valorAcessorios || 0);
   const biop = Number(f.valorBiopsia || 0);
 
-  const sobra = totalPag - (taxas + nf + anest + clinica + acess + biop);
+  // When acessorioParaMedico is checked, the accessory value is NOT deducted
+  // from the total — it stays as part of the doctor's honorários
+  const deductAcess = f.acessorioParaMedico ? 0 : acess;
+  const sobra = totalPag - (taxas + nf + anest + clinica + deductAcess + biop);
   return Math.max(0, roundCurrency(sobra));
 }
 
@@ -214,10 +226,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       valorMedico1: item.valorMedico1 || '',
       valorMedico2: item.valorMedico2 || '',
       valorRetidoTaxas: item.valorRetidoTaxas || '',
+      notaFiscalPercentual: item.notaFiscalPercentual ?? 15,
       valorNotaFiscal: item.valorNotaFiscal || '',
       valorAnestesista: item.valorAnestesista || '',
       taxaClinica: item.taxaClinica || '',
       valorAcessorios: item.valorAcessorios || '',
+      acessorioParaMedico: !!item.acessorioParaMedico,
       valorBiopsia: item.valorBiopsia || '',
       honorariosMedicos: item.honorariosMedicos || '',
     });
@@ -254,9 +268,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     }
 
     // 2. Sync Valor de Acessórios
+    // When acessorioParaMedico is true, the value goes to the doctor's fee
+    // instead of the clinic's cash register, so we remove/skip the fluxo entry
     const valorAcess = Number(detalheItem.valorAcessorios || 0);
     const keyAcess = `${detalheItem.id}_acessorios`;
     const existingAcess = fluxoList.find((f) => f.detalheId === keyAcess);
+    const acessGoesToClinic = !detalheItem.acessorioParaMedico;
 
     const entryAcess = {
       data: detalheItem.data,
@@ -267,7 +284,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       detalheId: keyAcess,
     };
 
-    if (valorAcess > 0) {
+    if (acessGoesToClinic && valorAcess > 0) {
       if (existingAcess) {
         updateItem('fluxoCaixa', existingAcess.id, entryAcess);
       } else {
@@ -333,10 +350,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       numParcelas: String(totalParcelas),
       formaPagamento: formaLabel,
       valorRetidoTaxas: roundCurrency(form.valorRetidoTaxas),
+      notaFiscalPercentual: form.notaFiscalPercentual !== '' ? Math.round(Number(form.notaFiscalPercentual) * 10) / 10 : 15,
       valorNotaFiscal: roundCurrency(form.valorNotaFiscal),
       valorAnestesista: roundCurrency(form.valorAnestesista),
       taxaClinica: roundCurrency(form.taxaClinica),
       valorAcessorios: roundCurrency(form.valorAcessorios),
+      acessorioParaMedico: !!form.acessorioParaMedico,
       valorBiopsia: roundCurrency(form.valorBiopsia),
       honorariosMedicos: roundCurrency(form.honorariosMedicos),
       valorMedico1: form.valorMedico1 ? roundCurrency(form.valorMedico1) : '',
@@ -397,13 +416,37 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const updateField = (field, value) => {
     setForm((f) => {
       const updated = { ...f, [field]: value };
+
+      // When the NF percentage changes, auto-calculate the NF value
+      if (field === 'notaFiscalPercentual') {
+        const nfVal = calcNotaFiscalFromPercent(updated.pagamentos, value);
+        updated.valorNotaFiscal = nfVal > 0 ? String(nfVal) : '0';
+      }
+
+      // When NF value is manually changed, reverse-calculate the percentage
+      if (field === 'valorNotaFiscal') {
+        const totalPag = (updated.pagamentos || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+        if (totalPag > 0) {
+          const pct = Math.round(((Number(value) || 0) / totalPag) * 1000) / 10;
+          updated.notaFiscalPercentual = pct;
+        }
+      }
+
+      // When pagamentos change, recalculate NF value from current percentage
+      if (field === 'pagamentos') {
+        const nfVal = calcNotaFiscalFromPercent(value, updated.notaFiscalPercentual);
+        updated.valorNotaFiscal = nfVal > 0 ? String(nfVal) : '0';
+      }
+
       if (
         [
           'valorRetidoTaxas',
           'valorNotaFiscal',
+          'notaFiscalPercentual',
           'valorAnestesista',
           'taxaClinica',
           'valorAcessorios',
+          'acessorioParaMedico',
           'valorBiopsia',
           'pagamentos',
         ].includes(field)
@@ -425,6 +468,11 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
         pagamentos[index].parcelas = '1';
       }
       const updated = { ...f, pagamentos };
+      // Recalculate NF value when payment amounts change
+      if (field === 'valor') {
+        const nfVal = calcNotaFiscalFromPercent(pagamentos, updated.notaFiscalPercentual);
+        updated.valorNotaFiscal = nfVal > 0 ? String(nfVal) : '0';
+      }
       const autoHon = calcAutoHonorarios(updated);
       updated.honorariosMedicos = autoHon > 0 ? String(roundCurrency(autoHon)) : '0';
       return updated;
@@ -443,6 +491,9 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       const pagamentos = (f.pagamentos || []).filter((_, i) => i !== index);
       if (pagamentos.length === 0) pagamentos.push({ ...emptyPagamento });
       const updated = { ...f, pagamentos };
+      // Recalculate NF value after removing a payment
+      const nfVal = calcNotaFiscalFromPercent(pagamentos, updated.notaFiscalPercentual);
+      updated.valorNotaFiscal = nfVal > 0 ? String(nfVal) : '0';
       const autoHon = calcAutoHonorarios(updated);
       updated.honorariosMedicos = autoHon > 0 ? String(roundCurrency(autoHon)) : '0';
       return updated;
@@ -1160,9 +1211,39 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               <label className="input-label">Valor Retido em Taxas (R$)</label>
               <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valorRetidoTaxas} onChange={(e) => updateField('valorRetidoTaxas', e.target.value)} />
             </div>
-            <div className="input-group">
+            <div className="input-group full-width">
               <label className="input-label">Valor Nota Fiscal (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valorNotaFiscal} onChange={(e) => updateField('valorNotaFiscal', e.target.value)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: '110px', flexShrink: 0 }}>
+                  <input
+                    type="number"
+                    className="input-field"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    style={{ width: '70px', textAlign: 'center', padding: '0.45rem 0.35rem' }}
+                    value={form.notaFiscalPercentual}
+                    onChange={(e) => updateField('notaFiscalPercentual', e.target.value)}
+                  />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 600 }}>%</span>
+                </div>
+                <span style={{ fontSize: 'var(--text-lg)', color: 'var(--text-muted)', fontWeight: 300 }}>=</span>
+                <input
+                  type="number"
+                  className="input-field"
+                  min="0"
+                  step="0.01"
+                  placeholder="0,00"
+                  style={{ flex: 1 }}
+                  value={form.valorNotaFiscal}
+                  onChange={(e) => updateField('valorNotaFiscal', e.target.value)}
+                />
+              </div>
+              {totalPagamentos > 0 && (
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                  🧾 {form.notaFiscalPercentual || 0}% de {formatCurrency(totalPagamentos)}
+                </div>
+              )}
             </div>
             <div className="input-group">
               <label className="input-label">Valor Anestesista (R$)</label>
@@ -1175,6 +1256,16 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             <div className="input-group">
               <label className="input-label">Valor de Acessórios (R$)</label>
               <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valorAcessorios} onChange={(e) => updateField('valorAcessorios', e.target.value)} />
+              {Number(form.valorAcessorios) > 0 && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: 'var(--text-xs)', marginTop: '0.4rem', color: form.acessorioParaMedico ? 'var(--color-emerald)' : 'var(--text-muted)', userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.acessorioParaMedico}
+                    onChange={(e) => updateField('acessorioParaMedico', e.target.checked)}
+                  />
+                  <span>👨‍⚕️ Adicionar ao honorário do médico realizante (ao invés do caixa da clínica)</span>
+                </label>
+              )}
             </div>
             <div className="input-group">
               <label className="input-label">Valor de Biópsia (R$)</label>
