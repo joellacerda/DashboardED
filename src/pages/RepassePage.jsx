@@ -56,18 +56,22 @@ export default function RepassePage() {
 
   // --- Merge registered doctors with doctors found in exam records ---
   const allDoctors = useMemo(() => {
-    const list = medicosList.map((m) => ({ ...m, nome: m.nome.trim().toUpperCase() }));
+    const list = medicosList.map((m) => ({
+      ...m,
+      nome: m.nome.trim().toUpperCase(),
+      ativo: m.ativo !== false,
+    }));
     const registeredNames = new Set(list.map((m) => m.nome.trim().toUpperCase()));
 
     // Collect from exam records
     detalhesExames.forEach((e) => {
       if (e.medico && !registeredNames.has(e.medico.trim().toUpperCase())) {
         registeredNames.add(e.medico.trim().toUpperCase());
-        list.push({ id: `auto_${e.medico.trim().toUpperCase()}`, nome: e.medico.trim().toUpperCase(), socio: true, auto: true });
+        list.push({ id: `auto_${e.medico.trim().toUpperCase()}`, nome: e.medico.trim().toUpperCase(), socio: true, auto: true, ativo: true });
       }
       if (e.medico2 && !registeredNames.has(e.medico2.trim().toUpperCase())) {
         registeredNames.add(e.medico2.trim().toUpperCase());
-        list.push({ id: `auto_${e.medico2.trim().toUpperCase()}`, nome: e.medico2.trim().toUpperCase(), socio: true, auto: true });
+        list.push({ id: `auto_${e.medico2.trim().toUpperCase()}`, nome: e.medico2.trim().toUpperCase(), socio: true, auto: true, ativo: true });
       }
     });
 
@@ -76,7 +80,7 @@ export default function RepassePage() {
 
   // Count active partner doctors (sócios)
   const countSocios = useMemo(
-    () => allDoctors.filter((m) => m.socio !== false).length,
+    () => allDoctors.filter((m) => m.socio !== false && m.ativo !== false).length,
     [allDoctors]
   );
 
@@ -87,6 +91,7 @@ export default function RepassePage() {
     return allDoctors
       .map((medico) => {
         const isSocio = medico.socio !== false;
+        const isActive = medico.ativo !== false;
 
         // 1. Honorários
         const honorarios = detalhesExames.reduce((sum, exam) => {
@@ -102,8 +107,8 @@ export default function RepassePage() {
         const bnb = Number(ajuste.bnb) || 0;
         const obs = ajuste.obs || '';
 
-        // 3. Cota clínica
-        const cotaClinica = isSocio ? cotaPorSocio : 0;
+        // 3. Cota clínica (apenas para sócios ativos)
+        const cotaClinica = isSocio && isActive ? cotaPorSocio : 0;
 
         // 4. Total calculation
         // Total = Honorários + Créditos - Débitos - BNB - Cota clínica
@@ -113,6 +118,7 @@ export default function RepassePage() {
           medico,
           nome: medico.nome,
           isSocio,
+          isActive,
           honorarios,
           creditos,
           debitos,
@@ -124,7 +130,7 @@ export default function RepassePage() {
           key,
         };
       })
-      .filter((row) => row.isSocio || row.honorarios > 0 || row.creditos > 0 || row.debitos > 0 || row.bnb > 0 || row.obs);
+      .filter((row) => (row.isSocio && row.isActive) || row.honorarios > 0 || row.creditos > 0 || row.debitos > 0 || row.bnb > 0 || row.obs);
   }, [allDoctors, detalhesExames, period, ajustesList, cotaPorSocio]);
 
   // Summary Totals
@@ -202,14 +208,21 @@ export default function RepassePage() {
     e.preventDefault();
     if (!newMedicoNome.trim()) return;
 
-    const currentMedicos = getData('medicos');
+    const currentMedicos = getData('medicos') || [];
     const nomeUpper = newMedicoNome.trim().toUpperCase();
-    if (currentMedicos.some((m) => m.nome.trim().toUpperCase() === nomeUpper)) {
+    const existing = currentMedicos.find((m) => m.nome.trim().toUpperCase() === nomeUpper);
+    if (existing) {
+      if (existing.ativo === false) {
+        updateItem('medicos', existing.id, { ativo: true, socio: newMedicoSocio });
+        setNewMedicoNome('');
+        refreshAll();
+        return;
+      }
       alert('Médico já cadastrado!');
       return;
     }
 
-    addItem('medicos', { nome: nomeUpper, socio: newMedicoSocio });
+    addItem('medicos', { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
     setNewMedicoNome('');
     refreshAll();
   };
@@ -222,14 +235,36 @@ export default function RepassePage() {
   };
 
   const toggleMedicoSocio = (medico) => {
-    const currentMedicos = getData('medicos');
-    const index = currentMedicos.findIndex((m) => m.id === medico.id || m.nome === medico.nome);
+    const currentMedicos = getData('medicos') || [];
+    const index = currentMedicos.findIndex(
+      (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
+    );
     if (index !== -1) {
-      currentMedicos[index].socio = !currentMedicos[index].socio;
-      setData('medicos', currentMedicos);
+      updateItem('medicos', currentMedicos[index].id, { socio: !currentMedicos[index].socio });
     } else {
-      currentMedicos.push({ id: crypto.randomUUID(), nome: medico.nome, socio: !medico.socio });
-      setData('medicos', currentMedicos);
+      addItem('medicos', {
+        nome: medico.nome.trim().toUpperCase(),
+        socio: !medico.socio,
+        ativo: medico.ativo !== false,
+      });
+    }
+    refreshAll();
+  };
+
+  const toggleMedicoAtivo = (medico) => {
+    const currentMedicos = getData('medicos') || [];
+    const index = currentMedicos.findIndex(
+      (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
+    );
+    const isCurrentlyActive = medico.ativo !== false;
+    if (index !== -1) {
+      updateItem('medicos', currentMedicos[index].id, { ativo: !isCurrentlyActive });
+    } else {
+      addItem('medicos', {
+        nome: medico.nome.trim().toUpperCase(),
+        socio: medico.socio !== false,
+        ativo: !isCurrentlyActive,
+      });
     }
     refreshAll();
   };
@@ -373,6 +408,11 @@ export default function RepassePage() {
                             ) : (
                               <span className="badge badge-info" style={{ opacity: 0.7 }} title="Médico Não-Sócio">
                                 Não-sócio
+                              </span>
+                            )}
+                            {!row.isActive && (
+                              <span className="badge badge-danger" style={{ opacity: 0.8 }} title="Médico Desativado (histórico preservado)">
+                                Inativo
                               </span>
                             )}
                           </div>
@@ -579,11 +619,19 @@ export default function RepassePage() {
           </form>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>Médicos Cadastrados:</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>Médicos Cadastrados:</h4>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                {allDoctors.filter((m) => m.ativo !== false).length} ativo(s) • {allDoctors.filter((m) => m.ativo === false).length} desativado(s)
+              </span>
+            </div>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.35rem 0' }}>
+              Médicos desativados não aparecem nos seletores ao cadastrar novos exames, mas todo seu histórico permanece preservado.
+            </p>
             {allDoctors.length === 0 ? (
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Nenhum médico cadastrado ainda.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '240px', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '2px' }}>
                 {allDoctors.map((m) => (
                   <div
                     key={m.id || m.nome}
@@ -591,14 +639,20 @@ export default function RepassePage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '0.5rem 0.75rem',
+                      padding: '0.6rem 0.85rem',
                       background: 'var(--bg-input)',
                       borderRadius: 'var(--radius-sm)',
                       fontSize: 'var(--text-sm)',
+                      opacity: m.ativo === false ? 0.75 : 1,
+                      borderLeft: m.ativo === false ? '3px solid var(--color-red)' : '3px solid var(--color-emerald)',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    <div>
-                      <strong style={{ marginInlineEnd: '0.5rem' }}>{m.nome}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: '200px' }}>
+                      <strong style={{ color: m.ativo === false ? 'var(--text-muted)' : 'inherit', textDecoration: m.ativo === false ? 'line-through' : 'none' }}>
+                        {m.nome}
+                      </strong>
                       <button
                         type="button"
                         className={`badge ${m.socio !== false ? 'badge-success' : 'badge-info'}`}
@@ -608,18 +662,48 @@ export default function RepassePage() {
                       >
                         {m.socio !== false ? '👑 Sócio' : '👤 Não-sócio'}
                       </button>
-                    </div>
-
-                    {!m.auto && (
                       <button
                         type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => setDeleteMedicoId(m.id)}
-                        title="Remover médico"
+                        className={`badge ${m.ativo !== false ? 'badge-success' : 'badge-danger'}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                        onClick={() => toggleMedicoAtivo(m)}
+                        title={m.ativo !== false ? 'Clique para desativar médico' : 'Clique para reativar médico'}
                       >
-                        🗑️
+                        {m.ativo !== false ? '🟢 Ativo' : '🔴 Desativado'}
                       </button>
-                    )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${m.ativo !== false ? 'btn-ghost' : 'btn-secondary'}`}
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          padding: '0.25rem 0.65rem',
+                          color: m.ativo !== false ? 'var(--color-red)' : 'var(--color-emerald)',
+                          borderColor: m.ativo !== false ? 'var(--border-medium)' : 'var(--color-emerald)',
+                        }}
+                        onClick={() => toggleMedicoAtivo(m)}
+                        title={
+                          m.ativo !== false
+                            ? 'Desativar médico: não aparecerá mais nos seletores ao adicionar novos exames, mantendo todo o histórico'
+                            : 'Reativar médico: voltará a aparecer nos seletores de exames'
+                        }
+                      >
+                        {m.ativo !== false ? '⏸️ Desativar' : '▶️ Reativar'}
+                      </button>
+
+                      {!m.auto && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-sm"
+                          onClick={() => setDeleteMedicoId(m.id)}
+                          title="Remover médico do cadastro"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -632,7 +716,7 @@ export default function RepassePage() {
         isOpen={!!deleteMedicoId}
         onClose={() => setDeleteMedicoId(null)}
         onConfirm={handleDeleteMedico}
-        message="Tem certeza que deseja remover este médico cadastrado?"
+        message="Tem certeza que deseja remover este médico do cadastro? Se deseja apenas ocultá-lo dos novos exames mantendo todo o histórico, utilize a opção 'Desativar'."
       />
     </>
   );

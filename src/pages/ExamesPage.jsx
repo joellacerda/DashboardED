@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getData, addItem, updateItem, deleteItem, getItem } from '../utils/storage';
+import { getData, addItem, updateItem, deleteItem, getItem, getActiveMedicosOptions } from '../utils/storage';
 import {
   formatDate,
   getTodayISO,
@@ -109,23 +109,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     return items.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
   }, [allParticulares, search, period]);
 
-  const medicosOptions = useMemo(() => {
-    const list = getData('medicos') || [];
-    const set = new Set(list.map((m) => m.nome.trim().toUpperCase()));
-
-    const exames = getData('exames') || [];
-    const detalhes = getData('detalhesExames') || [];
-
-    exames.forEach((e) => {
-      if (e.medico && e.medico.trim()) set.add(e.medico.trim().toUpperCase());
-    });
-    detalhes.forEach((d) => {
-      if (d.medico && d.medico.trim()) set.add(d.medico.trim().toUpperCase());
-      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim().toUpperCase());
-    });
-
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [modalOpen]);
+  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [modalOpen]);
 
   const examesOptions = useMemo(() => {
     const set = new Set(DEFAULT_EXAMES);

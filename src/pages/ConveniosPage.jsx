@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getData, addItem, updateItem, deleteItem } from '../utils/storage';
+import { getData, addItem, updateItem, deleteItem, getActiveMedicosOptions } from '../utils/storage';
 import {
   formatDate,
   getTodayISO,
@@ -94,27 +94,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
 
   const refresh = () => setData(getData('examesConvenio'));
 
-  const medicosOptions = useMemo(() => {
-    const list = getData('medicos') || [];
-    const set = new Set(list.map((m) => m.nome.trim().toUpperCase()));
-
-    const exames = getData('exames') || [];
-    const detalhes = getData('detalhesExames') || [];
-    const convs = getData('examesConvenio') || [];
-
-    exames.forEach((e) => {
-      if (e.medico && e.medico.trim()) set.add(e.medico.trim().toUpperCase());
-    });
-    detalhes.forEach((d) => {
-      if (d.medico && d.medico.trim()) set.add(d.medico.trim().toUpperCase());
-      if (d.medico2 && d.medico2.trim()) set.add(d.medico2.trim().toUpperCase());
-    });
-    convs.forEach((c) => {
-      if (c.medico && c.medico.trim()) set.add(c.medico.trim().toUpperCase());
-    });
-
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [modalOpen]);
+  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [modalOpen]);
 
   const conveniosOptions = useMemo(() => {
     const set = new Set(DEFAULT_CONVENIOS);

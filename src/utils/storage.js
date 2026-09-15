@@ -267,3 +267,53 @@ export function getItem(module, id) {
   const data = getData(module);
   return data.find((item) => item.id === id) || null;
 }
+
+/**
+ * Returns sorted list of active doctor names for selectors when adding exams.
+ * Doctors marked with ativo === false are excluded, even if they have historical records.
+ */
+export function getActiveMedicosOptions() {
+  const list = getData('medicos') || [];
+  const inactiveNames = new Set(
+    list
+      .filter((m) => m.ativo === false)
+      .map((m) => m.nome.trim().toUpperCase())
+  );
+  const activeSet = new Set(
+    list
+      .filter((m) => m.ativo !== false)
+      .map((m) => m.nome.trim().toUpperCase())
+  );
+
+  const exames = getData('exames') || [];
+  const detalhes = getData('detalhesExames') || [];
+  const convs = getData('examesConvenio') || [];
+
+  exames.forEach((e) => {
+    if (e.medico && e.medico.trim()) {
+      const name = e.medico.trim().toUpperCase();
+      if (!inactiveNames.has(name)) activeSet.add(name);
+    }
+  });
+
+  detalhes.forEach((d) => {
+    if (d.medico && d.medico.trim()) {
+      const name = d.medico.trim().toUpperCase();
+      if (!inactiveNames.has(name)) activeSet.add(name);
+    }
+    if (d.medico2 && d.medico2.trim()) {
+      const name = d.medico2.trim().toUpperCase();
+      if (!inactiveNames.has(name)) activeSet.add(name);
+    }
+  });
+
+  convs.forEach((c) => {
+    if (c.medico && c.medico.trim()) {
+      const name = c.medico.trim().toUpperCase();
+      if (!inactiveNames.has(name)) activeSet.add(name);
+    }
+  });
+
+  return Array.from(activeSet).sort((a, b) => a.localeCompare(b));
+}
+
