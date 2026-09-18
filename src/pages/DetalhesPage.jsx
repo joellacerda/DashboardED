@@ -1232,39 +1232,42 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               <label className="input-label">Valor Retido em Taxas (R$)</label>
               <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valorRetidoTaxas} onChange={(e) => updateField('valorRetidoTaxas', e.target.value)} />
             </div>
-            <div className="input-group full-width">
-              <label className="input-label">Valor Nota Fiscal (R$)</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: '110px', flexShrink: 0 }}>
+            <div className="input-group">
+              <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Valor Nota Fiscal (R$)</span>
+                {totalPagamentos > 0 && (
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                    {form.notaFiscalPercentual || 0}% de {formatCurrency(totalPagamentos)}
+                  </span>
+                )}
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', width: '68px', flexShrink: 0 }}>
                   <input
                     type="number"
                     className="input-field"
                     min="0"
                     max="100"
                     step="0.5"
-                    style={{ width: '70px', textAlign: 'center', padding: '0.45rem 0.35rem' }}
+                    style={{ width: '100%', textAlign: 'center', padding: '0.45rem 0.2rem' }}
                     value={form.notaFiscalPercentual}
                     onChange={(e) => updateField('notaFiscalPercentual', e.target.value)}
+                    title="Porcentagem da Nota Fiscal"
                   />
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 600 }}>%</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 600 }}>%</span>
                 </div>
-                <span style={{ fontSize: 'var(--text-lg)', color: 'var(--text-muted)', fontWeight: 300 }}>=</span>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>=</span>
                 <input
                   type="number"
                   className="input-field"
                   min="0"
                   step="0.01"
                   placeholder="0,00"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: 0 }}
                   value={form.valorNotaFiscal}
                   onChange={(e) => updateField('valorNotaFiscal', e.target.value)}
                 />
               </div>
-              {totalPagamentos > 0 && (
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                  🧾 {form.notaFiscalPercentual || 0}% de {formatCurrency(totalPagamentos)}
-                </div>
-              )}
             </div>
             <div className="input-group">
               <label className="input-label">Valor Anestesista (R$)</label>
