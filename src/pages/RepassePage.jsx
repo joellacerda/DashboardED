@@ -1,5 +1,12 @@
-import { useState, useMemo } from 'react';
-import { getData, addItem, updateItem, deleteItem, setData } from '../utils/storage';
+import { useState, useMemo, useEffect } from 'react';
+import {
+  getData,
+  addItem,
+  updateItem,
+  deleteItem,
+  setData,
+  syncAllConveniosToDetalhes,
+} from '../utils/storage';
 import {
   formatCurrency,
   getAcquisitionPeriod,
@@ -35,6 +42,11 @@ export default function RepassePage() {
     setDetalhesExames(getData('detalhesExames'));
     setFluxoCaixa(getData('fluxoCaixa'));
   };
+
+  useEffect(() => {
+    syncAllConveniosToDetalhes();
+    refreshAll();
+  }, []);
 
   // --- Calculate Clinic Deficit for current period ---
   const periodFluxo = useMemo(

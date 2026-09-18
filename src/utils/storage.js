@@ -317,3 +317,148 @@ export function getActiveMedicosOptions() {
   return Array.from(activeSet).sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * Synchronize a single examesConvenio record with detalhesExames
+ */
+export function syncConvenioToDetalhes(convenioItem) {
+  if (!convenioItem || !convenioItem.id) return null;
+
+  const hasDivisao =
+    (convenioItem.valorClinica !== undefined && convenioItem.valorClinica !== '' && convenioItem.valorClinica !== null) ||
+    (convenioItem.valorMedico !== undefined && convenioItem.valorMedico !== '' && convenioItem.valorMedico !== null) ||
+    convenioItem.fluxoLancado ||
+    (convenioItem.valorRepasse !== undefined && Number(convenioItem.valorRepasse) > 0);
+
+  const detalhesList = getData('detalhesExames') || [];
+  const syncId = `conv_${convenioItem.id}`;
+  const existingIdx = detalhesList.findIndex((d) => d.id === syncId || d.origemConvenioId === convenioItem.id);
+
+  if (!hasDivisao) {
+    if (existingIdx !== -1) {
+      deleteItem('detalhesExames', detalhesList[existingIdx].id);
+    }
+    return null;
+  }
+
+  const valClinicaNum = parseFloat(convenioItem.valorClinica) || 0;
+  const valMedicoNum = parseFloat(convenioItem.valorMedico) || 0;
+  const total = valClinicaNum + valMedicoNum;
+  const pctMedicoTotal = convenioItem.percentualMedico !== undefined && convenioItem.percentualMedico !== null
+    ? Number(convenioItem.percentualMedico)
+    : 60;
+  const pctClinica = Math.max(0, 100 - pctMedicoTotal);
+  const totalHonorariosMedicos = (total * pctMedicoTotal) / 100;
+  const direitoClinica = (total * pctClinica) / 100;
+
+  const temDiv2 = !!(convenioItem.temDivisaoMedico2 && convenioItem.medico2);
+  const pctMed1 = temDiv2 ? (Number(convenioItem.porcentagemMedico1) || 0) : 100;
+  const pctMed2 = temDiv2 ? (Number(convenioItem.porcentagemMedico2) || 0) : 0;
+
+  const direitoMed1 = (totalHonorariosMedicos * pctMed1) / 100;
+  const direitoMed2 = temDiv2 ? (totalHonorariosMedicos * pctMed2) / 100 : 0;
+
+  const difMed1 = Math.max(0, direitoMed1 - valMedicoNum);
+  const difMed2 = direitoMed2;
+
+  const repMed1 = convenioItem.valorRepasseMedico1 !== undefined && Number(convenioItem.valorRepasseMedico1) >= 0
+    ? Number(convenioItem.valorRepasseMedico1)
+    : difMed1;
+  const repMed2 = convenioItem.valorRepasseMedico2 !== undefined && Number(convenioItem.valorRepasseMedico2) >= 0
+    ? Number(convenioItem.valorRepasseMedico2)
+    : difMed2;
+  const repasseTotal = convenioItem.valorRepasse !== undefined && Number(convenioItem.valorRepasse) >= 0
+    ? Number(convenioItem.valorRepasse)
+    : (repMed1 + repMed2);
+
+  const cNome = (convenioItem.convenio || '').trim().toUpperCase();
+  const formaStr = cNome ? `Convênio (${cNome})` : 'Convênio';
+  const effectiveData = convenioItem.fluxoData || convenioItem.data;
+
+  const detalheRecord = {
+    id: syncId,
+    origemConvenioId: convenioItem.id,
+    isConvenio: true,
+    convenio: cNome,
+    data: effectiveData,
+    dataOriginalExame: convenioItem.data,
+    paciente: (convenioItem.paciente || '').trim().toUpperCase(),
+    tipoExame: (convenioItem.exame || '').trim().toUpperCase(),
+    procedimentoComplementar: convenioItem.procedimentoComplementar || '',
+    medico: (convenioItem.medico || '').trim().toUpperCase(),
+    temDivisao: temDiv2,
+    medico2: temDiv2 && convenioItem.medico2 ? convenioItem.medico2.trim().toUpperCase() : '',
+    divisaoTipo: 'valor',
+    porcentagemMedico1: pctMed1,
+    porcentagemMedico2: pctMed2,
+    valorMedico1: Math.round(repMed1 * 100) / 100,
+    valorMedico2: Math.round(repMed2 * 100) / 100,
+    honorariosMedicos: Math.round(repasseTotal * 100) / 100,
+    taxaClinica: Math.round(direitoClinica * 100) / 100,
+    valorPagamento: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
+    numParcelas: '1',
+    formaPagamento: formaStr,
+    pagamentos: [
+      {
+        forma: formaStr,
+        valor: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
+        parcelas: 1,
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (existingIdx !== -1) {
+    updateItem('detalhesExames', detalhesList[existingIdx].id, detalheRecord);
+  } else {
+    addItem('detalhesExames', detalheRecord);
+  }
+  return detalheRecord;
+}
+
+/**
+ * Synchronize all examesConvenio with detalhesExames
+ */
+export function syncAllConveniosToDetalhes() {
+  try {
+    const convenios = getData('examesConvenio') || [];
+    const validConvenioIds = new Set(convenios.map((c) => c.id));
+    const detalhesList = getData('detalhesExames') || [];
+
+    // Remove orphaned synced records whose source convenio was deleted
+    detalhesList.forEach((d) => {
+      if (d.origemConvenioId && !validConvenioIds.has(d.origemConvenioId)) {
+        deleteItem('detalhesExames', d.id);
+      }
+    });
+
+    convenios.forEach((c) => {
+      syncConvenioToDetalhes(c);
+    });
+  } catch (err) {
+    console.error('Error syncing convenios to detalhes:', err);
+  }
+}
+
+/**
+ * Remove synced detalhesExames record when a convenio exam is deleted
+ */
+export function removeConvenioFromDetalhes(convenioId) {
+  try {
+    const detalhesList = getData('detalhesExames') || [];
+    const syncId = `conv_${convenioId}`;
+    const found = detalhesList.find((d) => d.id === syncId || d.origemConvenioId === convenioId);
+    if (found) {
+      deleteItem('detalhesExames', found.id);
+    }
+  } catch (err) {
+    console.error('Error removing convenio from detalhes:', err);
+  }
+}
+
+// Initial sync on startup
+try {
+  syncAllConveniosToDetalhes();
+} catch (e) {
+  // ignore during initial bundle load
+}
+

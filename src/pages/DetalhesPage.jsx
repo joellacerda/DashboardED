@@ -1,5 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { getData, addItem, updateItem, deleteItem, getActiveMedicosOptions } from '../utils/storage';
+import {
+  getData,
+  addItem,
+  updateItem,
+  deleteItem,
+  getActiveMedicosOptions,
+  syncAllConveniosToDetalhes,
+} from '../utils/storage';
 import {
   formatCurrency,
   roundCurrency,
@@ -108,6 +115,11 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       if (onClearPrefill) onClearPrefill();
     }
   }, [prefillData, onClearPrefill]);
+
+  useEffect(() => {
+    syncAllConveniosToDetalhes();
+    setData(getData('detalhesExames'));
+  }, []);
 
   const refresh = () => setData(getData('detalhesExames'));
 
@@ -729,7 +741,16 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                           title={!isExamInThisPeriod ? 'Exame de outro período — parcela de honorários cai neste período' : undefined}
                         >
                           <td>{formatDate(item.data)}</td>
-                          <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</div>
+                            {item.isConvenio && (
+                              <div style={{ marginTop: '0.2rem' }}>
+                                <span className="badge badge-info" style={{ fontSize: '10px' }}>
+                                  🏢 {item.convenio || 'CONVÊNIO'}
+                                </span>
+                              </div>
+                            )}
+                          </td>
                           <td>
                             {(item.tipoExame || item.exame || '').toUpperCase()}
                             {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen, onClose, title, children, footer, className = '', maxWidth }) {
   const overlayRef = useRef(null);
 
   useEffect(() => {
@@ -22,7 +22,13 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className={`modal ${className}`.trim()}
+        style={maxWidth ? { width: `min(100%, ${maxWidth})` } : undefined}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Fechar">
