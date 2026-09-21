@@ -104,6 +104,7 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  height: 100%;
 }
 
 body {
@@ -112,11 +113,16 @@ body {
   color: var(--text-primary);
   line-height: 1.6;
   overflow: hidden;
+  height: 100dvh;
   min-height: 100dvh;
 }
 
 #root {
+  height: 100dvh;
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -158,7 +164,12 @@ table {
 /* === Layout === */
 .app-layout {
   display: flex;
+  height: 100dvh;
+  max-height: 100dvh;
   min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
 }
 
 /* === Sidebar === */
@@ -226,6 +237,8 @@ table {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .nav-item {
@@ -291,9 +304,12 @@ table {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
   min-width: 0;
   width: calc(100vw - var(--sidebar-width));
   max-width: calc(100vw - var(--sidebar-width));
+  overflow: hidden;
 }
 
 /* === Header === */
@@ -311,6 +327,7 @@ table {
   z-index: 50;
   gap: 1rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .page-title {
@@ -333,6 +350,8 @@ table {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* === Summary Cards Grid === */
@@ -475,6 +494,9 @@ table {
   border-radius: var(--card-radius);
   overflow: hidden;
   animation: fadeInUp 0.5s ease 0.3s both;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .table-header {
@@ -501,6 +523,9 @@ table {
 
 .table-scroll {
   overflow-x: auto;
+  min-width: 0;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -1440,9 +1465,13 @@ select:-webkit-autofill:focus {
 @media (max-width: 1024px) {
   .app-layout {
     flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
   }
   .mobile-header {
     display: flex;
+    flex-shrink: 0;
   }
   .sidebar-close-btn {
     display: flex;
@@ -1459,16 +1488,21 @@ select:-webkit-autofill:focus {
   }
   .main-content {
     margin-inline-start: 0;
-    width: 100vw;
-    max-width: 100vw;
-    height: calc(100dvh - 58px);
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    flex: 1;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
   }
   .page-header {
+    min-height: auto;
     padding: 0.75rem 1rem;
     flex-direction: row;
     align-items: center;
     gap: 0.5rem;
+    flex-shrink: 0;
   }
   .page-title {
     font-size: var(--text-lg);
@@ -1479,12 +1513,18 @@ select:-webkit-autofill:focus {
   }
   .page-container {
     padding: 1rem;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   .modal-form-grid {
     grid-template-columns: 1fr;
   }
   .summary-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   .overview-grid {
     grid-template-columns: 1fr;
@@ -1495,6 +1535,12 @@ select:-webkit-autofill:focus {
   }
   .period-btn {
     padding: 0.3rem 0.4rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-cards {
+    grid-template-columns: 1fr;
   }
 }
 
