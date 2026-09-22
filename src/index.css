@@ -1898,3 +1898,156 @@ select:-webkit-autofill:focus {
   gap: 0.25rem;
 }
 
+/* ============================================================
+   EXPANDABLE ROWS — Detalhes de Exames
+   ============================================================ */
+
+/* Expand/collapse chevron button */
+.btn-expand-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.btn-expand-row:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.btn-expand-row.expanded {
+  color: var(--color-emerald);
+  transform: rotate(90deg);
+}
+
+/* Row highlight when expanded */
+.expandable-row {
+  cursor: default;
+  transition: background var(--transition-fast);
+}
+
+.expandable-row:hover {
+  background: var(--bg-surface-hover);
+}
+
+.expandable-row.expanded {
+  background: oklch(72% 0.19 160 / 0.04);
+}
+
+/* The expanded detail row */
+.expanded-detail-row {
+  background: transparent !important;
+}
+
+.expanded-detail-row > td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border-medium);
+}
+
+/* Detail panel */
+.expanded-detail-panel {
+  padding: 0.75rem 1rem 0.85rem 2.75rem;
+  background: var(--bg-surface);
+  border-top: 1px solid oklch(72% 0.19 160 / 0.15);
+  animation: expandPanel 200ms ease-out;
+}
+
+@keyframes expandPanel {
+  from {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+    padding-top: 0.75rem;
+    padding-bottom: 0.85rem;
+  }
+}
+
+/* 4-column grid for detail sections */
+.expanded-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 1200px) {
+  .expanded-detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .expanded-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Each detail section */
+.expanded-detail-section {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.expanded-detail-section-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.expanded-detail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.expanded-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.expanded-detail-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expanded-detail-value {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: end;
+  white-space: nowrap;
+}
+
+/* Compact table specific overrides */
+.detalhes-compact-table th,
+.detalhes-compact-table td {
+  white-space: nowrap;
+}

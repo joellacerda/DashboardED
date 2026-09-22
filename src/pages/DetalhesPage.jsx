@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   getData,
   addItem,
@@ -94,6 +94,19 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
+  const [expandedRows, setExpandedRows] = useState(new Set());
+
+  const toggleRowExpand = (id) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (prefillData) {
@@ -694,32 +707,23 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             </div>
           </div>
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table detalhes-compact-table">
               <thead>
                 <tr>
+                  <th style={{ width: '36px' }} />
                   <th>Data</th>
                   <th>Paciente</th>
-                  <th>Tipo Exame</th>
+                  <th>Exame</th>
                   <th>Médico</th>
-                  <th>Forma Pgto</th>
                   <th>Pagamento</th>
-                  <th>Taxas</th>
-                  <th>Nota Fiscal</th>
-                  <th>Anestesista</th>
-                  <th>Taxa Clínica</th>
-                  <th>Acessórios</th>
-                  <th>Biópsia</th>
-                  <th>Parcelas</th>
-                  <th>Hon. Total</th>
-                  <th>Hon. no Período</th>
-                  <th>Período Parcelas</th>
+                  <th>Hon. Período</th>
                   <th style={{ width: '90px' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan="17">
+                    <td colSpan="8">
                       <div className="table-empty">
                         <div className="table-empty-icon">📋</div>
                         <p>Nenhum detalhe registrado para este período{search ? ' e busca' : ''}.</p>
@@ -733,162 +737,228 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                       const numP = pags.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
                       const honNoPeriodo = getHonorarioInPeriod(item, period);
                       const isExamInThisPeriod = isDateInPeriod(item.data, period);
+                      const isExpanded = expandedRows.has(item.id);
 
                       return (
-                        <tr
-                          key={item.id}
-                          style={!isExamInThisPeriod ? { opacity: 0.8, fontStyle: 'italic' } : undefined}
-                          title={!isExamInThisPeriod ? 'Exame de outro período — parcela de honorários cai neste período' : undefined}
-                        >
-                          <td>{formatDate(item.data)}</td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</div>
-                            {item.isConvenio && (
-                              <div style={{ marginTop: '0.2rem' }}>
-                                <span className="badge badge-info" style={{ fontSize: '10px' }}>
-                                  🏢 {item.convenio || 'CONVÊNIO'}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            {(item.tipoExame || item.exame || '').toUpperCase()}
-                            {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
-                              const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
-                              return (
-                                <span
-                                  key={proc}
-                                  className="badge badge-info"
-                                  style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
-                                  title={proc}
-                                >
-                                  {tagLabel}
-                                </span>
-                              );
-                            })}
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
-                            {item.medico2 && (
-                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)' }}>
-                                👥 c/ {item.medico2.toUpperCase()} (
-                                {item.divisaoTipo === 'valor'
-                                  ? `${formatCurrency(item.valorMedico1)} / ${formatCurrency(item.valorMedico2)}`
-                                  : `${item.porcentagemMedico1 ?? 50}% / ${item.porcentagemMedico2 ?? 50}%`}
-                                )
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            {pags.length === 1 ? (
-                              <span className="badge badge-neutral">
-                                {pags[0].forma} {pags[0].parcelas > 1 ? `${pags[0].parcelas}x` : ''}
-                              </span>
-                            ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                {pags.map((p, i) => (
-                                  <span key={i} className="badge badge-neutral" style={{ fontSize: 'var(--text-xs)' }}>
-                                    {p.forma} {p.parcelas > 1 ? `${p.parcelas}x` : ''}
+                        <React.Fragment key={item.id}>
+                          <tr
+                            className={`expandable-row${isExpanded ? ' expanded' : ''}`}
+                            style={!isExamInThisPeriod ? { opacity: 0.8, fontStyle: 'italic' } : undefined}
+                            title={!isExamInThisPeriod ? 'Exame de outro período — parcela de honorários cai neste período' : undefined}
+                          >
+                            <td>
+                              <button
+                                type="button"
+                                className={`btn-expand-row${isExpanded ? ' expanded' : ''}`}
+                                onClick={() => toggleRowExpand(item.id)}
+                                title={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes financeiros'}
+                                aria-label={isExpanded ? 'Recolher' : 'Expandir'}
+                              >
+                                ▶
+                              </button>
+                            </td>
+                            <td>{formatDate(item.data)}</td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</div>
+                              {item.isConvenio && (
+                                <div style={{ marginTop: '0.2rem' }}>
+                                  <span className="badge badge-info" style={{ fontSize: '10px' }}>
+                                    🏢 {item.convenio || 'CONVÊNIO'}
                                   </span>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="value-currency">
-                            {isExamInThisPeriod ? formatCurrency(item.valorPagamento) : <span style={{ color: 'var(--text-muted)' }} title="Contabilizado no período em que o exame foi realizado">—</span>}
-                          </td>
-                          <td className="value-negative">
-                            {isExamInThisPeriod ? formatCurrency(item.valorRetidoTaxas) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td className="value-currency">
-                            {isExamInThisPeriod ? formatCurrency(item.valorNotaFiscal) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td className="value-currency">
-                            {isExamInThisPeriod ? formatCurrency(item.valorAnestesista) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td className={isExamInThisPeriod ? 'value-positive' : ''}>
-                            {isExamInThisPeriod ? formatCurrency(item.taxaClinica) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td className={isExamInThisPeriod ? 'value-positive' : ''}>
-                            {isExamInThisPeriod ? formatCurrency(item.valorAcessorios) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td className={isExamInThisPeriod ? 'value-positive' : ''}>
-                            {isExamInThisPeriod ? formatCurrency(item.valorBiopsia) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {numP > 1 ? (
-                              <span className="badge badge-info">{numP}×</span>
-                            ) : (
-                              '1×'
-                            )}
-                          </td>
-                          <td className="value-currency">
-                            <div>{formatCurrency(item.honorariosMedicos)}</div>
-                            {(item.temDivisao || item.medico2) && (
-                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: 1.3 }}>
-                                {item.divisaoTipo === 'valor' ? (
-                                  <>
-                                    <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(item.valorMedico1)}</div>
-                                    <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(item.valorMedico2)}</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div>{item.medico ? item.medico.toUpperCase() : ''} ({item.porcentagemMedico1 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico1) ?? 50)) / 100))}</div>
-                                    <div>{item.medico2 ? item.medico2.toUpperCase() : ''} ({item.porcentagemMedico2 ?? 50}%): {formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico2) ?? 50)) / 100))}</div>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className={honNoPeriodo > 0 ? 'value-positive' : 'value-currency'}>
-                            <div>
-                              {formatCurrency(honNoPeriodo)}
-                              {honNoPeriodo > 0 && (
-                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-emerald)', marginInlineStart: '0.25rem' }}>
-                                  ✓
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              {(item.tipoExame || item.exame || '').toUpperCase()}
+                              {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
+                                const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
+                                return (
+                                  <span
+                                    key={proc}
+                                    className="badge badge-info"
+                                    style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
+                                    title={proc}
+                                  >
+                                    {tagLabel}
+                                  </span>
+                                );
+                              })}
+                              {numP > 1 && (
+                                <span className="badge badge-info" style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }} title={`${numP} parcelas`}>
+                                  {numP}×
                                 </span>
                               )}
-                            </div>
-                            {honNoPeriodo > 0 && (item.temDivisao || item.medico2) && (
-                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: '0.2rem', lineHeight: 1.3 }}>
-                                <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}</div>
-                                <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}</div>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
+                              {item.medico2 && (
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)' }}>
+                                  👥 c/ {item.medico2.toUpperCase()}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="value-currency" style={{ fontWeight: 600 }}>
+                                {isExamInThisPeriod ? formatCurrency(item.valorPagamento) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                               </div>
-                            )}
-                          </td>
-                          <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-                            {getInstallmentLabels(item.data, pags, item.formaPagamento).map((label, idx) => (
-                              <div key={idx} style={{ whiteSpace: 'nowrap' }}>{label}</div>
-                            ))}
-                          </td>
-                          <td>
-                            <div className="action-buttons">
-                              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
-                                ✏️
-                              </button>
-                              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                              {isExamInThisPeriod && pags.length === 1 && (
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                                  {pags[0].forma}{pags[0].parcelas > 1 ? ` ${pags[0].parcelas}x` : ''}
+                                </div>
+                              )}
+                              {isExamInThisPeriod && pags.length > 1 && (
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                                  Misto ({pags.length} formas)
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className={honNoPeriodo > 0 ? 'value-positive' : 'value-currency'} style={{ fontWeight: 600 }}>
+                                {formatCurrency(honNoPeriodo)}
+                                {honNoPeriodo > 0 && (
+                                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-emerald)', marginInlineStart: '0.25rem' }}>✓</span>
+                                )}
+                              </div>
+                              {honNoPeriodo > 0 && (item.temDivisao || item.medico2) && (
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: '0.15rem', lineHeight: 1.3 }}>
+                                  <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}</div>
+                                  <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}</div>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="action-buttons">
+                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
+                                  ✏️
+                                </button>
+                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expanded detail panel */}
+                          {isExpanded && (
+                            <tr className="expanded-detail-row">
+                              <td colSpan="8">
+                                <div className="expanded-detail-panel">
+                                  <div className="expanded-detail-grid">
+                                    {/* Coluna 1: Financeiro Bruto */}
+                                    <div className="expanded-detail-section">
+                                      <div className="expanded-detail-section-title">💳 Pagamento</div>
+                                      <div className="expanded-detail-items">
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Total Pagamento</span>
+                                          <span className="expanded-detail-value">{isExamInThisPeriod ? formatCurrency(item.valorPagamento) : '—'}</span>
+                                        </div>
+                                        {pags.map((p, i) => (
+                                          <div className="expanded-detail-item" key={i}>
+                                            <span className="expanded-detail-label">{p.forma}</span>
+                                            <span className="expanded-detail-value" style={{ fontSize: 'var(--text-xs)' }}>
+                                              {formatCurrency(p.valor)}{p.parcelas > 1 ? ` (${p.parcelas}x)` : ''}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Coluna 2: Deduções */}
+                                    <div className="expanded-detail-section">
+                                      <div className="expanded-detail-section-title">📊 Deduções</div>
+                                      <div className="expanded-detail-items">
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Taxas Retidas</span>
+                                          <span className="expanded-detail-value value-negative">{isExamInThisPeriod ? formatCurrency(item.valorRetidoTaxas) : '—'}</span>
+                                        </div>
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Nota Fiscal{item.notaFiscalPercentual ? ` (${item.notaFiscalPercentual}%)` : ''}</span>
+                                          <span className="expanded-detail-value value-negative">{isExamInThisPeriod ? formatCurrency(item.valorNotaFiscal) : '—'}</span>
+                                        </div>
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Anestesista</span>
+                                          <span className="expanded-detail-value value-negative">{isExamInThisPeriod ? formatCurrency(item.valorAnestesista) : '—'}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Coluna 3: Receita Clínica */}
+                                    <div className="expanded-detail-section">
+                                      <div className="expanded-detail-section-title">🏥 Receita Clínica</div>
+                                      <div className="expanded-detail-items">
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Taxa Clínica</span>
+                                          <span className="expanded-detail-value value-positive">{isExamInThisPeriod ? formatCurrency(item.taxaClinica) : '—'}</span>
+                                        </div>
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Acessórios{item.acessorioParaMedico ? ' (→ Médico)' : ''}</span>
+                                          <span className="expanded-detail-value value-positive">{isExamInThisPeriod ? formatCurrency(item.valorAcessorios) : '—'}</span>
+                                        </div>
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Biópsia</span>
+                                          <span className="expanded-detail-value value-positive">{isExamInThisPeriod ? formatCurrency(item.valorBiopsia) : '—'}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Coluna 4: Honorários */}
+                                    <div className="expanded-detail-section">
+                                      <div className="expanded-detail-section-title">👨‍⚕️ Honorários</div>
+                                      <div className="expanded-detail-items">
+                                        <div className="expanded-detail-item">
+                                          <span className="expanded-detail-label">Total Honorários</span>
+                                          <span className="expanded-detail-value" style={{ fontWeight: 700 }}>{formatCurrency(item.honorariosMedicos)}</span>
+                                        </div>
+                                        {(item.temDivisao || item.medico2) && (
+                                          <>
+                                            {item.divisaoTipo === 'valor' ? (
+                                              <>
+                                                <div className="expanded-detail-item">
+                                                  <span className="expanded-detail-label">{item.medico || 'Médico 1'}</span>
+                                                  <span className="expanded-detail-value">{formatCurrency(item.valorMedico1)}</span>
+                                                </div>
+                                                <div className="expanded-detail-item">
+                                                  <span className="expanded-detail-label">{item.medico2 || 'Médico 2'}</span>
+                                                  <span className="expanded-detail-value">{formatCurrency(item.valorMedico2)}</span>
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <div className="expanded-detail-item">
+                                                  <span className="expanded-detail-label">{item.medico || 'Médico 1'} ({item.porcentagemMedico1 ?? 50}%)</span>
+                                                  <span className="expanded-detail-value">{formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico1) ?? 50)) / 100))}</span>
+                                                </div>
+                                                <div className="expanded-detail-item">
+                                                  <span className="expanded-detail-label">{item.medico2 || 'Médico 2'} ({item.porcentagemMedico2 ?? 50}%)</span>
+                                                  <span className="expanded-detail-value">{formatCurrency(roundCurrency((Number(item.honorariosMedicos || 0) * (Number(item.porcentagemMedico2) ?? 50)) / 100))}</span>
+                                                </div>
+                                              </>
+                                            )}
+                                          </>
+                                        )}
+                                        <div className="expanded-detail-item" style={{ borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.35rem', marginTop: '0.2rem' }}>
+                                          <span className="expanded-detail-label">Período Parcelas</span>
+                                          <span className="expanded-detail-value" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                                            {getInstallmentLabels(item.data, pags, item.formaPagamento).map((label, idx) => (
+                                              <div key={idx} style={{ whiteSpace: 'nowrap' }}>{label}</div>
+                                            ))}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                     <tr className="totals-row">
-                      <td colSpan="5" style={{ textAlign: 'end', fontWeight: 700 }}>Totais no período:</td>
-                      <td className="value-currency">{formatCurrency(totalPagamento)}</td>
-                      <td className="value-negative">{formatCurrency(totalTaxas)}</td>
-                      <td className="value-currency">{formatCurrency(totalNotaFiscal)}</td>
-                      <td className="value-currency">{formatCurrency(totalAnestesista)}</td>
-                      <td className="value-positive">{formatCurrency(totalClinicaPeriodo)}</td>
-                      <td className="value-positive">{formatCurrency(totalAcessoriosPeriodo)}</td>
-                      <td className="value-positive">{formatCurrency(totalBiopsiaPeriodo)}</td>
                       <td />
-                      <td className="value-currency">
-                        {formatCurrency(examsInPeriod.reduce((s, d) => s + Number(d.honorariosMedicos || 0), 0))}
-                      </td>
-                      <td className="value-positive">{formatCurrency(totalHonorariosPeriodo)}</td>
-                      <td />
+                      <td colSpan="4" style={{ textAlign: 'end', fontWeight: 700 }}>Totais no período:</td>
+                      <td className="value-currency" style={{ fontWeight: 700 }}>{formatCurrency(totalPagamento)}</td>
+                      <td className="value-positive" style={{ fontWeight: 700 }}>{formatCurrency(totalHonorariosPeriodo)}</td>
                       <td />
                     </tr>
                   </>
@@ -900,7 +970,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             <div className="table-footer">
               <span>{filtered.length} registro(s)</span>
               <span>
-                Clínica: {formatCurrency(totalClinicaPeriodo)} | Honorários: {formatCurrency(totalHonorariosPeriodo)}
+                Clínica: {formatCurrency(totalClinicaPeriodo)} | Acess.: {formatCurrency(totalAcessoriosPeriodo)} | Biópsia: {formatCurrency(totalBiopsiaPeriodo)} | Honorários: {formatCurrency(totalHonorariosPeriodo)}
               </span>
             </div>
           )}
