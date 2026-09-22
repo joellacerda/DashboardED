@@ -95,6 +95,25 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const [openActionMenuId, setOpenActionMenuId] = useState(null);
+
+  useEffect(() => {
+    if (!openActionMenuId) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.row-action-menu')) {
+        setOpenActionMenuId(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setOpenActionMenuId(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openActionMenuId]);
 
   const toggleRowExpand = (id) => {
     setExpandedRows((prev) => {
@@ -710,14 +729,14 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             <table className="data-table detalhes-compact-table">
               <thead>
                 <tr>
-                  <th style={{ width: '36px' }} />
-                  <th>Data</th>
+                  <th style={{ width: '28px' }} />
+                  <th style={{ width: '80px' }}>Data</th>
                   <th>Paciente</th>
-                  <th>Exame</th>
-                  <th>Médico</th>
-                  <th>Pagamento</th>
-                  <th>Hon. Período</th>
-                  <th style={{ width: '90px' }}>Ações</th>
+                  <th style={{ width: '200px' }}>Exame</th>
+                  <th style={{ width: '115px' }}>Médico</th>
+                  <th style={{ width: '100px' }}>Pagamento</th>
+                  <th style={{ width: '110px' }}>Hon. Período</th>
+                  <th style={{ width: '44px', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -732,12 +751,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                   </tr>
                 ) : (
                   <>
-                    {filtered.map((item) => {
+                    {filtered.map((item, index) => {
                       const pags = migrateLegacyPayment(item);
-                      const numP = pags.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
                       const honNoPeriodo = getHonorarioInPeriod(item, period);
                       const isExamInThisPeriod = isDateInPeriod(item.data, period);
                       const isExpanded = expandedRows.has(item.id);
+                      const isNearBottom = filtered.length > 2 && index >= filtered.length - 2;
 
                       return (
                         <React.Fragment key={item.id}>
@@ -757,47 +776,68 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                                 ▶
                               </button>
                             </td>
-                            <td>{formatDate(item.data)}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.data)}</td>
                             <td>
-                              <div style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</div>
+                              <div
+                                className="table-cell-truncate table-patient-name"
+                                title={item.paciente ? item.paciente.toUpperCase() : ''}
+                              >
+                                {item.paciente ? item.paciente.toUpperCase() : ''}
+                              </div>
                               {item.isConvenio && (
-                                <div style={{ marginTop: '0.2rem' }}>
-                                  <span className="badge badge-info" style={{ fontSize: '10px' }}>
+                                <div style={{ marginTop: '0.15rem' }}>
+                                  <span
+                                    className="badge badge-info table-cell-truncate"
+                                    style={{ fontSize: '10px', padding: '0.05rem 0.35rem', maxWidth: '100%', display: 'inline-block' }}
+                                    title={`Convênio: ${item.convenio || 'CONVÊNIO'}`}
+                                  >
                                     🏢 {item.convenio || 'CONVÊNIO'}
                                   </span>
                                 </div>
                               )}
                             </td>
                             <td>
-                              {(item.tipoExame || item.exame || '').toUpperCase()}
-                              {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
-                                const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
-                                return (
-                                  <span
-                                    key={proc}
-                                    className="badge badge-info"
-                                    style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }}
-                                    title={proc}
-                                  >
-                                    {tagLabel}
-                                  </span>
-                                );
-                              })}
-                              {numP > 1 && (
-                                <span className="badge badge-info" style={{ marginLeft: '0.4rem', fontSize: 'var(--text-xs)' }} title={`${numP} parcelas`}>
-                                  {numP}×
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', minWidth: 0 }}>
+                                <span
+                                  className="table-cell-truncate"
+                                  title={(item.tipoExame || item.exame || '').toUpperCase()}
+                                >
+                                  {(item.tipoExame || item.exame || '').toUpperCase()}
                                 </span>
-                              )}
+                                {normalizeProcedimentosComplementares(item.procedimentoComplementar).map((proc) => {
+                                  const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : 'M';
+                                  return (
+                                    <span
+                                      key={proc}
+                                      className="badge badge-info"
+                                      style={{ fontSize: '10px', padding: '0.05rem 0.3rem', flexShrink: 0, fontWeight: 700 }}
+                                      title={proc}
+                                    >
+                                      {tagLabel}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </td>
                             <td>
-                              <div style={{ fontWeight: 500 }}>{item.medico ? item.medico.toUpperCase() : ''}</div>
+                              <div
+                                className="table-cell-truncate"
+                                style={{ fontWeight: 500 }}
+                                title={item.medico ? item.medico.toUpperCase() : ''}
+                              >
+                                {item.medico ? item.medico.toUpperCase() : ''}
+                              </div>
                               {item.medico2 && (
-                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)' }}>
+                                <div
+                                  className="table-cell-truncate"
+                                  style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: '0.1rem' }}
+                                  title={`c/ ${item.medico2.toUpperCase()}`}
+                                >
                                   👥 c/ {item.medico2.toUpperCase()}
                                 </div>
                               )}
                             </td>
-                            <td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
                               <div className="value-currency" style={{ fontWeight: 600 }}>
                                 {isExamInThisPeriod ? formatCurrency(item.valorPagamento) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                               </div>
@@ -808,11 +848,11 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                               )}
                               {isExamInThisPeriod && pags.length > 1 && (
                                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                                  Misto ({pags.length} formas)
+                                  Misto ({pags.length}x)
                                 </div>
                               )}
                             </td>
-                            <td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
                               <div className={honNoPeriodo > 0 ? 'value-positive' : 'value-currency'} style={{ fontWeight: 600 }}>
                                 {formatCurrency(honNoPeriodo)}
                                 {honNoPeriodo > 0 && (
@@ -820,20 +860,59 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                                 )}
                               </div>
                               {honNoPeriodo > 0 && (item.temDivisao || item.medico2) && (
-                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: '0.15rem', lineHeight: 1.3 }}>
-                                  <div>{item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}</div>
-                                  <div>{item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-accent)', marginTop: '0.15rem', lineHeight: 1.25 }}>
+                                  <div className="table-cell-truncate" title={`${item.medico}: ${formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}`}>
+                                    {item.medico ? item.medico.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico, period))}
+                                  </div>
+                                  <div className="table-cell-truncate" title={`${item.medico2}: ${formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}`}>
+                                    {item.medico2 ? item.medico2.toUpperCase() : ''}: {formatCurrency(getHonorarioMedicoInPeriod(item, item.medico2, period))}
+                                  </div>
                                 </div>
                               )}
                             </td>
-                            <td>
-                              <div className="action-buttons">
-                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
-                                  ✏️
+                            <td style={{ textAlign: 'center' }}>
+                              <div className="row-action-menu">
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-icon btn-sm action-menu-trigger"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionMenuId(openActionMenuId === item.id ? null : item.id);
+                                  }}
+                                  title="Opções"
+                                  aria-label="Opções"
+                                >
+                                  <span className="action-menu-dots">•••</span>
                                 </button>
-                                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
-                                  🗑️
-                                </button>
+                                {openActionMenuId === item.id && (
+                                  <div
+                                    className={`action-menu-popover${isNearBottom ? ' open-up' : ''}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="action-menu-item"
+                                      onClick={() => {
+                                        setOpenActionMenuId(null);
+                                        openEdit(item);
+                                      }}
+                                    >
+                                      <span className="action-menu-icon">✏️</span>
+                                      <span>Editar</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="action-menu-item action-menu-item-danger"
+                                      onClick={() => {
+                                        setOpenActionMenuId(null);
+                                        setDeleteId(item.id);
+                                      }}
+                                    >
+                                      <span className="action-menu-icon">🗑️</span>
+                                      <span>Excluir</span>
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
