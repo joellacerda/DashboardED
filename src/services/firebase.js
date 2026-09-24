@@ -1,4 +1,3 @@
-// Firebase Firestore Integration Service for Endodiagnose
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import {
   getFirestore,
@@ -9,6 +8,16 @@ import {
   getDocs,
   writeBatch,
 } from 'firebase/firestore';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
 
 const CONFIG_STORAGE_KEY = 'endodiagnose_firebase_config';
 
@@ -18,6 +27,9 @@ export function getStoredFirebaseConfig() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.apiKey && parsed.projectId) {
+        if (!parsed.authDomain) {
+          parsed.authDomain = `${parsed.projectId}.firebaseapp.com`;
+        }
         return parsed;
       }
     }
@@ -42,17 +54,23 @@ export function saveStoredFirebaseConfig(config) {
   if (!config) {
     localStorage.removeItem(CONFIG_STORAGE_KEY);
   } else {
+    // Ensure authDomain is filled
+    if (!config.authDomain && config.projectId) {
+      config.authDomain = `${config.projectId}.firebaseapp.com`;
+    }
     localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
   }
 }
 
 let firebaseApp = null;
 let firestoreDb = null;
+let firebaseAuth = null;
 
 export function initFirebase(config = getStoredFirebaseConfig()) {
   if (!config || !config.apiKey || !config.projectId) {
     firebaseApp = null;
     firestoreDb = null;
+    firebaseAuth = null;
     return null;
   }
   try {
@@ -63,7 +81,8 @@ export function initFirebase(config = getStoredFirebaseConfig()) {
       firebaseApp = initializeApp(config);
     }
     firestoreDb = getFirestore(firebaseApp);
-    return firestoreDb;
+    firebaseAuth = getAuth(firebaseApp);
+    return { db: firestoreDb, auth: firebaseAuth };
   } catch (err) {
     console.error('Erro ao inicializar Firebase:', err);
     return null;
@@ -82,6 +101,7 @@ export async function reinitFirebase(config) {
   }
   firebaseApp = null;
   firestoreDb = null;
+  firebaseAuth = null;
   return initFirebase(config);
 }
 
@@ -92,9 +112,102 @@ export function getDb() {
   return firestoreDb;
 }
 
+export function getFirebaseAuth() {
+  if (!firebaseAuth) {
+    initFirebase();
+  }
+  return firebaseAuth;
+}
+
 export function isCloudConfigured() {
   const cfg = getStoredFirebaseConfig();
   return Boolean(cfg && cfg.apiKey && cfg.projectId);
+}
+
+// Authentication Helpers
+export async function loginWithEmail(email, password) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await signInWithEmailAndPassword(auth, email.trim(), password);
+}
+
+export async function registerWithEmail(email, password) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await createUserWithEmailAndPassword(auth, email.trim(), password);
+}
+
+export async function loginWithGoogle() {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return await signInWithPopup(auth, provider);
+}
+
+export async function logoutUser() {
+  const auth = getFirebaseAuth();
+  if (!auth) return;
+  return await signOut(auth);
+}
+
+export async function resetPassword(email) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await sendPasswordResetEmail(auth, email.trim());
+}
+
+export function subscribeAuthState(callback) {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
+  return onAuthStateChanged(auth, callback);
+}
+
+export function getAuthErrorMessage(error) {
+  const code = typeof error === 'string' ? error : (error?.code || '');
+  const message = error?.message || '';
+
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'E-mail ou senha incorretos.';
+    case 'auth/invalid-email':
+      return 'O endereço de e-mail informado é inválido.';
+    case 'auth/email-already-in-use':
+      return 'Este e-mail já está cadastrado no sistema.';
+    case 'auth/weak-password':
+      return 'A senha deve conter no mínimo 6 caracteres.';
+    case 'auth/popup-closed-by-user':
+      return 'A janela de autenticação do Google foi fechada antes de concluir.';
+    case 'auth/cancelled-popup-request':
+      return 'Solicitação de login cancelada.';
+    case 'auth/popup-blocked':
+      return 'O navegador bloqueou a janela pop-up de login. Permita pop-ups para este site.';
+    case 'auth/operation-not-allowed':
+    case 'auth/admin-restricted-operation':
+      return 'O provedor Google não está ativado no Firebase Console. Acesse Authentication > Sign-in method > Google e ative-o.';
+    case 'auth/unauthorized-domain':
+      return 'Domínio não autorizado. Adicione "localhost" em Authentication > Settings > Authorized Domains no Firebase Console.';
+    case 'auth/auth-domain-config-required':
+      return 'authDomain ausente na configuração do Firebase. Preencha o Auth Domain nas configurações.';
+    case 'auth/configuration-not-found':
+      return 'Serviço de Authentication não configurado no seu projeto Firebase.';
+    case 'auth/too-many-requests':
+      return 'Muitas tentativas consecutivas. Aguarde alguns instantes antes de tentar novamente.';
+    case 'auth/network-request-failed':
+      return 'Falha de conexão com a rede. Verifique seu acesso à internet.';
+    case 'auth/user-disabled':
+      return 'Esta conta de usuário foi desativada.';
+    default:
+      if (code) {
+        return `Erro de autenticação [${code}]: ${message || 'Verifique as configurações no console do Firebase.'}`;
+      }
+      return message || 'Ocorreu um erro durante a autenticação. Verifique os dados e tente novamente.';
+  }
 }
 
 // Test cloud connection without polluting the default app
@@ -108,6 +221,21 @@ export async function testConnection(config) {
     await getDocs(testCol);
     return { success: true, message: 'Conexão com Firestore estabelecida com sucesso!' };
   } catch (err) {
+    // A permission-denied error confirms the database exists, the API key is valid,
+    // and Firestore successfully evaluated the security rules (which require authentication).
+    const isPermissionDenied =
+      err.code === 'permission-denied' ||
+      err.code === 'firestore/permission-denied' ||
+      err.message?.toLowerCase().includes('permission') ||
+      err.message?.includes('insufficient permissions');
+
+    if (isPermissionDenied) {
+      return {
+        success: true,
+        message: 'Conexão estabelecida com sucesso! O banco está ativo e protegido por autenticação.',
+        protectedByAuth: true,
+      };
+    }
     return { success: false, message: err.message || 'Falha ao conectar com o Firestore.' };
   } finally {
     if (tempApp) {

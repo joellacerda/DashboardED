@@ -1,3 +1,5 @@
+import { useAuth } from '../contexts/AuthContext';
+
 const navItems = [
   {
     id: 'overview',
@@ -80,6 +82,8 @@ const navItems = [
 ];
 
 export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, isCloudConnected }) {
+  const { user, logout, isConfigured } = useAuth();
+
   const handleItemClick = (id) => {
     onTabChange(id);
     if (onClose) onClose();
@@ -124,10 +128,11 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
           ))}
         </nav>
 
-        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-subtle)' }}>
+        <div className="sidebar-bottom-actions">
+          {/* Cloud Sync Button */}
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-sm sidebar-cloud-btn"
             style={{
               width: '100%',
               justifyContent: 'center',
@@ -146,6 +151,45 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
             <span>{isCloudConnected ? '🟢' : '☁️'}</span>
             <span>{isCloudConnected ? 'Nuvem Conectada' : 'Salvar na Nuvem'}</span>
           </button>
+
+          {/* User Profile Card if logged in */}
+          {user ? (
+            <div className="sidebar-user-card">
+              <div className="sidebar-user-avatar">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName || 'Avatar'} className="sidebar-user-img" />
+                ) : (
+                  <span>{(user.displayName || user.email || 'M')[0].toUpperCase()}</span>
+                )}
+              </div>
+              <div className="sidebar-user-info">
+                <span className="sidebar-user-name" title={user.displayName || user.email}>
+                  {user.displayName || user.email?.split('@')[0]}
+                </span>
+                <span className="sidebar-user-email" title={user.email}>
+                  {user.email}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="sidebar-user-logout-btn"
+                onClick={logout}
+                title="Sair do sistema (Logout)"
+                aria-label="Sair do sistema"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              </button>
+            </div>
+          ) : !isConfigured ? (
+            <div className="sidebar-offline-pill">
+              <span className="sidebar-offline-dot" />
+              <span>Modo Local (Offline)</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="sidebar-footer">
