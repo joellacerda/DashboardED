@@ -253,6 +253,8 @@ table {
   transition: all var(--transition-fast);
   position: relative;
   overflow: hidden;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .nav-item:hover:not(.active) {

@@ -117,14 +117,20 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
 
         <nav className="sidebar-nav">
           {navItems.map((item) => (
-            <button
+            <a
               key={item.id}
+              href={`#/${item.id}`}
               className={`nav-item${activeTab === item.id ? ' active' : ''}`}
-              onClick={() => handleItemClick(item.id)}
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  handleItemClick(item.id);
+                }
+              }}
             >
               {item.icon}
               {item.label}
-            </button>
+            </a>
           ))}
         </nav>
 

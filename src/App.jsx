@@ -13,15 +13,63 @@ import RepassePage from './pages/RepassePage';
 import FolhaPage from './pages/FolhaPage';
 import ConveniosPage from './pages/ConveniosPage';
 
+const VALID_TABS = [
+  'overview',
+  'exames',
+  'convenios',
+  'fluxo-caixa',
+  'detalhes',
+  'repasses',
+  'folha',
+];
+
+const TAB_TITLES = {
+  overview: 'Visão Geral',
+  exames: 'Exames Particulares',
+  convenios: 'Exames de Convênio',
+  'fluxo-caixa': 'Fluxo de Caixa',
+  detalhes: 'Detalhes de Exames',
+  repasses: 'Repasse Médico',
+  folha: 'Folha de Pagamento',
+};
+
+function getTabFromHash() {
+  if (typeof window === 'undefined') return 'overview';
+  const rawHash = window.location.hash || '';
+  const cleanHash = rawHash.replace(/^#\/?/, '').trim().toLowerCase();
+  return VALID_TABS.includes(cleanHash) ? cleanHash : 'overview';
+}
+
 function AppContent() {
   const { user, loading, isConfigured, refreshConfig } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => getTabFromHash());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [prefillDetalhe, setPrefillDetalhe] = useState(null);
   const [cloudModalOpen, setCloudModalOpen] = useState(false);
   const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Synchronize browser history / hashchange (e.g. Back/Forward button, manual URL change)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const tabFromUrl = getTabFromHash();
+      setActiveTab((prev) => (prev !== tabFromUrl ? tabFromUrl : prev));
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Synchronize URL hash and document title whenever activeTab changes
+  useEffect(() => {
+    const targetHash = `#/${activeTab}`;
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
+    }
+    const label = TAB_TITLES[activeTab] || 'Dashboard';
+    document.title = `${label} — Clínica Endodiagnose`;
+  }, [activeTab]);
 
   useEffect(() => {
     initFirebase();
