@@ -18,6 +18,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
+import { useToast } from '../contexts/ToastContext';
 
 const emptyForm = { data: '', paciente: '', exame: '', medico: '', procedimentoComplementar: '' };
 
@@ -35,6 +36,7 @@ const columns = [
 ];
 
 export default function ExamesPage({ onNavigateToDetalhes }) {
+  const toast = useToast();
   const [data, setData] = useState(() => getData('exames'));
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -196,6 +198,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
     refresh();
     setModalOpen(false);
+    toast.success(editId ? 'Exame particular atualizado com sucesso!' : 'Exame particular cadastrado com sucesso!');
 
     if (isNew && onNavigateToDetalhes) {
       onNavigateToDetalhes({
@@ -220,6 +223,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         deleteItem('detalhesExames', deleteId);
       }
       refresh();
+      toast.success('Exame particular excluído.');
     }
   };
 

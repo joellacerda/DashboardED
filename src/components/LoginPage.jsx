@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthErrorMessage } from '../services/firebase';
+import { useToast } from '../contexts/ToastContext';
 
 export default function LoginPage({ onOpenConfigModal }) {
+  const toast = useToast();
   const { login, register, loginGoogle, sendPasswordReset } = useAuth();
 
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
@@ -28,10 +30,13 @@ export default function LoginPage({ onOpenConfigModal }) {
       try {
         await sendPasswordReset(email);
         setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada e spam.');
+        toast.info('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
         setLoading(false);
       } catch (err) {
         console.error('Password reset error:', err);
-        setErrorMsg(getAuthErrorMessage(err));
+        const msg = getAuthErrorMessage(err);
+        setErrorMsg(msg);
+        toast.error(msg);
         setLoading(false);
       }
       return;
@@ -51,7 +56,9 @@ export default function LoginPage({ onOpenConfigModal }) {
         await register(email, password);
       } catch (err) {
         console.error('Register error:', err);
-        setErrorMsg(getAuthErrorMessage(err));
+        const msg = getAuthErrorMessage(err);
+        setErrorMsg(msg);
+        toast.error(msg);
         setLoading(false);
       }
       return;
@@ -63,7 +70,9 @@ export default function LoginPage({ onOpenConfigModal }) {
       await login(email, password);
     } catch (err) {
       console.error('Login error:', err);
-      setErrorMsg(getAuthErrorMessage(err));
+      const msg = getAuthErrorMessage(err);
+      setErrorMsg(msg);
+      toast.error(msg);
       setLoading(false);
     }
   };
@@ -76,7 +85,9 @@ export default function LoginPage({ onOpenConfigModal }) {
       await loginGoogle();
     } catch (err) {
       console.error('Google sign-in error:', err);
-      setErrorMsg(getAuthErrorMessage(err));
+      const msg = getAuthErrorMessage(err);
+      setErrorMsg(msg);
+      toast.error(msg);
       setLoading(false);
     }
   };

@@ -21,6 +21,7 @@ import {
 } from '../utils/helpers';
 import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
+import { useToast } from '../contexts/ToastContext';
 
 const emptyPagamento = { forma: 'Cartão de Crédito', valor: '', parcelas: '1' };
 
@@ -79,6 +80,7 @@ export default function DetalhesFormModal({
   onClose,
   onSuccess,
 }) {
+  const toast = useToast();
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
 
   const medicosOptions = useMemo(() => getActiveMedicosOptions(), [isOpen]);
@@ -381,6 +383,7 @@ export default function DetalhesFormModal({
       }
     }
 
+    toast.success(editItem ? 'Detalhes do exame atualizados com sucesso!' : 'Detalhes do exame cadastrados com sucesso!');
     if (onSuccess) onSuccess(savedItem);
     onClose();
   };

@@ -19,8 +19,10 @@ import {
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
+import { useToast } from '../contexts/ToastContext';
 
 export default function RepassePage() {
+  const toast = useToast();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [medicosList, setMedicosList] = useState(() => getData('medicos'));
   const [ajustesList, setAjustesList] = useState(() => getData('repassesAjustes'));
@@ -213,6 +215,7 @@ export default function RepassePage() {
     setData('repassesAjustes', currentAjustes);
     refreshAll();
     setEditAjusteModal(false);
+    toast.success('Ajustes de repasse salvos com sucesso!');
   };
 
   // --- Handlers for Managing Doctors ---
@@ -228,21 +231,24 @@ export default function RepassePage() {
         updateItem('medicos', existing.id, { ativo: true, socio: newMedicoSocio });
         setNewMedicoNome('');
         refreshAll();
+        toast.success('Médico reativado com sucesso!');
         return;
       }
-      alert('Médico já cadastrado!');
+      toast.warning('Médico já cadastrado!');
       return;
     }
 
     addItem('medicos', { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
     setNewMedicoNome('');
     refreshAll();
+    toast.success('Médico adicionado com sucesso!');
   };
 
   const handleDeleteMedico = () => {
     if (deleteMedicoId) {
       deleteItem('medicos', deleteMedicoId);
       refreshAll();
+      toast.success('Médico removido com sucesso.');
     }
   };
 

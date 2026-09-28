@@ -4,6 +4,7 @@ import { formatCurrency, exportCSV, exportPDF } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
+import { useToast } from '../contexts/ToastContext';
 
 const emptyForm = {
   nome: '',
@@ -38,6 +39,7 @@ const columns = [
 ];
 
 export default function FolhaPage() {
+  const toast = useToast();
   const [data, setData] = useState(() => getData('folhaPagamento'));
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -90,12 +92,14 @@ export default function FolhaPage() {
     }
     refresh();
     setModalOpen(false);
+    toast.success(editId ? 'Funcionário atualizado com sucesso!' : 'Funcionário cadastrado com sucesso!');
   };
 
   const handleDelete = () => {
     if (deleteId) {
       deleteItem('folhaPagamento', deleteId);
       refresh();
+      toast.success('Funcionário removido da folha.');
     }
   };
 

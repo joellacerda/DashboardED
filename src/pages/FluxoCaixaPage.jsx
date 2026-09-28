@@ -13,6 +13,7 @@ import {
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
+import { useToast } from '../contexts/ToastContext';
 
 const CATEGORIAS_ENTRADA = [
   'Exames / Procedimentos',
@@ -45,6 +46,7 @@ const columns = [
 ];
 
 export default function FluxoCaixaPage() {
+  const toast = useToast();
   const [data, setData] = useState(() => getData('fluxoCaixa'));
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [modalOpen, setModalOpen] = useState(false);
@@ -165,12 +167,14 @@ function formatDescricao(nome) {
     }
     refresh();
     setModalOpen(false);
+    toast.success(editId ? 'Lançamento atualizado no Fluxo de Caixa!' : 'Lançamento registrado no Fluxo de Caixa!');
   };
 
   const handleDelete = () => {
     if (deleteId) {
       deleteItem('fluxoCaixa', deleteId);
       refresh();
+      toast.success('Lançamento excluído do Fluxo de Caixa.');
     }
   };
 

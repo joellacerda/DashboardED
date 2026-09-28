@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 
 export default function ExportMenu({ onExportCSV, onExportPDF }) {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -22,13 +24,21 @@ export default function ExportMenu({ onExportCSV, onExportPDF }) {
         <div className="export-dropdown">
           <button
             className="export-dropdown-item"
-            onClick={() => { onExportCSV(); setOpen(false); }}
+            onClick={() => {
+              onExportCSV();
+              setOpen(false);
+              toast.success('Arquivo CSV exportado com sucesso!');
+            }}
           >
             📄 Exportar CSV
           </button>
           <button
             className="export-dropdown-item"
-            onClick={() => { onExportPDF(); setOpen(false); }}
+            onClick={() => {
+              onExportPDF();
+              setOpen(false);
+              toast.success('Relatório PDF gerado com sucesso!');
+            }}
           >
             🖨️ Exportar PDF
           </button>

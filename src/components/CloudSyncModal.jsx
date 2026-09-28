@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { useToast } from '../contexts/ToastContext';
 import {
   getStoredFirebaseConfig,
   saveStoredFirebaseConfig,
@@ -13,6 +14,7 @@ import {
 import { getAllData, restoreAllData, MODULE_KEYS } from '../utils/storage';
 
 export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
+  const toast = useToast();
   const [configured, setConfigured] = useState(false);
   const [config, setConfig] = useState({
     apiKey: '',
@@ -90,6 +92,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
     await reinitFirebase(config);
     setConfigured(true);
     setIsLoading(false);
+    toast.success('Firebase conectado com sucesso!');
     setStatusMessage({
       type: 'success',
       text: testRes.protectedByAuth
@@ -112,6 +115,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
       });
       setConfigured(false);
       setStatusMessage({ type: 'info', text: 'Firebase desconectado. O sistema voltou ao modo local.' });
+      toast.info('Firebase desconectado.');
     }
   };
 
@@ -127,9 +131,11 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
       const count = await uploadAllLocalToCloud(allLocalData);
       setIsLoading(false);
       setStatusMessage({ type: 'success', text: `🚀 Backup concluído com sucesso! ${count} registros enviados para o Firestore na nuvem.` });
+      toast.success(`Backup concluído! ${count} registros salvos na nuvem.`);
     } catch (err) {
       setIsLoading(false);
       setStatusMessage({ type: 'error', text: `Erro ao enviar dados para a nuvem: ${err.message}` });
+      toast.error('Erro ao enviar dados para a nuvem.');
     }
   };
 
@@ -148,10 +154,12 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
       restoreAllData(cloudData);
       setIsLoading(false);
       setStatusMessage({ type: 'success', text: '📥 Dados baixados da nuvem e restaurados com sucesso!' });
+      toast.success('Dados restaurados da nuvem com sucesso!');
       if (onDataUpdated) onDataUpdated();
     } catch (err) {
       setIsLoading(false);
       setStatusMessage({ type: 'error', text: `Erro ao baixar dados da nuvem: ${err.message}` });
+      toast.error('Erro ao baixar dados da nuvem.');
     }
   };
 
@@ -267,14 +275,14 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
                 statusMessage.type === 'success'
                   ? 'rgba(16, 185, 129, 0.15)'
                   : statusMessage.type === 'error'
-                  ? 'rgba(239, 68, 68, 0.15)'
-                  : 'rgba(59, 130, 246, 0.15)',
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : 'rgba(59, 130, 246, 0.15)',
               color:
                 statusMessage.type === 'success'
                   ? 'var(--accent-emerald)'
                   : statusMessage.type === 'error'
-                  ? 'var(--accent-red)'
-                  : 'var(--accent-blue)',
+                    ? 'var(--accent-red)'
+                    : 'var(--accent-blue)',
               border: '1px solid currentColor',
             }}
           >
@@ -371,7 +379,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
             <h4 style={{ margin: 0, color: 'var(--accent-blue)' }}>
               Passo a Passo para criar seu Banco Gratuito no Firebase:
             </h4>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
               <div>
                 <strong>1. Criar o Projeto:</strong>
@@ -387,7 +395,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated }) {
                 <strong>3. Configurar Regras de Segurança do Firestore:</strong>
                 <div>Na aba <strong>Regras (Rules)</strong> do Firestore Database, cole a regra segura abaixo e clique em <strong>Publicar</strong> (permite acesso apenas a usuários autenticados):</div>
                 <pre style={{ background: 'var(--bg-surface)', padding: '0.6rem', borderRadius: '4px', fontSize: '11px', overflowX: 'auto', border: '1px solid var(--border-subtle)', color: 'var(--accent-emerald)' }}>
-{`rules_version = '2';
+                  {`rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {

@@ -25,8 +25,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import DetalhesExpandedRow from '../components/DetalhesExpandedRow';
 import DetalhesFormModal from '../components/DetalhesFormModal';
+import { useToast } from '../contexts/ToastContext';
 
 export default function DetalhesPage({ prefillData, onClearPrefill }) {
+  const toast = useToast();
   const [data, setData] = useState(() => getData('detalhesExames'));
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -176,6 +178,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       linked.forEach((entry) => deleteItem('fluxoCaixa', entry.id));
       deleteItem('detalhesExames', deleteId);
       refresh();
+      toast.success('Registro de detalhes excluído.');
     }
   };
 

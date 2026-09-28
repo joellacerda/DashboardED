@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import CloudSyncModal from './components/CloudSyncModal';
 import LoginPage from './components/LoginPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { isCloudConfigured, initFirebase } from './services/firebase';
 import OverviewPage from './pages/OverviewPage';
 import ExamesPage from './pages/ExamesPage';
@@ -210,7 +211,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

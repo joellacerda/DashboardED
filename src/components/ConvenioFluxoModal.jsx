@@ -17,8 +17,10 @@ import {
 } from '../utils/helpers';
 import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
+import { useToast } from '../contexts/ToastContext';
 
 export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess }) {
+  const toast = useToast();
   const [fluxoPeriod, setFluxoPeriod] = useState(() => getAcquisitionPeriod());
   const [fluxoForm, setFluxoForm] = useState({
     data: getTodayISO(),
@@ -221,6 +223,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
     updateItem('examesConvenio', item.id, updatedItem);
     syncConvenioToDetalhes(updatedItem);
 
+    toast.success('Partilha salva e lançada no Fluxo de Caixa!');
     if (onSuccess) onSuccess();
     onClose();
   };

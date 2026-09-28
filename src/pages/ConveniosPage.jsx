@@ -29,6 +29,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
+import { useToast } from '../contexts/ToastContext';
 
 const DEFAULT_CONVENIOS = [
   'ABERTTA SAUDE',
@@ -83,6 +84,7 @@ const columns = [
 ];
 
 export default function ConveniosPage({ onNavigateToFluxo }) {
+  const toast = useToast();
   const [data, setData] = useState(() => getData('examesConvenio'));
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -182,6 +184,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
     }
     refresh();
     setModalOpen(false);
+    toast.success(editId ? 'Exame de convênio atualizado com sucesso!' : 'Exame de convênio cadastrado com sucesso!');
   };
 
   const handleDelete = () => {
@@ -189,6 +192,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       deleteItem('examesConvenio', deleteId);
       removeConvenioFromDetalhes(deleteId);
       refresh();
+      toast.success('Exame de convênio excluído.');
     }
   };
 
