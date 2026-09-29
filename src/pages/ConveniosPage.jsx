@@ -28,6 +28,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
+import Pagination from '../components/Pagination';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
 import { useToast } from '../contexts/ToastContext';
 
@@ -93,6 +94,12 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [convenioFilter, setConvenioFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, search, convenioFilter]);
 
   // Fluxo de Caixa Modal de Partilha
   const [fluxoModalItem, setFluxoModalItem] = useState(null);
@@ -144,6 +151,14 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       return (a.paciente || '').localeCompare(b.paciente || '');
     });
   }, [data, search, period, convenioFilter]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedItems = useMemo(
+    () => filtered.slice(startIndex, startIndex + pageSize),
+    [filtered, startIndex, pageSize]
+  );
 
   const openNew = () => {
     setEditId(null);
@@ -299,7 +314,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((item) => (
+                  paginatedItems.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
                       <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
@@ -370,11 +385,14 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="table-footer">
-              <span>{filtered.length} registro(s) de convênio</span>
-            </div>
-          )}
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            label="exame(s) de convênio"
+          />
         </div>
       </div>
 

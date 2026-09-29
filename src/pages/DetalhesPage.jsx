@@ -25,6 +25,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import DetalhesExpandedRow from '../components/DetalhesExpandedRow';
 import DetalhesFormModal from '../components/DetalhesFormModal';
+import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 
 export default function DetalhesPage({ prefillData, onClearPrefill }) {
@@ -35,8 +36,14 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, search]);
 
   useEffect(() => {
     if (!openActionMenuId) return;
@@ -106,6 +113,14 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     }
     return items.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
   }, [data, search, period]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedItems = useMemo(
+    () => filtered.slice(startIndex, startIndex + pageSize),
+    [filtered, startIndex, pageSize]
+  );
 
   // --- Period-aware calculations ---
   // Payments, Fees & Taxes: ONLY for exams performed IN THIS PERIOD
@@ -355,12 +370,12 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
                   </tr>
                 ) : (
                   <>
-                    {filtered.map((item, index) => {
+                    {paginatedItems.map((item, index) => {
                       const pags = migrateLegacyPayment(item);
                       const honNoPeriodo = getHonorarioInPeriod(item, period);
                       const isExamInThisPeriod = isDateInPeriod(item.data, period);
                       const isExpanded = expandedRows.has(item.id);
-                      const isNearBottom = filtered.length > 2 && index >= filtered.length - 2;
+                      const isNearBottom = paginatedItems.length > 2 && index >= paginatedItems.length - 2;
 
                       return (
                         <React.Fragment key={item.id}>
@@ -538,14 +553,19 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="table-footer">
-              <span>{filtered.length} registro(s)</span>
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            label="registro(s)"
+            summaryNode={
               <span>
                 Clínica: {formatCurrency(totalClinicaPeriodo)} | Acess.: {formatCurrency(totalAcessoriosPeriodo)} | Biópsia: {formatCurrency(totalBiopsiaPeriodo)} | Honorários: {formatCurrency(totalHonorariosPeriodo)}
               </span>
-            </div>
-          )}
+            }
+          />
         </div>
       </div>
 

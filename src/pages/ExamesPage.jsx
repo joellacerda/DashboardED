@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { getData, addItem, updateItem, deleteItem, getItem, getActiveMedicosOptions } from '../utils/storage';
 import {
   formatDate,
@@ -18,6 +18,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
+import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 
 const emptyForm = { data: '', paciente: '', exame: '', medico: '', procedimentoComplementar: '' };
@@ -44,6 +45,12 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, search]);
 
   const refresh = () => setData(getData('exames'));
 
@@ -110,6 +117,14 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     }
     return items.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
   }, [allParticulares, search, period]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedItems = useMemo(
+    () => filtered.slice(startIndex, startIndex + pageSize),
+    [filtered, startIndex, pageSize]
+  );
 
   const medicosOptions = useMemo(() => getActiveMedicosOptions(), [modalOpen]);
 
@@ -311,7 +326,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((item) => (
+                  paginatedItems.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
                       <td style={{ fontWeight: 600 }}>{item.paciente ? item.paciente.toUpperCase() : ''}</td>
@@ -373,11 +388,14 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="table-footer">
-              <span>{filtered.length} registro(s)</span>
-            </div>
-          )}
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            label="exame(s) particulares"
+          />
         </div>
       </div>
 

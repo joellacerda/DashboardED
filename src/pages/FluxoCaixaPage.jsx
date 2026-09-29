@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { getData, addItem, updateItem, deleteItem } from '../utils/storage';
 import {
   formatCurrency,
@@ -13,6 +13,7 @@ import {
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
+import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 
 const CATEGORIAS_ENTRADA = [
@@ -56,6 +57,12 @@ export default function FluxoCaixaPage() {
   const [deleteId, setDeleteId] = useState(null);
   const [typeFilter, setTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, search, typeFilter, categoryFilter]);
 
   const refresh = () => setData(getData('fluxoCaixa'));
 
@@ -89,6 +96,14 @@ export default function FluxoCaixaPage() {
       return indexB - indexA;
     });
   }, [data, period, search, typeFilter, categoryFilter]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedItems = useMemo(
+    () => filtered.slice(startIndex, startIndex + pageSize),
+    [filtered, startIndex, pageSize]
+  );
 
   // List of unique categories according to the selected typeFilter for filtering
   const availableCategories = useMemo(() => {
@@ -332,7 +347,7 @@ function formatDescricao(nome) {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((item) => (
+                  paginatedItems.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
                       <td style={{ fontWeight: 500 }}>{formatDescricao(item.nome)}</td>
@@ -383,14 +398,19 @@ function formatDescricao(nome) {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="table-footer">
-              <span>{filtered.length} movimentação(ões)</span>
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            label="movimentação(ões)"
+            summaryNode={
               <span>
                 Entradas: {formatCurrency(totalEntradas)} | Saídas: {formatCurrency(totalSaidas)}
               </span>
-            </div>
-          )}
+            }
+          />
         </div>
       </div>
 
