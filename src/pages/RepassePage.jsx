@@ -388,7 +388,7 @@ export default function RepassePage() {
           </div>
 
           <div className="table-scroll">
-            <table className="data-table" style={{ fontSize: 'var(--text-sm)' }}>
+            <table className="data-table repasse-table" style={{ fontSize: 'var(--text-sm)' }}>
               <thead>
                 <tr style={{ background: 'oklch(22% 0.04 160)' }}>
                   <th style={{ color: 'white', fontWeight: 600 }}>Médico</th>

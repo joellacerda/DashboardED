@@ -348,14 +348,14 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
             <table className="data-table detalhes-compact-table">
               <thead>
                 <tr>
-                  <th style={{ width: '28px' }} />
-                  <th style={{ width: '80px' }}>Data</th>
-                  <th>Paciente</th>
-                  <th style={{ width: '200px' }}>Exame</th>
-                  <th style={{ width: '115px' }}>Médico</th>
-                  <th style={{ width: '100px' }}>Pagamento</th>
-                  <th style={{ width: '110px' }}>Hon. Período</th>
-                  <th style={{ width: '44px', textAlign: 'center' }}>Ações</th>
+                  <th style={{ width: '3%' }} />
+                  <th style={{ width: '9%' }}>Data</th>
+                  <th style={{ width: '23%' }}>Paciente</th>
+                  <th style={{ width: '18%' }}>Exame</th>
+                  <th style={{ width: '16%' }}>Médico</th>
+                  <th style={{ width: '13%' }}>Pagamento</th>
+                  <th style={{ width: '15%' }}>Hon. Período</th>
+                  <th style={{ width: '6%', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>

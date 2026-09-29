@@ -2323,9 +2323,36 @@ select:-webkit-autofill:focus {
 
 .detalhes-compact-table th,
 .detalhes-compact-table td {
-  padding: 0.5rem 0.45rem;
+  padding: 0.45rem 0.4rem;
   vertical-align: middle;
   font-size: var(--text-sm);
+  box-sizing: border-box;
+}
+
+.detalhes-compact-table th:last-child,
+.detalhes-compact-table td:last-child {
+  padding-right: 0.65rem;
+}
+
+/* Ensure all data rows have uniform, identical height */
+.detalhes-compact-table tbody tr.expandable-row {
+  height: 56px;
+}
+
+.detalhes-compact-table tbody tr.expandable-row > td {
+  height: 56px;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* Ensure uniform row height on Repasse Médico table as well */
+.repasse-table tbody tr:not(.totals-row) {
+  height: 56px;
+}
+
+.repasse-table tbody tr:not(.totals-row) > td {
+  height: 56px;
+  vertical-align: middle;
   box-sizing: border-box;
 }
 
