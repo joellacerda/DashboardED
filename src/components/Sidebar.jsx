@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const navItems = [
@@ -83,6 +84,25 @@ const navItems = [
 
 export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, isCloudConnected }) {
   const { user, logout, isConfigured } = useAuth();
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.photoURL]);
+
+  const getInitials = (name, email) => {
+    if (name && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return name.slice(0, 2).toUpperCase();
+    }
+    if (email) {
+      return email.slice(0, 2).toUpperCase();
+    }
+    return 'ED';
+  };
 
   const handleItemClick = (id) => {
     onTabChange(id);
@@ -162,10 +182,16 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
           {user ? (
             <div className="sidebar-user-card">
               <div className="sidebar-user-avatar">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.displayName || 'Avatar'} className="sidebar-user-img" />
+                {user.photoURL && !avatarError ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'Avatar'}
+                    className="sidebar-user-img"
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarError(true)}
+                  />
                 ) : (
-                  <span>{(user.displayName || user.email || 'M')[0].toUpperCase()}</span>
+                  <span>{getInitials(user.displayName, user.email)}</span>
                 )}
               </div>
               <div className="sidebar-user-info">
