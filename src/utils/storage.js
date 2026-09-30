@@ -247,7 +247,7 @@ export function addItem(module, item) {
 
 export function updateItem(module, id, updates) {
   const data = getData(module);
-  const index = data.findIndex((item) => item.id === id);
+  const index = data.findIndex((item) => String(item.id) === String(id));
   if (index === -1) return null;
   data[index] = { ...data[index], ...updates, updatedAt: new Date().toISOString() };
   setData(module, data);
@@ -257,7 +257,7 @@ export function updateItem(module, id, updates) {
 
 export function deleteItem(module, id) {
   const data = getData(module);
-  const filtered = data.filter((item) => item.id !== id);
+  const filtered = data.filter((item) => String(item.id) !== String(id));
   setData(module, filtered);
   deleteFromCloud(module, id);
   return filtered;
@@ -265,7 +265,7 @@ export function deleteItem(module, id) {
 
 export function getItem(module, id) {
   const data = getData(module);
-  return data.find((item) => item.id === id) || null;
+  return data.find((item) => String(item.id) === String(id)) || null;
 }
 
 /**

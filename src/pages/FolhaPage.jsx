@@ -1,13 +1,23 @@
-import { useState, useMemo } from 'react';
-import { getData, addItem, updateItem, deleteItem } from '../utils/storage';
-import { formatCurrency, exportCSV, exportPDF } from '../utils/helpers';
+import { useState, useMemo, useEffect } from 'react';
+import { getData, addItem, updateItem, deleteItem, getItem } from '../utils/storage';
+import {
+  formatCurrency,
+  formatDate,
+  exportCSV,
+  exportPDF,
+  getAcquisitionPeriod,
+  navigateAcquisitionPeriod,
+  getTodayISO,
+} from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
+import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 
 const emptyForm = {
   nome: '',
+  cargo: '',
   salarioBase: '',
   valeAlimentacao: '',
   valeTransporte: '',
@@ -29,6 +39,7 @@ function calcLiquido(f) {
 
 const columns = [
   { key: 'nome', label: 'Nome' },
+  { key: 'cargo', label: 'Cargo', accessor: (item) => item.cargo || '—' },
   { key: 'salarioBase', label: 'Salário Base', accessor: (item) => formatCurrency(item.salarioBase) },
   { key: 'valeAlimentacao', label: 'V. Alimentação', accessor: (item) => formatCurrency(item.valeAlimentacao) },
   { key: 'valeTransporte', label: 'V. Transporte', accessor: (item) => formatCurrency(item.valeTransporte) },
@@ -41,26 +52,108 @@ const columns = [
 export default function FolhaPage() {
   const toast = useToast();
   const [data, setData] = useState(() => getData('folhaPagamento'));
+  const [fluxoCaixa, setFluxoCaixa] = useState(() => getData('fluxoCaixa'));
+  const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  const refresh = () => setData(getData('folhaPagamento'));
+  const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
+  const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, search]);
+
+  const refresh = () => {
+    setData(getData('folhaPagamento'));
+    setFluxoCaixa(getData('fluxoCaixa'));
+  };
+
+  // Resolve employees for the current selected acquisition period
+  const resolvedEmployees = useMemo(() => {
+    return data
+      .filter((emp) => {
+        // Active employees always appear; inactive employees only appear if they have a record in this period
+        if (emp.ativo === false && !emp.periodos?.[period.start]) return false;
+        return true;
+      })
+      .map((emp) => {
+        const periodData = emp.periodos?.[period.start];
+        const isLegacyCurrent = !emp.periodos && isCurrentPeriod;
+
+        const salarioBase = Number(periodData?.salarioBase ?? emp.salarioBase ?? 0);
+        const valeAlimentacao = Number(periodData?.valeAlimentacao ?? emp.valeAlimentacao ?? 0);
+        const valeTransporte = Number(periodData?.valeTransporte ?? emp.valeTransporte ?? 0);
+        const extras = Number(periodData?.extras ?? (isLegacyCurrent ? emp.extras : 0) ?? 0);
+        const descontos = Number(periodData?.descontos ?? (isLegacyCurrent ? emp.descontos : 0) ?? 0);
+        const produtividade = Number(periodData?.produtividade ?? (isLegacyCurrent ? emp.produtividade : 0) ?? 0);
+        const isCustomizedForPeriod = !!periodData || isLegacyCurrent;
+
+        const liquido = calcLiquido({
+          salarioBase,
+          valeAlimentacao,
+          valeTransporte,
+          extras,
+          descontos,
+          produtividade,
+        });
+
+        return {
+          ...emp,
+          salarioBase,
+          valeAlimentacao,
+          valeTransporte,
+          extras,
+          descontos,
+          produtividade,
+          liquido,
+          isCustomizedForPeriod,
+        };
+      });
+  }, [data, period, isCurrentPeriod]);
 
   const filtered = useMemo(() => {
-    let items = [...data];
+    let items = resolvedEmployees;
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((e) => e.nome.toLowerCase().includes(q));
+      items = items.filter(
+        (e) =>
+          (e.nome || '').toLowerCase().includes(q) ||
+          (e.cargo || '').toLowerCase().includes(q)
+      );
     }
     return items.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [data, search]);
+  }, [resolvedEmployees, search]);
 
-  const totalFolha = filtered.reduce((s, f) => s + calcLiquido(f), 0);
-  const totalBase = filtered.reduce((s, f) => s + Number(f.salarioBase || 0), 0);
-  const mediaSalarial = filtered.length > 0 ? totalFolha / filtered.length : 0;
+  // Financial aggregates for the selected period
+  const totalFolha = filtered.reduce((s, f) => s + f.liquido, 0);
+  const totalBase = filtered.reduce((s, f) => s + f.salarioBase, 0);
+  const totalBeneficios = filtered.reduce((s, f) => s + f.valeAlimentacao + f.valeTransporte, 0);
+  const totalVariaveis = filtered.reduce((s, f) => s + f.extras + f.produtividade, 0);
+  const totalDescontos = filtered.reduce((s, f) => s + f.descontos, 0);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedItems = useMemo(
+    () => filtered.slice(startIndex, startIndex + pageSize),
+    [filtered, startIndex, pageSize]
+  );
+
+  // Check if current period has already been posted to Fluxo de Caixa
+  const folhaLancamentoNoCaixa = useMemo(() => {
+    return fluxoCaixa.find(
+      (f) =>
+        f.folhaPeriodoStart === period.start ||
+        (f.categoria === 'Folha de Pagamento / Pessoal' && (f.nome || '').includes(period.label))
+    );
+  }, [fluxoCaixa, period]);
 
   const openNew = () => {
     setEditId(null);
@@ -71,36 +164,174 @@ export default function FolhaPage() {
   const openEdit = (item) => {
     setEditId(item.id);
     setForm({
-      nome: item.nome,
-      salarioBase: item.salarioBase,
-      valeAlimentacao: item.valeAlimentacao,
-      valeTransporte: item.valeTransporte,
-      extras: item.extras,
-      descontos: item.descontos,
-      produtividade: item.produtividade,
+      nome: item.nome || '',
+      cargo: item.cargo || '',
+      salarioBase: item.salarioBase !== undefined && item.salarioBase !== null ? item.salarioBase : '',
+      valeAlimentacao: item.valeAlimentacao !== undefined && item.valeAlimentacao !== null ? item.valeAlimentacao : '',
+      valeTransporte: item.valeTransporte !== undefined && item.valeTransporte !== null ? item.valeTransporte : '',
+      extras: item.extras !== undefined && item.extras !== null ? item.extras : '',
+      descontos: item.descontos !== undefined && item.descontos !== null ? item.descontos : '',
+      produtividade: item.produtividade !== undefined && item.produtividade !== null ? item.produtividade : '',
     });
     setModalOpen(true);
   };
 
   const handleSave = (e) => {
-    e.preventDefault();
-    if (!form.nome || !form.salarioBase) return;
-    if (editId) {
-      updateItem('folhaPagamento', editId, form);
-    } else {
-      addItem('folhaPagamento', form);
+    if (e && e.preventDefault) e.preventDefault();
+
+    const nomeTrimmed = (form.nome || '').trim().toUpperCase();
+    if (!nomeTrimmed) {
+      toast.warning('O nome do colaborador é obrigatório.');
+      return;
     }
+
+    if (form.salarioBase === '' || form.salarioBase === null || form.salarioBase === undefined) {
+      toast.warning('O Salário Base é obrigatório.');
+      return;
+    }
+
+    const salarioBaseNum = Number(form.salarioBase);
+    if (isNaN(salarioBaseNum) || salarioBaseNum < 0) {
+      toast.warning('Informe um salário base válido maior ou igual a zero.');
+      return;
+    }
+
+    const baseVA = Number(form.valeAlimentacao || 0);
+    const baseVT = Number(form.valeTransporte || 0);
+    const baseExtras = Number(form.extras || 0);
+    const baseDescontos = Number(form.descontos || 0);
+    const baseProd = Number(form.produtividade || 0);
+
+    const periodEntry = {
+      salarioBase: salarioBaseNum,
+      valeAlimentacao: baseVA,
+      valeTransporte: baseVT,
+      extras: baseExtras,
+      descontos: baseDescontos,
+      produtividade: baseProd,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const employeeFields = {
+      nome: nomeTrimmed,
+      cargo: form.cargo ? form.cargo.trim().toUpperCase() : '',
+      salarioBase: salarioBaseNum,
+      valeAlimentacao: baseVA,
+      valeTransporte: baseVT,
+      extras: baseExtras,
+      descontos: baseDescontos,
+      produtividade: baseProd,
+    };
+
+    if (editId) {
+      const existing =
+        data.find((emp) => String(emp.id) === String(editId)) ||
+        getItem('folhaPagamento', editId) ||
+        {};
+
+      const updatedPeriodos = {
+        ...(existing.periodos || {}),
+        [period.start]: periodEntry,
+      };
+
+      const updatedEmployee = {
+        ...existing,
+        ...employeeFields,
+        periodos: updatedPeriodos,
+      };
+
+      updateItem('folhaPagamento', editId, updatedEmployee);
+      toast.success(`Alterações de ${nomeTrimmed} salvas com sucesso!`);
+    } else {
+      const newEmployee = {
+        ...employeeFields,
+        ativo: true,
+        periodos: {
+          [period.start]: periodEntry,
+        },
+      };
+
+      addItem('folhaPagamento', newEmployee);
+      toast.success(`Colaborador ${nomeTrimmed} cadastrado com sucesso!`);
+    }
+
     refresh();
     setModalOpen(false);
-    toast.success(editId ? 'Funcionário atualizado com sucesso!' : 'Funcionário cadastrado com sucesso!');
   };
 
   const handleDelete = () => {
     if (deleteId) {
       deleteItem('folhaPagamento', deleteId);
       refresh();
-      toast.success('Funcionário removido da folha.');
+      toast.success('Colaborador removido da folha.');
     }
+  };
+
+  // Copy values from previous acquisition period to current period
+  const handleCopyFromPrevious = () => {
+    const prevPeriod = navigateAcquisitionPeriod(period, -1);
+    let copiedCount = 0;
+
+    const updatedData = data.map((emp) => {
+      if (emp.ativo === false) return emp;
+      const prevEntry = emp.periodos?.[prevPeriod.start];
+      if (prevEntry) {
+        copiedCount++;
+        return {
+          ...emp,
+          periodos: {
+            ...(emp.periodos || {}),
+            [period.start]: {
+              ...prevEntry,
+              copiedFrom: prevPeriod.start,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        };
+      }
+      return emp;
+    });
+
+    if (copiedCount === 0) {
+      toast.info(`Nenhum lançamento personalizado encontrado no período anterior (${prevPeriod.label}).`);
+      return;
+    }
+
+    setData(updatedData);
+    localStorage.setItem('endodiagnose_folha_pagamento', JSON.stringify(updatedData));
+    updatedData.forEach((emp) => updateItem('folhaPagamento', emp.id, emp));
+    toast.success(`Lançamentos de ${copiedCount} colaborador(es) copiados do período anterior!`);
+  };
+
+  // Launch net payroll into Fluxo de Caixa
+  const handleLancarFluxo = () => {
+    if (totalFolha <= 0) {
+      toast.warning('O valor total líquido da folha deve ser maior que zero.');
+      return;
+    }
+
+    const descricao = `FOLHA DE PAGAMENTO — ${period.label}`;
+
+    if (folhaLancamentoNoCaixa) {
+      updateItem('fluxoCaixa', folhaLancamentoNoCaixa.id, {
+        valor: totalFolha,
+        nome: descricao,
+        data: folhaLancamentoNoCaixa.data || getTodayISO(),
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success(`Lançamento no Fluxo de Caixa atualizado para ${formatCurrency(totalFolha)}!`);
+    } else {
+      addItem('fluxoCaixa', {
+        data: getTodayISO(),
+        nome: descricao,
+        categoria: 'Folha de Pagamento / Pessoal',
+        tipo: 'saida',
+        valor: totalFolha,
+        folhaPeriodoStart: period.start,
+      });
+      toast.success(`Folha de ${formatCurrency(totalFolha)} lançada com sucesso no Fluxo de Caixa!`);
+    }
+    setFluxoCaixa(getData('fluxoCaixa'));
   };
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
@@ -108,56 +339,134 @@ export default function FolhaPage() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Folha de Pagamento</h1>
+        <div>
+          <h1 className="page-title">Folha de Pagamento</h1>
+        </div>
         <div className="header-actions">
-          <button className="btn btn-primary" onClick={openNew}>
+          {/* Period selector */}
+          <div className="period-selector">
+            <button
+              type="button"
+              className="period-btn"
+              onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
+              title="Período anterior"
+            >
+              ◀
+            </button>
+            <span className="period-label">{period.label}</span>
+            <button
+              type="button"
+              className="period-btn"
+              onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
+              title="Próximo período"
+            >
+              ▶
+            </button>
+          </div>
+
+          {!isCurrentPeriod && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm period-today-btn"
+              onClick={() => setPeriod(getAcquisitionPeriod())}
+              title="Ir para o período atual"
+            >
+              Hoje
+            </button>
+          )}
+
+          {/* Action to copy from previous period */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={handleCopyFromPrevious}
+            title={`Copiar lançamentos do período anterior (${navigateAcquisitionPeriod(period, -1).label})`}
+          >
+            📋 Copiar Mês Anterior
+          </button>
+
+          {/* Action to launch into Fluxo de Caixa */}
+          <button
+            type="button"
+            className={`btn btn-sm ${folhaLancamentoNoCaixa ? 'btn-secondary' : 'btn-secondary'}`}
+            onClick={handleLancarFluxo}
+            style={folhaLancamentoNoCaixa ? { borderColor: 'var(--color-emerald)', color: 'var(--color-emerald)' } : {}}
+            title={folhaLancamentoNoCaixa ? 'Atualizar valor da folha no Fluxo de Caixa' : 'Lançar saída da folha no Fluxo de Caixa'}
+          >
+            💵 {folhaLancamentoNoCaixa ? 'Atualizar no Caixa' : 'Lançar no Caixa'}
+          </button>
+
+          <button type="button" className="btn btn-primary" onClick={openNew}>
             + Novo Funcionário
           </button>
         </div>
       </div>
 
       <div className="page-container">
-        <div className="summary-cards">
+        {/* 5 KPI Summary Cards for the Period */}
+        <div className="summary-cards summary-cards-5">
           <div className="summary-card card-accent-emerald">
             <div className="summary-card-header">
-              <span className="summary-card-label">Total da Folha</span>
+              <span className="summary-card-label">Total Líquido da Folha</span>
               <div className="summary-card-icon">💰</div>
             </div>
             <div className="summary-card-value">{formatCurrency(totalFolha)}</div>
           </div>
+
           <div className="summary-card card-accent-blue">
             <div className="summary-card-header">
-              <span className="summary-card-label">Total Base</span>
+              <span className="summary-card-label">Salários Base</span>
               <div className="summary-card-icon blue">📊</div>
             </div>
             <div className="summary-card-value">{formatCurrency(totalBase)}</div>
           </div>
+
           <div className="summary-card card-accent-amber">
             <div className="summary-card-header">
-              <span className="summary-card-label">Funcionários</span>
-              <div className="summary-card-icon amber">👥</div>
+              <span className="summary-card-label">Benefícios (VA + VT)</span>
+              <div className="summary-card-icon amber">🥪</div>
             </div>
-            <div className="summary-card-value">{filtered.length}</div>
+            <div className="summary-card-value">{formatCurrency(totalBeneficios)}</div>
           </div>
+
           <div className="summary-card card-accent-purple">
             <div className="summary-card-header">
-              <span className="summary-card-label">Média Salarial</span>
+              <span className="summary-card-label">Extras & Produtividade</span>
               <div className="summary-card-icon purple">📈</div>
             </div>
-            <div className="summary-card-value">{formatCurrency(mediaSalarial)}</div>
+            <div className="summary-card-value">{formatCurrency(totalVariaveis)}</div>
+          </div>
+
+          <div className="summary-card card-accent-red">
+            <div className="summary-card-header">
+              <span className="summary-card-label">Total Descontos</span>
+              <div className="summary-card-icon red">📉</div>
+            </div>
+            <div className="summary-card-value">{formatCurrency(totalDescontos)}</div>
           </div>
         </div>
 
         <div className="table-container">
           <div className="table-header">
-            <h3 className="table-title">Funcionários</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h3 className="table-title">Demonstrativo da Folha</h3>
+              {folhaLancamentoNoCaixa && (
+                <span
+                  className="badge-fluxo-done"
+                  title={`Lançado no Fluxo de Caixa: ${formatCurrency(folhaLancamentoNoCaixa.valor)} em ${formatDate(folhaLancamentoNoCaixa.data)}`}
+                >
+                  ✓ Lançado no Caixa ({formatCurrency(folhaLancamentoNoCaixa.valor)})
+                </span>
+              )}
+            </div>
+
             <div className="table-actions">
               <div className="search-input-wrapper">
                 <span className="search-icon">🔍</span>
                 <input
                   type="search"
                   className="search-input"
-                  placeholder="Buscar funcionário..."
+                  placeholder="Buscar colaborador..."
                   value={search}
                   autoComplete="off"
                   autoCorrect="off"
@@ -166,16 +475,17 @@ export default function FolhaPage() {
                 />
               </div>
               <ExportMenu
-                onExportCSV={() => exportCSV(filtered, columns, 'folha_pagamento')}
-                onExportPDF={() => exportPDF(filtered, columns, 'Folha de Pagamento')}
+                onExportCSV={() => exportCSV(filtered, columns, `folha_pagamento_${period.start}`)}
+                onExportPDF={() => exportPDF(filtered, columns, `Folha de Pagamento — ${period.label}`)}
               />
             </div>
           </div>
+
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table" style={{ fontSize: 'var(--text-sm)' }}>
               <thead>
                 <tr>
-                  <th>Nome</th>
+                  <th>Colaborador</th>
                   <th>Salário Base</th>
                   <th>V. Alimentação</th>
                   <th>V. Transporte</th>
@@ -183,7 +493,7 @@ export default function FolhaPage() {
                   <th>Descontos</th>
                   <th>Produtividade</th>
                   <th>Líquido</th>
-                  <th style={{ width: '90px' }}>Ações</th>
+                  <th style={{ width: '80px', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -192,28 +502,84 @@ export default function FolhaPage() {
                     <td colSpan="9">
                       <div className="table-empty">
                         <div className="table-empty-icon">👥</div>
-                        <p>Nenhum funcionário registrado{search ? ' para esta busca' : ''}.</p>
+                        <p>Nenhum colaborador registrado{search ? ' para esta busca' : ' neste período'}.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   <>
-                    {filtered.map((item) => (
-                      <tr key={item.id}>
-                        <td style={{ fontWeight: 500 }}>{item.nome}</td>
+                    {paginatedItems.map((item) => (
+                      <tr key={item.id} style={{ height: '54px' }}>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.nome}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
+                            {item.cargo && (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {item.cargo}
+                              </span>
+                            )}
+                            {item.isCustomizedForPeriod ? (
+                              <span
+                                className="badge"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '0.05rem 0.35rem',
+                                  background: 'oklch(72% 0.19 160 / 0.12)',
+                                  color: 'var(--color-emerald)',
+                                  border: '1px solid oklch(72% 0.19 160 / 0.25)',
+                                }}
+                                title="Valores personalizados para este período"
+                              >
+                                ✓ Ajustado
+                              </span>
+                            ) : (
+                              <span
+                                className="badge"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '0.05rem 0.35rem',
+                                  background: 'var(--bg-surface-elevated)',
+                                  color: 'var(--text-muted)',
+                                  border: '1px solid var(--border-subtle)',
+                                }}
+                                title="Utilizando valores contratuais padrão"
+                              >
+                                Padrão
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="value-currency">{formatCurrency(item.salarioBase)}</td>
                         <td className="value-currency">{formatCurrency(item.valeAlimentacao)}</td>
                         <td className="value-currency">{formatCurrency(item.valeTransporte)}</td>
-                        <td className="value-positive">{formatCurrency(item.extras)}</td>
-                        <td className="value-negative">{formatCurrency(item.descontos)}</td>
-                        <td className="value-positive">{formatCurrency(item.produtividade)}</td>
-                        <td style={{ fontWeight: 700 }}>{formatCurrency(calcLiquido(item))}</td>
-                        <td>
-                          <div className="action-buttons">
-                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
+                        <td className={item.extras > 0 ? 'value-positive' : 'value-currency'}>
+                          {item.extras > 0 ? `+${formatCurrency(item.extras)}` : 'R$ 0,00'}
+                        </td>
+                        <td className={item.descontos > 0 ? 'value-negative' : 'value-currency'}>
+                          {item.descontos > 0 ? `-${formatCurrency(item.descontos)}` : 'R$ 0,00'}
+                        </td>
+                        <td className={item.produtividade > 0 ? 'value-positive' : 'value-currency'}>
+                          {item.produtividade > 0 ? `+${formatCurrency(item.produtividade)}` : 'R$ 0,00'}
+                        </td>
+                        <td style={{ fontWeight: 700, color: 'var(--color-emerald)', fontSize: 'var(--text-sm)' }}>
+                          {formatCurrency(item.liquido)}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div className="action-buttons" style={{ justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-icon btn-sm"
+                              onClick={() => openEdit(item)}
+                              title="Editar valores deste período"
+                            >
                               ✏️
                             </button>
-                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-icon btn-sm"
+                              onClick={() => setDeleteId(item.id)}
+                              title="Remover colaborador"
+                            >
                               🗑️
                             </button>
                           </div>
@@ -221,14 +587,26 @@ export default function FolhaPage() {
                       </tr>
                     ))}
                     <tr className="totals-row">
-                      <td style={{ textAlign: 'end', fontWeight: 700 }}>Totais:</td>
-                      <td className="value-currency">{formatCurrency(totalBase)}</td>
-                      <td className="value-currency">{formatCurrency(filtered.reduce((s, f) => s + Number(f.valeAlimentacao || 0), 0))}</td>
-                      <td className="value-currency">{formatCurrency(filtered.reduce((s, f) => s + Number(f.valeTransporte || 0), 0))}</td>
-                      <td className="value-positive">{formatCurrency(filtered.reduce((s, f) => s + Number(f.extras || 0), 0))}</td>
-                      <td className="value-negative">{formatCurrency(filtered.reduce((s, f) => s + Number(f.descontos || 0), 0))}</td>
-                      <td className="value-positive">{formatCurrency(filtered.reduce((s, f) => s + Number(f.produtividade || 0), 0))}</td>
-                      <td style={{ fontWeight: 700 }}>{formatCurrency(totalFolha)}</td>
+                      <td style={{ textAlign: 'end', fontWeight: 700 }}>Totais no período:</td>
+                      <td className="value-currency" style={{ fontWeight: 700 }}>{formatCurrency(totalBase)}</td>
+                      <td className="value-currency" style={{ fontWeight: 700 }}>
+                        {formatCurrency(filtered.reduce((s, f) => s + f.valeAlimentacao, 0))}
+                      </td>
+                      <td className="value-currency" style={{ fontWeight: 700 }}>
+                        {formatCurrency(filtered.reduce((s, f) => s + f.valeTransporte, 0))}
+                      </td>
+                      <td className="value-positive" style={{ fontWeight: 700 }}>
+                        {formatCurrency(filtered.reduce((s, f) => s + f.extras, 0))}
+                      </td>
+                      <td className="value-negative" style={{ fontWeight: 700 }}>
+                        {formatCurrency(totalDescontos)}
+                      </td>
+                      <td className="value-positive" style={{ fontWeight: 700 }}>
+                        {formatCurrency(filtered.reduce((s, f) => s + f.produtividade, 0))}
+                      </td>
+                      <td style={{ fontWeight: 800, color: 'var(--color-emerald)' }}>
+                        {formatCurrency(totalFolha)}
+                      </td>
                       <td />
                     </tr>
                   </>
@@ -236,79 +614,169 @@ export default function FolhaPage() {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="table-footer">
-              <span>{filtered.length} funcionário(s)</span>
-              <span>Total líquido: {formatCurrency(totalFolha)}</span>
-            </div>
-          )}
+
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            label="colaborador(es)"
+            summaryNode={
+              <span>
+                Total Líquido da Folha ({period.label}): <strong style={{ color: 'var(--color-emerald)' }}>{formatCurrency(totalFolha)}</strong>
+              </span>
+            }
+          />
         </div>
       </div>
 
+      {/* Modal: Cadastro / Edição por Período */}
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editId ? 'Editar Funcionário' : 'Novo Funcionário'}
+        title={editId ? `Editar Colaborador — ${form.nome || 'Colaborador'}` : 'Novo Colaborador'}
+        maxWidth="640px"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSave}>{editId ? 'Salvar' : 'Cadastrar'}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleSave}>
+              {editId ? 'Salvar Alterações' : 'Cadastrar'}
+            </button>
           </>
         }
       >
         <form onSubmit={handleSave} autoComplete="off">
+          <div style={{ marginBottom: '0.85rem', padding: '0.5rem 0.75rem', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+            📅 Competência / Período: <strong style={{ color: 'var(--text-primary)' }}>{period.label}</strong>
+          </div>
+
           <div className="modal-form-grid">
-            <div className="input-group full-width">
-              <label className="input-label">Nome <span className="required">*</span></label>
+            <div className="input-group">
+              <label className="input-label">
+                Nome do Colaborador <span className="required">*</span>
+              </label>
               <input
                 type="text"
                 className="input-field"
                 required
                 autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Nome do funcionário"
+                placeholder="Ex: MARIA SILVA"
                 value={form.nome}
                 onChange={(e) => updateField('nome', e.target.value.toUpperCase())}
               />
             </div>
+
             <div className="input-group">
-              <label className="input-label">Salário Base (R$) <span className="required">*</span></label>
-              <input type="number" className="input-field" required min="0" step="0.01" placeholder="0,00" value={form.salarioBase} onChange={(e) => updateField('salarioBase', e.target.value)} />
+              <label className="input-label">Cargo / Função</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Ex: RECEPCIONISTA, ENFERMEIRA..."
+                value={form.cargo}
+                onChange={(e) => updateField('cargo', e.target.value.toUpperCase())}
+              />
             </div>
+
+            <div className="input-group">
+              <label className="input-label">
+                Salário Base (R$) <span className="required">*</span>
+              </label>
+              <input
+                type="number"
+                className="input-field"
+                required
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.salarioBase}
+                onChange={(e) => updateField('salarioBase', e.target.value)}
+              />
+            </div>
+
             <div className="input-group">
               <label className="input-label">Vale Alimentação (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valeAlimentacao} onChange={(e) => updateField('valeAlimentacao', e.target.value)} />
+              <input
+                type="number"
+                className="input-field"
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.valeAlimentacao}
+                onChange={(e) => updateField('valeAlimentacao', e.target.value)}
+              />
             </div>
+
             <div className="input-group">
               <label className="input-label">Vale Transporte (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.valeTransporte} onChange={(e) => updateField('valeTransporte', e.target.value)} />
+              <input
+                type="number"
+                className="input-field"
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.valeTransporte}
+                onChange={(e) => updateField('valeTransporte', e.target.value)}
+              />
             </div>
+
             <div className="input-group">
-              <label className="input-label">Extras (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.extras} onChange={(e) => updateField('extras', e.target.value)} />
+              <label className="input-label">Extras / Horas Extras (R$)</label>
+              <input
+                type="number"
+                className="input-field"
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.extras}
+                onChange={(e) => updateField('extras', e.target.value)}
+              />
             </div>
+
             <div className="input-group">
-              <label className="input-label">Descontos (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.descontos} onChange={(e) => updateField('descontos', e.target.value)} />
+              <label className="input-label">Produtividade / Bônus (R$)</label>
+              <input
+                type="number"
+                className="input-field"
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.produtividade}
+                onChange={(e) => updateField('produtividade', e.target.value)}
+              />
             </div>
+
             <div className="input-group">
-              <label className="input-label">Produtividade (R$)</label>
-              <input type="number" className="input-field" min="0" step="0.01" placeholder="0,00" value={form.produtividade} onChange={(e) => updateField('produtividade', e.target.value)} />
+              <label className="input-label">Descontos / Faltas (R$)</label>
+              <input
+                type="number"
+                className="input-field"
+                min="0"
+                step="0.01"
+                placeholder="0,00"
+                value={form.descontos}
+                onChange={(e) => updateField('descontos', e.target.value)}
+              />
             </div>
           </div>
-          {(form.salarioBase || form.extras || form.descontos || form.produtividade) && (
-            <div style={{
-              marginTop: '1rem',
-              padding: '0.75rem 1rem',
-              background: 'oklch(72% 0.19 160 / 0.08)',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              fontSize: 'var(--text-sm)',
-            }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Salário Líquido Estimado:</span>
+
+          {(form.salarioBase || form.extras || form.descontos || form.produtividade || form.valeAlimentacao || form.valeTransporte) && (
+            <div
+              style={{
+                marginTop: '1rem',
+                padding: '0.75rem 1rem',
+                background: 'oklch(72% 0.19 160 / 0.08)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: 'var(--text-sm)',
+                border: '1px solid oklch(72% 0.19 160 / 0.2)',
+              }}
+            >
+              <span style={{ color: 'var(--text-secondary)' }}>Salário Líquido Estimado no Período:</span>
               <span style={{ fontWeight: 700, color: 'var(--color-emerald)', fontSize: 'var(--text-lg)' }}>
                 {formatCurrency(calcLiquido(form))}
               </span>
@@ -321,7 +789,7 @@ export default function FolhaPage() {
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        message="Tem certeza que deseja excluir este funcionário?"
+        message="Tem certeza que deseja excluir este colaborador?"
       />
     </>
   );
