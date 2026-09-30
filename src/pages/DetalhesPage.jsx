@@ -77,14 +77,26 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   useEffect(() => {
     if (prefillData) {
-      setEditItem(null);
+      const existing = data.find(
+        (d) =>
+          (prefillData.id && String(d.id) === String(prefillData.id)) ||
+          (d.data === prefillData.data &&
+            d.paciente &&
+            prefillData.paciente &&
+            d.paciente.trim().toUpperCase() === prefillData.paciente.trim().toUpperCase())
+      );
+      if (existing) {
+        setEditItem(existing);
+      } else {
+        setEditItem(null);
+      }
       if (prefillData.data) {
         const dateObj = new Date(prefillData.data + 'T00:00:00');
         setPeriod(getAcquisitionPeriod(dateObj));
       }
       setModalOpen(true);
     }
-  }, [prefillData]);
+  }, [prefillData, data]);
 
   useEffect(() => {
     syncAllConveniosToDetalhes();
@@ -573,15 +585,16 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
         isOpen={modalOpen}
         editItem={editItem}
         prefillData={prefillData}
-        onClearPrefill={onClearPrefill}
         onClose={() => {
           setModalOpen(false);
           setEditItem(null);
+          if (onClearPrefill) onClearPrefill();
         }}
         onSuccess={() => {
           refresh();
           setModalOpen(false);
           setEditItem(null);
+          if (onClearPrefill) onClearPrefill();
         }}
       />
 

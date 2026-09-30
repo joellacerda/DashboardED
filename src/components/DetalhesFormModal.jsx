@@ -145,11 +145,10 @@ export default function DetalhesFormModal({
         medico: prefillData.medico || '',
         pagamentos: [{ ...emptyPagamento }],
       });
-      if (onClearPrefill) onClearPrefill();
     } else {
       setForm({ ...emptyForm, data: getTodayISO(), pagamentos: [{ ...emptyPagamento }] });
     }
-  }, [isOpen, editItem, prefillData, onClearPrefill]);
+  }, [isOpen, editItem, prefillData]);
 
   const updateField = (field, value) => {
     setForm((f) => {
@@ -356,7 +355,8 @@ export default function DetalhesFormModal({
     if (editItem && editItem.id) {
       savedItem = updateItem('detalhesExames', editItem.id, sanitizedForm);
     } else {
-      savedItem = addItem('detalhesExames', sanitizedForm);
+      const newItem = prefillData?.id ? { ...sanitizedForm, id: prefillData.id } : sanitizedForm;
+      savedItem = addItem('detalhesExames', newItem);
     }
 
     if (savedItem) {
@@ -413,8 +413,8 @@ export default function DetalhesFormModal({
       honDoc1Mensal = roundCurrency(val1 / Math.max(1, totalParcelasForm));
       honDoc2Mensal = roundCurrency(val2 / Math.max(1, totalParcelasForm));
     } else {
-      const pct1 = Number(form.porcentagemMedico1) ?? 50;
-      const pct2 = Number(form.porcentagemMedico2) ?? 50;
+      const pct1 = Number(form.porcentagemMedico1 ?? 50);
+      const pct2 = Number(form.porcentagemMedico2 ?? 50);
       honDoc1Total = roundCurrency((totalHonForm * pct1) / 100);
       honDoc2Total = roundCurrency((totalHonForm * pct2) / 100);
       honDoc1Mensal = roundCurrency((formHonorarioMensal * pct1) / 100);
