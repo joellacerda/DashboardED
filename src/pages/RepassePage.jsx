@@ -29,6 +29,9 @@ export default function RepassePage() {
   const [detalhesExames, setDetalhesExames] = useState(() => getData('detalhesExames'));
   const [fluxoCaixa, setFluxoCaixa] = useState(() => getData('fluxoCaixa'));
 
+  const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
+  const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
+
   const [editAjusteModal, setEditAjusteModal] = useState(false);
   const [selectedMedico, setSelectedMedico] = useState(null);
   const [ajusteForm, setAjusteForm] = useState({ creditos: '', debitos: '', bnb: '', obs: '', isSocio: true });
@@ -304,22 +307,36 @@ export default function RepassePage() {
       <div className="page-header">
         <h1 className="page-title">Repasses Médicos</h1>
         <div className="header-actions">
-          <div className="period-selector">
-            <button
-              className="period-btn"
-              onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
-              title="Período anterior"
-            >
-              ◀
-            </button>
-            <span className="period-label">{period.label}</span>
-            <button
-              className="period-btn"
-              onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
-              title="Próximo período"
-            >
-              ▶
-            </button>
+          <div className="period-selector-wrapper">
+            <div className="period-selector">
+              <button
+                type="button"
+                className="period-btn"
+                onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
+                title="Período anterior"
+              >
+                ◀
+              </button>
+              <span className="period-label">{period.label}</span>
+              <button
+                type="button"
+                className="period-btn"
+                onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
+                title="Próximo período"
+              >
+                ▶
+              </button>
+            </div>
+            {!isCurrentPeriod && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm period-today-btn"
+                onClick={() => setPeriod(getAcquisitionPeriod())}
+                title="Ir para o período atual"
+              >
+                Hoje
+              </button>
+            )}
           </div>
           <button className="btn btn-secondary" onClick={() => setManageMedicosModal(true)}>
             ⚙️ Gerenciar Médicos & Sócios
