@@ -76,7 +76,6 @@ export default function DetalhesFormModal({
   isOpen,
   editItem,
   prefillData,
-  onClearPrefill,
   onClose,
   onSuccess,
 }) {

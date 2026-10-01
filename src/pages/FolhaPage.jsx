@@ -86,13 +86,15 @@ export default function FolhaPage() {
         const periodData = emp.periodos?.[period.start];
         const isLegacyCurrent = !emp.periodos && isCurrentPeriod;
 
+        // Apenas o salário-base permanece o mesmo para os meses posteriores
         const salarioBase = Number(periodData?.salarioBase ?? emp.salarioBase ?? 0);
-        const valeAlimentacao = Number(periodData?.valeAlimentacao ?? emp.valeAlimentacao ?? 0);
-        const valeTransporte = Number(periodData?.valeTransporte ?? emp.valeTransporte ?? 0);
+
+        // Todas as outras informações mudam mês a mês (zeradas se não lançadas no período)
+        const valeAlimentacao = Number(periodData?.valeAlimentacao ?? (isLegacyCurrent ? emp.valeAlimentacao : 0) ?? 0);
+        const valeTransporte = Number(periodData?.valeTransporte ?? (isLegacyCurrent ? emp.valeTransporte : 0) ?? 0);
         const extras = Number(periodData?.extras ?? (isLegacyCurrent ? emp.extras : 0) ?? 0);
         const descontos = Number(periodData?.descontos ?? (isLegacyCurrent ? emp.descontos : 0) ?? 0);
         const produtividade = Number(periodData?.produtividade ?? (isLegacyCurrent ? emp.produtividade : 0) ?? 0);
-        const isCustomizedForPeriod = !!periodData || isLegacyCurrent;
 
         const liquido = calcLiquido({
           salarioBase,
@@ -112,7 +114,6 @@ export default function FolhaPage() {
           descontos,
           produtividade,
           liquido,
-          isCustomizedForPeriod,
         };
       });
   }, [data, period, isCurrentPeriod]);
@@ -212,15 +213,10 @@ export default function FolhaPage() {
       updatedAt: new Date().toISOString(),
     };
 
-    const employeeFields = {
+    const employeeBase = {
       nome: nomeTrimmed,
       cargo: form.cargo ? form.cargo.trim().toUpperCase() : '',
       salarioBase: salarioBaseNum,
-      valeAlimentacao: baseVA,
-      valeTransporte: baseVT,
-      extras: baseExtras,
-      descontos: baseDescontos,
-      produtividade: baseProd,
     };
 
     if (editId) {
@@ -236,7 +232,7 @@ export default function FolhaPage() {
 
       const updatedEmployee = {
         ...existing,
-        ...employeeFields,
+        ...employeeBase,
         periodos: updatedPeriodos,
       };
 
@@ -244,7 +240,7 @@ export default function FolhaPage() {
       toast.success(`Alterações de ${nomeTrimmed} salvas com sucesso!`);
     } else {
       const newEmployee = {
-        ...employeeFields,
+        ...employeeBase,
         ativo: true,
         periodos: {
           [period.start]: periodEntry,
@@ -512,42 +508,11 @@ export default function FolhaPage() {
                       <tr key={item.id} style={{ height: '54px' }}>
                         <td>
                           <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.nome}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
-                            {item.cargo && (
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                {item.cargo}
-                              </span>
-                            )}
-                            {item.isCustomizedForPeriod ? (
-                              <span
-                                className="badge"
-                                style={{
-                                  fontSize: '10px',
-                                  padding: '0.05rem 0.35rem',
-                                  background: 'oklch(72% 0.19 160 / 0.12)',
-                                  color: 'var(--color-emerald)',
-                                  border: '1px solid oklch(72% 0.19 160 / 0.25)',
-                                }}
-                                title="Valores personalizados para este período"
-                              >
-                                ✓ Ajustado
-                              </span>
-                            ) : (
-                              <span
-                                className="badge"
-                                style={{
-                                  fontSize: '10px',
-                                  padding: '0.05rem 0.35rem',
-                                  background: 'var(--bg-surface-elevated)',
-                                  color: 'var(--text-muted)',
-                                  border: '1px solid var(--border-subtle)',
-                                }}
-                                title="Utilizando valores contratuais padrão"
-                              >
-                                Padrão
-                              </span>
-                            )}
-                          </div>
+                          {item.cargo && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                              {item.cargo}
+                            </div>
+                          )}
                         </td>
                         <td className="value-currency">{formatCurrency(item.salarioBase)}</td>
                         <td className="value-currency">{formatCurrency(item.valeAlimentacao)}</td>
