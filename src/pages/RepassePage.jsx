@@ -35,6 +35,7 @@ export default function RepassePage() {
   const [editAjusteModal, setEditAjusteModal] = useState(false);
   const [selectedMedico, setSelectedMedico] = useState(null);
   const [ajusteForm, setAjusteForm] = useState({ creditos: '', debitos: '', bnb: '', obs: '', isSocio: true });
+  const [viewingObs, setViewingObs] = useState(null);
 
   const [manageMedicosModal, setManageMedicosModal] = useState(false);
   const [newMedicoNome, setNewMedicoNome] = useState('');
@@ -415,8 +416,8 @@ export default function RepassePage() {
                   <th style={{ color: 'white', fontWeight: 600 }}>BNB</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Cota clínica</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Total</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>OBS</th>
-                  <th style={{ color: 'white', fontWeight: 600, width: '70px' }}>Ações</th>
+                  <th style={{ color: 'white', fontWeight: 600, width: '60px', textAlign: 'center' }}>OBS</th>
+                  <th style={{ color: 'white', fontWeight: 600, width: '70px', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -436,13 +437,9 @@ export default function RepassePage() {
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 500 }}>
                             <span>{row.nome}</span>
-                            {row.isSocio ? (
+                            {row.isSocio && (
                               <span className="badge badge-success" title="Médico Sócio da Clínica">
                                 Sócio
-                              </span>
-                            ) : (
-                              <span className="badge badge-info" style={{ opacity: 0.7 }} title="Médico Não-Sócio">
-                                Não-sócio
                               </span>
                             )}
                             {!row.isActive && (
@@ -484,11 +481,35 @@ export default function RepassePage() {
                           </div>
                         </td>
 
-                        <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {row.obs || '—'}
+                        <td style={{ textAlign: 'center', width: '60px' }}>
+                          {row.obs ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-icon btn-sm"
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                color: 'var(--color-emerald)',
+                                borderRadius: '6px',
+                                padding: '3px 8px',
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                              }}
+                              onClick={() => setViewingObs({ doctor: row.nome, obs: row.obs, row })}
+                              title={`Clique para ver a observação:\n"${row.obs}"`}
+                            >
+                              📝
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
                         </td>
 
-                        <td>
+                        <td style={{ textAlign: 'center', width: '70px' }}>
                           <button
                             className="btn btn-ghost btn-icon btn-sm"
                             onClick={() => openEditAjuste(row)}
@@ -511,7 +532,7 @@ export default function RepassePage() {
                       <td className={totalLiquidoGeral >= 0 ? 'value-positive' : 'value-negative'} style={{ fontWeight: 700 }}>
                         {totalLiquidoGeral >= 0 ? formatCurrency(totalLiquidoGeral) : `-${formatCurrency(Math.abs(totalLiquidoGeral))}`}
                       </td>
-                      <td />
+                      <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>—</td>
                       <td />
                     </tr>
                   </>
@@ -530,6 +551,55 @@ export default function RepassePage() {
           )}
         </div>
       </div>
+
+      {/* Modal: Visualizar Observações */}
+      <Modal
+        isOpen={Boolean(viewingObs)}
+        onClose={() => setViewingObs(null)}
+        title={`📝 Observações — ${viewingObs?.doctor || ''}`}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '0.75rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                const targetRow = viewingObs?.row;
+                setViewingObs(null);
+                if (targetRow) openEditAjuste(targetRow);
+              }}
+            >
+              ✏️ Editar Ajustes / OBS
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setViewingObs(null)}
+            >
+              Fechar
+            </button>
+          </div>
+        }
+      >
+        <div style={{ padding: '0.5rem 0' }}>
+          <div
+            style={{
+              background: 'var(--bg-secondary, #1a2234)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              padding: '1.25rem',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.6,
+              color: 'var(--text-primary)',
+              fontSize: 'var(--text-sm)',
+              minHeight: '80px',
+              maxHeight: '320px',
+              overflowY: 'auto',
+            }}
+          >
+            {viewingObs?.obs}
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal: Editar Ajustes do Repasse (Créditos, Débitos, BNB, Sócio, OBS) */}
       <Modal
