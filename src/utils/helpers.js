@@ -470,3 +470,132 @@ function downloadBlob(blob, filename) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export const DIAS_SEMANA = [
+  { id: 'seg', label: 'Segunda-feira', short: 'Segunda' },
+  { id: 'ter', label: 'Terça-feira', short: 'Terça' },
+  { id: 'qua', label: 'Quarta-feira', short: 'Quarta' },
+  { id: 'qui', label: 'Quinta-feira', short: 'Quinta' },
+  { id: 'sex', label: 'Sexta-feira', short: 'Sexta' },
+  { id: 'sab', label: 'Sábado', short: 'Sábado' },
+];
+
+export function normalizeDiaId(val) {
+  if (!val) return null;
+  const str = String(val).toLowerCase();
+  if (['seg', 'ter', 'qua', 'qui', 'sex', 'sab'].includes(str)) return str;
+  if (str.startsWith('seg')) return 'seg';
+  if (str.startsWith('ter')) return 'ter';
+  if (str.startsWith('qua')) return 'qua';
+  if (str.startsWith('qui')) return 'qui';
+  if (str.startsWith('sex')) return 'sex';
+  if (str.startsWith('sab') || str.startsWith('sáb')) return 'sab';
+  if (str.includes('-')) {
+    const d = new Date(str + 'T00:00:00');
+    const day = d.getDay();
+    const map = { 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
+    return map[day] || null;
+  }
+  return null;
+}
+
+export const TURNOS = [
+  { id: 'manha', label: 'Manhã', short: 'MAN', horarioPadrao: '07:30 – 12:30', icon: '☀️' },
+  { id: 'tarde', label: 'Tarde', short: 'TAR', horarioPadrao: '13:00 – 18:00', icon: '🌤️' },
+];
+
+export const MOTIVOS_TRANCA = [
+  'Sem Expediente',
+  'Manutenção Preventiva',
+  'Higienização / Limpeza Técnica',
+  'Feriado / Recesso',
+  'Reforma / Reparo',
+  'Treinamento de Equipe',
+  'Outro',
+];
+
+export const PROCEDIMENTOS_SUGESTOES = [
+  'Consultas',
+  'Endoscopia Digestiva Alta',
+  'Colonoscopia',
+  'Polipectomia / Mucosectomia',
+  'Ecoendoscopia',
+  'Plasma de Argônio',
+  'Retorno',
+  'Geral / Misto',
+];
+
+/**
+ * Parses a date or date string into local Date at 00:00:00 without UTC timezone shifts.
+ */
+function parseLocalDate(val) {
+  if (!val) return new Date();
+  if (val instanceof Date) return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+  if (typeof val === 'string' && val.includes('-')) {
+    const [y, m, d] = val.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(val);
+}
+
+/**
+ * Returns Monday to Saturday (6 days) for any given reference date.
+ * @param {Date|string} [refDate]
+ * @returns {{ mondayISO: string, saturdayISO: string, label: string, days: Array }}
+ */
+export function getWeekMondayToSaturday(refDate = new Date()) {
+  const localD = parseLocalDate(refDate);
+  const dayOfWeek = localD.getDay(); // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+  
+  // Distance to Monday (Segunda-feira)
+  // If today is Sunday (0), distance to Monday of upcoming week is +1, or previous Monday -6.
+  // Standard in clinics: if Sunday, view upcoming week (1).
+  const distanceToMonday = dayOfWeek === 0 ? 1 : 1 - dayOfWeek;
+  
+  const monday = new Date(localD.getFullYear(), localD.getMonth(), localD.getDate() + distanceToMonday);
+
+  const dayNames = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const dayShortNames = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const todayISO = getTodayISO();
+
+  const days = [];
+  for (let i = 0; i < 6; i++) {
+    const cur = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    const iso = formatDateISO(cur);
+    days.push({
+      date: iso,
+      dateObj: cur,
+      dayName: dayNames[i],
+      shortName: dayShortNames[i],
+      dayNumber: cur.getDate(),
+      month: cur.getMonth() + 1,
+      monthName: months[cur.getMonth()],
+      formattedDate: `${String(cur.getDate()).padStart(2, '0')}/${String(cur.getMonth() + 1).padStart(2, '0')}`,
+      isToday: iso === todayISO,
+    });
+  }
+
+  const startD = days[0].dateObj;
+  const endD = days[5].dateObj;
+  const label = `${startD.getDate()} de ${months[startD.getMonth()]} a ${endD.getDate()} de ${months[endD.getMonth()]}, ${endD.getFullYear()}`;
+
+  return {
+    mondayISO: days[0].date,
+    saturdayISO: days[5].date,
+    label,
+    days,
+  };
+}
+
+/**
+ * Navigate weeks forward or backward
+ * @param {string} currentMondayISO
+ * @param {number} weeksDelta
+ */
+export function navigateWeek(currentMondayISO, weeksDelta) {
+  const base = parseLocalDate(currentMondayISO);
+  base.setDate(base.getDate() + (weeksDelta * 7));
+  return getWeekMondayToSaturday(base);
+}
+

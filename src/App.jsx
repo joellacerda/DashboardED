@@ -13,9 +13,11 @@ import DetalhesPage from './pages/DetalhesPage';
 import RepassePage from './pages/RepassePage';
 import FolhaPage from './pages/FolhaPage';
 import ConveniosPage from './pages/ConveniosPage';
+import CronogramaPage from './pages/CronogramaPage';
 
 const VALID_TABS = [
   'overview',
+  'cronograma',
   'exames',
   'convenios',
   'fluxo-caixa',
@@ -26,6 +28,7 @@ const VALID_TABS = [
 
 const TAB_TITLES = {
   overview: 'Visão Geral',
+  cronograma: 'Cronograma de Salas',
   exames: 'Exames Particulares',
   convenios: 'Exames de Convênio',
   'fluxo-caixa': 'Fluxo de Caixa',
@@ -38,6 +41,9 @@ function getTabFromHash() {
   if (typeof window === 'undefined') return 'overview';
   const rawHash = window.location.hash || '';
   const cleanHash = rawHash.replace(/^#\/?/, '').trim().toLowerCase();
+  if (cleanHash === 'cronograma-salas' || cleanHash === 'salas' || cleanHash === 'escala') {
+    return 'cronograma';
+  }
   return VALID_TABS.includes(cleanHash) ? cleanHash : 'overview';
 }
 
@@ -130,6 +136,8 @@ function AppContent() {
     switch (activeTab) {
       case 'overview':
         return <OverviewPage />;
+      case 'cronograma':
+        return <CronogramaPage />;
       case 'exames':
         return <ExamesPage onNavigateToDetalhes={handleNavigateToDetalhes} />;
       case 'convenios':

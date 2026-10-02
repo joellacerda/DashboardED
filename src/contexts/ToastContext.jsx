@@ -33,6 +33,7 @@ export function ToastProvider({ children }) {
 
   const toast = useMemo(() => {
     const fn = (message, options) => addToast(message, options);
+    fn.show = (message, type = 'info') => addToast(message, typeof type === 'string' ? { type } : type);
     fn.success = (message, options) => addToast(message, { ...options, type: 'success' });
     fn.error = (message, options) => addToast(message, { ...options, type: 'error' });
     fn.warning = (message, options) => addToast(message, { ...options, type: 'warning' });

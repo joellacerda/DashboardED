@@ -10,6 +10,8 @@ const STORAGE_KEYS = {
   medicos: 'endodiagnose_medicos',
   repassesAjustes: 'endodiagnose_repasses_ajustes',
   examesConvenio: 'endodiagnose_exames_convenio',
+  cronogramaSalas: 'endodiagnose_cronograma_salas',
+  salasConfig: 'endodiagnose_salas_config',
 };
 
 // Automatic migration for legacy values in localStorage
@@ -461,4 +463,99 @@ try {
 } catch (e) {
   // ignore during initial bundle load
 }
+
+export const DEFAULT_SALAS = [
+  { id: 'sala_c1', nome: 'Consultório 1', tipo: 'consultorio', cor: '#3b82f6', ativo: true, ordem: 1 },
+  { id: 'sala_c2', nome: 'Consultório 2', tipo: 'consultorio', cor: '#0ea5e9', ativo: true, ordem: 2 },
+  { id: 'sala_e1', nome: 'Sala 1 — Endoscopia', tipo: 'exame', cor: '#10b981', ativo: true, ordem: 3 },
+  { id: 'sala_e2', nome: 'Sala 2 — Colonoscopia', tipo: 'exame', cor: '#8b5cf6', ativo: true, ordem: 4 },
+  { id: 'sala_e3', nome: 'Sala 3 — Procedimentos / Eco', tipo: 'exame', cor: '#f59e0b', ativo: true, ordem: 5 },
+];
+
+export function getSalasConfig() {
+  const saved = getData('salasConfig');
+  if (saved && Array.isArray(saved) && saved.length > 0) {
+    return [...saved].sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  }
+  // Initialize default rooms in localStorage if empty
+  setData('salasConfig', DEFAULT_SALAS);
+  return DEFAULT_SALAS;
+}
+
+export function saveSalasConfig(salas) {
+  setData('salasConfig', salas);
+  if (Array.isArray(salas)) {
+    salas.forEach((s) => saveToCloud('salasConfig', s));
+  }
+}
+
+export function getCronogramaList() {
+  return getData('cronogramaSalas') || [];
+}
+
+export function saveCronogramaSlot(slot) {
+  if (!slot || !slot.data || !slot.salaId || !slot.turno) return null;
+  const list = getData('cronogramaSalas') || [];
+  
+  // Find if slot exists by ID or by composite key (data + salaId + turno)
+  const existingIdx = list.findIndex(
+    (item) => item.id === slot.id || (item.data === slot.data && item.salaId === slot.salaId && item.turno === slot.turno)
+  );
+
+  if (existingIdx !== -1) {
+    const existingId = list[existingIdx].id;
+    return updateItem('cronogramaSalas', existingId, slot);
+  } else {
+    return addItem('cronogramaSalas', slot);
+  }
+}
+
+export function deleteCronogramaSlot(id) {
+  return deleteItem('cronogramaSalas', id);
+}
+
+/**
+ * Replicates all slots from one week (Monday-Saturday) to another week.
+ * @param {string[]} sourceDays - Array of 6 ISO date strings (Monday to Saturday)
+ * @param {string[]} targetDays - Array of 6 target ISO date strings
+ * @param {boolean} overwrite - Whether to overwrite existing slots in target days
+ */
+export function replicateWeekSchedule(sourceDays, targetDays, overwrite = true) {
+  if (!Array.isArray(sourceDays) || !Array.isArray(targetDays) || sourceDays.length !== 6 || targetDays.length !== 6) {
+    return { replicated: 0, skipped: 0 };
+  }
+  const allSlots = getData('cronogramaSalas') || [];
+  let replicated = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < 6; i++) {
+    const srcDate = sourceDays[i];
+    const tgtDate = targetDays[i];
+    const srcSlots = allSlots.filter((s) => s.data === srcDate);
+
+    for (const src of srcSlots) {
+      const existingInTarget = allSlots.find(
+        (s) => s.data === tgtDate && s.salaId === src.salaId && s.turno === src.turno
+      );
+
+      if (existingInTarget && !overwrite) {
+        skipped++;
+        continue;
+      }
+
+      const newSlot = {
+        ...src,
+        id: existingInTarget ? existingInTarget.id : crypto.randomUUID(),
+        data: tgtDate,
+        updatedAt: new Date().toISOString(),
+      };
+
+      saveCronogramaSlot(newSlot);
+      replicated++;
+    }
+  }
+
+  return { replicated, skipped };
+}
+
 
