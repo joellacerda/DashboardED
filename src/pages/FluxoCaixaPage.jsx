@@ -15,6 +15,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
+import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
 
 const CATEGORIAS_ENTRADA = [
   'Exames / Procedimentos',
@@ -53,12 +54,41 @@ export default function FluxoCaixaPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [typeFilter, setTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  const markTouched = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const validationErrors = useMemo(() => {
+    const errs = {};
+    const dateErr = validateDate(form.data, 'Data');
+    if (dateErr) errs.data = dateErr;
+
+    const nomeErr = validateRequired(form.nome, 'Descrição');
+    if (nomeErr) {
+      errs.nome = nomeErr;
+    } else if (form.nome.trim().length < 2) {
+      errs.nome = 'A descrição deve ter ao menos 2 caracteres.';
+    }
+
+    const valorErr = validatePositiveNumber(form.valor, 'Valor', false);
+    if (valorErr) errs.valor = valorErr;
+
+    const catErr = validateRequired(form.categoria, 'Categoria');
+    if (catErr) errs.categoria = catErr;
+
+    return errs;
+  }, [form]);
+
+  const hasError = (field) => Boolean((submitted || touched[field]) && validationErrors[field]);
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
@@ -138,6 +168,8 @@ export default function FluxoCaixaPage() {
   const openNew = () => {
     setEditId(null);
     setForm({ ...emptyForm, data: getTodayISO(), categoria: 'Exames / Procedimentos' });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
@@ -150,6 +182,8 @@ export default function FluxoCaixaPage() {
       categoria: item.categoria || (item.tipo === 'entrada' ? 'Exames / Procedimentos' : 'Material Médico / Insumos'),
       valor: item.valor,
     });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
@@ -173,7 +207,12 @@ function formatDescricao(nome) {
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!form.data || !form.nome || !form.valor) return;
+    setSubmitted(true);
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0];
+      toast.warning(firstError || 'Por favor, preencha os campos destacados em vermelho.');
+      return;
+    }
     const sanitizedForm = {
       ...form,
       nome: formatDescricao(form.nome.trim().toUpperCase()),
@@ -442,17 +481,22 @@ function formatDescricao(nome) {
           </>
         }
       >
-        <form onSubmit={handleSave} autoComplete="off">
+        <form onSubmit={handleSave} noValidate autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">Data <span className="required">*</span></label>
               <input
                 type="date"
-                className="input-field"
-                required
+                className={`input-field ${hasError('data') ? 'is-invalid' : ''}`}
                 value={form.data}
                 onChange={(e) => setForm({ ...form, data: e.target.value })}
+                onBlur={() => markTouched('data')}
               />
+              {hasError('data') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.data}
+                </div>
+              )}
             </div>
             <div className="input-group">
               <label className="input-label">Tipo <span className="required">*</span></label>
@@ -473,9 +517,10 @@ function formatDescricao(nome) {
             <div className="input-group full-width">
               <label className="input-label">Categoria <span className="required">*</span></label>
               <select
-                className="input-field"
+                className={`input-field ${hasError('categoria') ? 'is-invalid' : ''}`}
                 value={form.categoria}
                 onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                onBlur={() => markTouched('categoria')}
               >
                 {(form.tipo === 'entrada' ? CATEGORIAS_ENTRADA : CATEGORIAS_SAIDA).map((cat) => (
                   <option key={cat} value={cat}>
@@ -483,34 +528,49 @@ function formatDescricao(nome) {
                   </option>
                 ))}
               </select>
+              {hasError('categoria') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.categoria}
+                </div>
+              )}
             </div>
 
             <div className="input-group full-width">
               <label className="input-label">Descrição <span className="required">*</span></label>
               <input
                 type="text"
-                className="input-field"
-                required
+                className={`input-field ${hasError('nome') ? 'is-invalid' : ''}`}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 placeholder="Nome ou descrição da movimentação"
                 value={form.nome}
                 onChange={(e) => setForm({ ...form, nome: e.target.value.toUpperCase() })}
+                onBlur={() => markTouched('nome')}
               />
+              {hasError('nome') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.nome}
+                </div>
+              )}
             </div>
             <div className="input-group full-width">
               <label className="input-label">Valor (R$) <span className="required">*</span></label>
               <input
                 type="number"
-                className="input-field"
-                required
+                className={`input-field ${hasError('valor') ? 'is-invalid' : ''}`}
                 min="0.01"
                 step="0.01"
                 placeholder="0,00"
                 value={form.valor}
                 onChange={(e) => setForm({ ...form, valor: e.target.value })}
+                onBlur={() => markTouched('valor')}
               />
+              {hasError('valor') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.valor}
+                </div>
+              )}
             </div>
           </div>
         </form>

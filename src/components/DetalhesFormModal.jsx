@@ -22,6 +22,11 @@ import {
 import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
 import { useToast } from '../contexts/ToastContext';
+import {
+  validateDate,
+  validateRequired,
+  validatePercentageSum,
+} from '../utils/validation';
 
 const emptyPagamento = { forma: 'Cartão de Crédito', valor: '', parcelas: '1' };
 
@@ -81,6 +86,53 @@ export default function DetalhesFormModal({
 }) {
   const toast = useToast();
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+
+  const markTouched = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const validationErrors = useMemo(() => {
+    const errs = {};
+    const dateErr = validateDate(form.data, 'Data do exame');
+    if (dateErr) errs.data = dateErr;
+
+    const medErr = validateRequired(form.medico, 'Médico principal');
+    if (medErr) errs.medico = medErr;
+
+    if (form.temDivisao) {
+      const med2Err = validateRequired(form.medico2, 'Segundo médico');
+      if (med2Err) {
+        errs.medico2 = med2Err;
+      } else if (form.medico && form.medico.trim().toUpperCase() === form.medico2.trim().toUpperCase()) {
+        errs.medico2 = 'O 2º médico deve ser diferente do médico principal.';
+      }
+
+      if (form.divisaoTipo === 'porcentagem') {
+        const sumErr = validatePercentageSum(form.porcentagemMedico1, form.porcentagemMedico2);
+        if (sumErr) errs.divisao = sumErr;
+      }
+    }
+
+    const pacErr = validateRequired(form.paciente, 'Nome do paciente');
+    if (pacErr) errs.paciente = pacErr;
+
+    const exameErr = validateRequired(form.tipoExame, 'Tipo de exame');
+    if (exameErr) errs.tipoExame = exameErr;
+
+    const pagamentos = form.pagamentos || [];
+    const validPags = pagamentos.filter((p) => Number(p.valor) > 0);
+    if (pagamentos.length === 0 || validPags.length === 0) {
+      errs.pagamentos = 'Adicione ao menos uma forma de pagamento com valor maior que R$ 0,00.';
+    }
+
+    return errs;
+  }, [form]);
+
+  const hasError = (field) => {
+    return Boolean((submitted || touched[field]) && validationErrors[field]);
+  };
 
   const medicosOptions = useMemo(() => getActiveMedicosOptions(), [isOpen]);
 
@@ -101,7 +153,11 @@ export default function DetalhesFormModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setTouched({});
+      setSubmitted(false);
+      return;
+    }
 
     if (editItem) {
       const pagamentos = migrateLegacyPayment(editItem).map((p) => ({
@@ -310,6 +366,14 @@ export default function DetalhesFormModal({
 
   const handleSave = (e) => {
     if (e) e.preventDefault();
+    setSubmitted(true);
+
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0];
+      toast.warning(firstError || 'Por favor, verifique os campos obrigatórios destacados em vermelho.');
+      return;
+    }
+
     const pagamentos = (form.pagamentos || []).filter((p) => Number(p.valor) > 0);
     if (!form.data || !form.paciente || !form.tipoExame || !form.medico || pagamentos.length === 0) return;
 
@@ -439,27 +503,38 @@ export default function DetalhesFormModal({
         </>
       }
     >
-      <form onSubmit={handleSave} autoComplete="off">
+      <form onSubmit={handleSave} noValidate autoComplete="off">
         <div className="modal-form-grid">
           <div className="input-group">
             <label className="input-label">Data <span className="required">*</span></label>
             <input
               type="date"
-              className="input-field"
-              required
+              className={`input-field ${hasError('data') ? 'is-invalid' : ''}`}
               value={form.data}
               onChange={(e) => updateField('data', e.target.value)}
+              onBlur={() => markTouched('data')}
             />
+            {hasError('data') && (
+              <div className="input-feedback-error">
+                <span>⚠</span> {validationErrors.data}
+              </div>
+            )}
           </div>
           <div className="input-group">
             <label className="input-label">Médico Principal <span className="required">*</span></label>
             <AutoCompleteInput
               options={medicosOptions}
-              required
+              className={`input-field ${hasError('medico') ? 'is-invalid' : ''}`}
               placeholder="Selecione ou digite o médico"
               value={form.medico}
               onChange={(val) => updateField('medico', val.toUpperCase())}
+              onBlur={() => markTouched('medico')}
             />
+            {hasError('medico') && (
+              <div className="input-feedback-error">
+                <span>⚠</span> {validationErrors.medico}
+              </div>
+            )}
           </div>
 
           <div className="input-group full-width" style={{ marginTop: '0.1rem' }}>
@@ -492,11 +567,17 @@ export default function DetalhesFormModal({
                 <label className="input-label">Segundo Médico (Co-médico / Assistente) <span className="required">*</span></label>
                 <AutoCompleteInput
                   options={medicosOptions}
-                  required={form.temDivisao}
+                  className={`input-field ${hasError('medico2') ? 'is-invalid' : ''}`}
                   placeholder="Selecione ou digite o 2º médico"
                   value={form.medico2}
                   onChange={(val) => updateField('medico2', val.toUpperCase())}
+                  onBlur={() => markTouched('medico2')}
                 />
+                {hasError('medico2') && (
+                  <div className="input-feedback-error">
+                    <span>⚠</span> {validationErrors.medico2}
+                  </div>
+                )}
               </div>
 
               <div className="input-group">
@@ -526,56 +607,69 @@ export default function DetalhesFormModal({
               </div>
 
               {form.divisaoTipo === 'porcentagem' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div className="input-group">
-                    <label className="input-label">% {form.medico || 'Médico 1'}</label>
-                    <input
-                      type="number"
-                      className="input-field"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      placeholder="50.0"
-                      value={form.porcentagemMedico1}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          setForm((f) => ({ ...f, porcentagemMedico1: '', porcentagemMedico2: '' }));
-                          return;
-                        }
-                        const val = Number(raw);
-                        if (isNaN(val)) return;
-                        const clamped = Math.min(100, Math.max(0, val));
-                        const other = Math.round((100 - clamped) * 10) / 10;
-                        setForm((f) => ({ ...f, porcentagemMedico1: raw, porcentagemMedico2: other }));
-                      }}
-                    />
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="input-group">
+                      <label className="input-label">% {form.medico || 'Médico 1'}</label>
+                      <input
+                        type="number"
+                        className="input-field"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        placeholder="50.0"
+                        value={form.porcentagemMedico1}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setForm((f) => ({ ...f, porcentagemMedico1: '', porcentagemMedico2: '' }));
+                            return;
+                          }
+                          const val = Number(raw);
+                          if (isNaN(val)) return;
+                          const clamped = Math.min(100, Math.max(0, val));
+                          const other = Math.round((100 - clamped) * 10) / 10;
+                          setForm((f) => ({ ...f, porcentagemMedico1: raw, porcentagemMedico2: other }));
+                        }}
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">% {form.medico2 || 'Médico 2'}</label>
+                      <input
+                        type="number"
+                        className="input-field"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        placeholder="50.0"
+                        value={form.porcentagemMedico2}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setForm((f) => ({ ...f, porcentagemMedico2: '', porcentagemMedico1: '' }));
+                            return;
+                          }
+                          const val = Number(raw);
+                          if (isNaN(val)) return;
+                          const clamped = Math.min(100, Math.max(0, val));
+                          const other = Math.round((100 - clamped) * 10) / 10;
+                          setForm((f) => ({ ...f, porcentagemMedico2: raw, porcentagemMedico1: other }));
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="input-group">
-                    <label className="input-label">% {form.medico2 || 'Médico 2'}</label>
-                    <input
-                      type="number"
-                      className="input-field"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      placeholder="50.0"
-                      value={form.porcentagemMedico2}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          setForm((f) => ({ ...f, porcentagemMedico2: '', porcentagemMedico1: '' }));
-                          return;
-                        }
-                        const val = Number(raw);
-                        if (isNaN(val)) return;
-                        const clamped = Math.min(100, Math.max(0, val));
-                        const other = Math.round((100 - clamped) * 10) / 10;
-                        setForm((f) => ({ ...f, porcentagemMedico2: raw, porcentagemMedico1: other }));
-                      }}
-                    />
-                  </div>
-                </div>
+                  {hasError('divisao') ? (
+                    <div className="input-feedback-error" style={{ marginTop: '-0.25rem' }}>
+                      <span>⚠</span> {validationErrors.divisao}
+                    </div>
+                  ) : (
+                    form.porcentagemMedico1 !== '' && form.porcentagemMedico2 !== '' && (
+                      <div className="input-feedback-success" style={{ marginTop: '-0.25rem' }}>
+                        <span>✓</span> Divisão equilibrada (100%)
+                      </div>
+                    )
+                  )}
+                </>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div className="input-group">
@@ -611,22 +705,27 @@ export default function DetalhesFormModal({
             <label className="input-label">Paciente <span className="required">*</span></label>
             <input
               type="text"
-              className="input-field"
-              required
+              className={`input-field ${hasError('paciente') ? 'is-invalid' : ''}`}
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
               placeholder="Nome do paciente"
               value={form.paciente}
               onChange={(e) => updateField('paciente', e.target.value.toUpperCase())}
+              onBlur={() => markTouched('paciente')}
             />
+            {hasError('paciente') && (
+              <div className="input-feedback-error">
+                <span>⚠</span> {validationErrors.paciente}
+              </div>
+            )}
           </div>
 
           <div className="input-group full-width">
             <label className="input-label">Tipo de Exame <span className="required">*</span></label>
             <AutoCompleteInput
               options={examesOptions}
-              required
+              className={`input-field ${hasError('tipoExame') ? 'is-invalid' : ''}`}
               placeholder="Selecione ou digite o tipo de exame"
               value={form.tipoExame}
               onChange={(val) => {
@@ -637,7 +736,13 @@ export default function DetalhesFormModal({
                   procedimentoComplementar: examePermiteComplementar(upper) ? f.procedimentoComplementar : '',
                 }));
               }}
+              onBlur={() => markTouched('tipoExame')}
             />
+            {hasError('tipoExame') && (
+              <div className="input-feedback-error">
+                <span>⚠</span> {validationErrors.tipoExame}
+              </div>
+            )}
           </div>
 
           {examePermiteComplementar(form.tipoExame) && (
@@ -693,6 +798,12 @@ export default function DetalhesFormModal({
               </button>
             </div>
 
+            {hasError('pagamentos') && (
+              <div className="input-feedback-error" style={{ marginBottom: '0.75rem' }}>
+                <span>⚠</span> {validationErrors.pagamentos}
+              </div>
+            )}
+
             {(form.pagamentos || []).map((pag, idx) => (
               <div key={idx} className="pagamento-row">
                 <div className="pagamento-row-header">
@@ -726,14 +837,18 @@ export default function DetalhesFormModal({
                     <label className="input-label">Valor (R$)</label>
                     <input
                       type="number"
-                      className="input-field"
+                      className={`input-field ${submitted && (!pag.valor || Number(pag.valor) <= 0) ? 'is-invalid' : ''}`}
                       min="0"
                       step="0.01"
                       placeholder="0,00"
-                      required={idx === 0}
                       value={pag.valor}
                       onChange={(e) => updatePagamento(idx, 'valor', e.target.value)}
                     />
+                    {submitted && (!pag.valor || Number(pag.valor) <= 0) && (
+                      <div className="input-feedback-error">
+                        <span>⚠</span> Valor maior que R$ 0,00 obrigatório
+                      </div>
+                    )}
                   </div>
                   {isCreditCardPayment(pag.forma, 1) && (
                     <div className="input-group">

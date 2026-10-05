@@ -18,10 +18,13 @@ import {
 import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
 import { useToast } from '../contexts/ToastContext';
+import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
 
 export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess }) {
   const toast = useToast();
   const [fluxoPeriod, setFluxoPeriod] = useState(() => getAcquisitionPeriod());
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const [fluxoForm, setFluxoForm] = useState({
     data: getTodayISO(),
     nome: '',
@@ -37,10 +40,46 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
     porcentagemMedico2: 12.5,
   });
 
+  const markTouched = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const validationErrors = useMemo(() => {
+    const errs = {};
+    const dateErr = validateDate(fluxoForm.data, 'Data do recebimento');
+    if (dateErr) errs.data = dateErr;
+
+    const valorErr = validatePositiveNumber(fluxoForm.valor, 'Valor a lançar', false);
+    if (valorErr) errs.valor = valorErr;
+
+    const nomeErr = validateRequired(fluxoForm.nome, 'Descrição do lançamento');
+    if (nomeErr) errs.nome = nomeErr;
+
+    if (fluxoForm.temDivisaoMedico2) {
+      const med2Err = validateRequired(fluxoForm.medico2, 'Segundo médico');
+      if (med2Err) {
+        errs.medico2 = med2Err;
+      } else if (item && item.medico && item.medico.trim().toUpperCase() === (fluxoForm.medico2 || '').trim().toUpperCase()) {
+        errs.medico2 = 'O 2º médico deve ser diferente do médico realizante.';
+      }
+    }
+
+    return errs;
+  }, [fluxoForm, item]);
+
+  const hasError = (field) => Boolean((submitted || touched[field]) && validationErrors[field]);
+
   const medicosOptions = useMemo(() => getActiveMedicosOptions(), [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !item) return;
+    if (!isOpen || !item) {
+      setTouched({});
+      setSubmitted(false);
+      return;
+    }
+
+    setTouched({});
+    setSubmitted(false);
 
     const pNome = item.paciente ? item.paciente.trim().toUpperCase() : '';
     const cNome = item.convenio ? item.convenio.trim().toUpperCase() : '';
@@ -171,9 +210,14 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
 
   const handleSave = (e) => {
     if (e) e.preventDefault();
-    if (!fluxoForm.data || !fluxoForm.nome || !fluxoForm.valor || !item) return;
+    setSubmitted(true);
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0];
+      toast.warning(firstError || 'Por favor, preencha os campos destacados em vermelho.');
+      return;
+    }
+    if (!item) return;
     const valorLancado = Number(fluxoForm.valor);
-    if (isNaN(valorLancado) || valorLancado <= 0) return;
 
     // Verificar se já existe lançamento vinculado a este exame
     const fluxoList = getData('fluxoCaixa') || [];
@@ -247,7 +291,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
         </>
       }
     >
-      <form onSubmit={handleSave} autoComplete="off">
+      <form onSubmit={handleSave} noValidate autoComplete="off">
         <div
           style={{
             background: 'var(--color-dark-800)',
@@ -449,10 +493,17 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
                   </label>
                   <AutoCompleteInput
                     options={medicosOptions.filter((m) => m !== (item.medico || '').toUpperCase())}
+                    className={`input-field ${hasError('medico2') ? 'is-invalid' : ''}`}
                     placeholder="Selecione ou digite o 2º médico"
                     value={fluxoForm.medico2}
                     onChange={(val) => setFluxoForm({ ...fluxoForm, medico2: val.toUpperCase() })}
+                    onBlur={() => markTouched('medico2')}
                   />
+                  {hasError('medico2') && (
+                    <div className="input-feedback-error">
+                      <span>⚠</span> {validationErrors.medico2}
+                    </div>
+                  )}
                 </div>
 
                 <div className="split-slider-section">
@@ -802,11 +853,17 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
               </label>
               <input
                 type="date"
-                className="input-field"
+                className={`input-field ${hasError('data') ? 'is-invalid' : ''}`}
                 required
                 value={fluxoForm.data}
                 onChange={(e) => handleFluxoDateChange(e.target.value)}
+                onBlur={() => markTouched('data')}
               />
+              {hasError('data') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.data}
+                </div>
+              )}
             </div>
 
             <div className="input-group">
@@ -818,14 +875,20 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
               </label>
               <input
                 type="number"
-                className="input-field"
+                className={`input-field ${hasError('valor') ? 'is-invalid' : ''}`}
                 required
                 min="0.01"
                 step="0.01"
                 placeholder="0,00"
                 value={fluxoForm.valor}
                 onChange={(e) => setFluxoForm({ ...fluxoForm, valor: e.target.value })}
+                onBlur={() => markTouched('valor')}
               />
+              {hasError('valor') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.valor}
+                </div>
+              )}
               {splitCalculations.total > 0 && (
                 <div className="split-quick-fills">
                   <button
@@ -870,14 +933,20 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
               </label>
               <input
                 type="text"
-                className="input-field"
+                className={`input-field ${hasError('nome') ? 'is-invalid' : ''}`}
                 required
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 value={fluxoForm.nome}
                 onChange={(e) => setFluxoForm({ ...fluxoForm, nome: e.target.value.toUpperCase() })}
+                onBlur={() => markTouched('nome')}
               />
+              {hasError('nome') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.nome}
+                </div>
+              )}
             </div>
 
             <div className="input-group">

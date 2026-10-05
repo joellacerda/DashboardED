@@ -31,6 +31,7 @@ import AutoCompleteInput from '../components/AutoCompleteInput';
 import Pagination from '../components/Pagination';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
 import { useToast } from '../contexts/ToastContext';
+import { validateDate, validateRequired } from '../utils/validation';
 
 const DEFAULT_CONVENIOS = [
   'ABERTTA SAUDE',
@@ -90,12 +91,40 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [convenioFilter, setConvenioFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  const markTouched = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const validationErrors = useMemo(() => {
+    const errs = {};
+    const dateErr = validateDate(form.data, 'Data');
+    if (dateErr) errs.data = dateErr;
+
+    const medErr = validateRequired(form.medico, 'Médico realizante');
+    if (medErr) errs.medico = medErr;
+
+    const pacErr = validateRequired(form.paciente, 'Nome do paciente');
+    if (pacErr) errs.paciente = pacErr;
+
+    const convErr = validateRequired(form.convenio, 'Convênio');
+    if (convErr) errs.convenio = convErr;
+
+    const exameErr = validateRequired(form.exame, 'Exame');
+    if (exameErr) errs.exame = exameErr;
+
+    return errs;
+  }, [form]);
+
+  const hasError = (field) => Boolean((submitted || touched[field]) && validationErrors[field]);
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
@@ -166,6 +195,8 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   const openNew = () => {
     setEditId(null);
     setForm({ ...emptyForm, data: getTodayISO() });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
@@ -179,12 +210,19 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       exame: item.exame || '',
       procedimentoComplementar: item.procedimentoComplementar || '',
     });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!form.data || !form.paciente || !form.medico || !form.convenio || !form.exame) return;
+    setSubmitted(true);
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0];
+      toast.warning(firstError || 'Por favor, preencha os campos destacados em vermelho.');
+      return;
+    }
     const allowsCompl = examePermiteComplementar(form.exame);
     const sanitizedForm = {
       ...form,
@@ -429,7 +467,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
           </>
         }
       >
-        <form onSubmit={handleSave} autoComplete="off">
+        <form onSubmit={handleSave} noValidate autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">
@@ -437,11 +475,16 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </label>
               <input
                 type="date"
-                className="input-field"
-                required
+                className={`input-field ${hasError('data') ? 'is-invalid' : ''}`}
                 value={form.data}
                 onChange={(e) => setForm({ ...form, data: e.target.value })}
+                onBlur={() => markTouched('data')}
               />
+              {hasError('data') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.data}
+                </div>
+              )}
             </div>
 
             <div className="input-group">
@@ -450,11 +493,17 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </label>
               <AutoCompleteInput
                 options={medicosOptions}
-                required
+                className={`input-field ${hasError('medico') ? 'is-invalid' : ''}`}
                 placeholder="Selecione ou digite o médico"
                 value={form.medico}
                 onChange={(val) => setForm({ ...form, medico: val.toUpperCase() })}
+                onBlur={() => markTouched('medico')}
               />
+              {hasError('medico') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.medico}
+                </div>
+              )}
             </div>
 
             <div className="input-group full-width">
@@ -463,15 +512,20 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </label>
               <input
                 type="text"
-                className="input-field"
-                required
+                className={`input-field ${hasError('paciente') ? 'is-invalid' : ''}`}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 placeholder="Nome completo do paciente"
                 value={form.paciente}
                 onChange={(e) => setForm({ ...form, paciente: e.target.value.toUpperCase() })}
+                onBlur={() => markTouched('paciente')}
               />
+              {hasError('paciente') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.paciente}
+                </div>
+              )}
             </div>
 
             <div className="input-group">
@@ -480,11 +534,17 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </label>
               <AutoCompleteInput
                 options={conveniosOptions}
-                required
+                className={`input-field ${hasError('convenio') ? 'is-invalid' : ''}`}
                 placeholder="Nome do convênio (ex: Unimed)"
                 value={form.convenio}
                 onChange={(val) => setForm({ ...form, convenio: val.toUpperCase() })}
+                onBlur={() => markTouched('convenio')}
               />
+              {hasError('convenio') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.convenio}
+                </div>
+              )}
             </div>
 
             <div className="input-group">
@@ -493,11 +553,17 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
               </label>
               <AutoCompleteInput
                 options={examesOptions}
-                required
+                className={`input-field ${hasError('exame') ? 'is-invalid' : ''}`}
                 placeholder="Selecione ou digite o procedimento"
                 value={form.exame}
                 onChange={(val) => setForm({ ...form, exame: val.toUpperCase(), procedimentoComplementar: examePermiteComplementar(val) ? form.procedimentoComplementar : '' })}
+                onBlur={() => markTouched('exame')}
               />
+              {hasError('exame') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.exame}
+                </div>
+              )}
             </div>
 
             {examePermiteComplementar(form.exame) && (

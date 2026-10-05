@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
+import { validateRequired, validatePositiveNumber } from '../utils/validation';
 
 const emptyForm = {
   nome: '',
@@ -57,10 +58,29 @@ export default function FolhaPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  const markTouched = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const validationErrors = useMemo(() => {
+    const errs = {};
+    const nomeErr = validateRequired(form.nome, 'Nome do colaborador');
+    if (nomeErr) errs.nome = nomeErr;
+
+    const salErr = validatePositiveNumber(form.salarioBase, 'Salário Base', true);
+    if (salErr) errs.salarioBase = salErr;
+
+    return errs;
+  }, [form]);
+
+  const hasError = (field) => Boolean((submitted || touched[field]) && validationErrors[field]);
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
@@ -159,6 +179,8 @@ export default function FolhaPage() {
   const openNew = () => {
     setEditId(null);
     setForm({ ...emptyForm });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
@@ -174,11 +196,20 @@ export default function FolhaPage() {
       descontos: item.descontos !== undefined && item.descontos !== null ? item.descontos : '',
       produtividade: item.produtividade !== undefined && item.produtividade !== null ? item.produtividade : '',
     });
+    setTouched({});
+    setSubmitted(false);
     setModalOpen(true);
   };
 
   const handleSave = (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    setSubmitted(true);
+
+    if (Object.keys(validationErrors).length > 0) {
+      const firstError = Object.values(validationErrors)[0];
+      toast.warning(firstError || 'Por favor, preencha os campos obrigatórios destacados em vermelho.');
+      return;
+    }
 
     const nomeTrimmed = (form.nome || '').trim().toUpperCase();
     if (!nomeTrimmed) {
@@ -615,7 +646,7 @@ export default function FolhaPage() {
           </>
         }
       >
-        <form onSubmit={handleSave} autoComplete="off">
+        <form onSubmit={handleSave} noValidate autoComplete="off">
           <div style={{ marginBottom: '0.85rem', padding: '0.5rem 0.75rem', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
             📅 Competência / Período: <strong style={{ color: 'var(--text-primary)' }}>{period.label}</strong>
           </div>
@@ -627,13 +658,18 @@ export default function FolhaPage() {
               </label>
               <input
                 type="text"
-                className="input-field"
-                required
+                className={`input-field ${hasError('nome') ? 'is-invalid' : ''}`}
                 autoComplete="off"
                 placeholder="Ex: MARIA SILVA"
                 value={form.nome}
                 onChange={(e) => updateField('nome', e.target.value.toUpperCase())}
+                onBlur={() => markTouched('nome')}
               />
+              {hasError('nome') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.nome}
+                </div>
+              )}
             </div>
 
             <div className="input-group">
@@ -653,14 +689,19 @@ export default function FolhaPage() {
               </label>
               <input
                 type="number"
-                className="input-field"
-                required
+                className={`input-field ${hasError('salarioBase') ? 'is-invalid' : ''}`}
                 min="0"
                 step="0.01"
                 placeholder="0,00"
                 value={form.salarioBase}
                 onChange={(e) => updateField('salarioBase', e.target.value)}
+                onBlur={() => markTouched('salarioBase')}
               />
+              {hasError('salarioBase') && (
+                <div className="input-feedback-error">
+                  <span>⚠</span> {validationErrors.salarioBase}
+                </div>
+              )}
             </div>
 
             <div className="input-group">

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 export default function AutoCompleteInput({
   value,
   onChange,
+  onBlur,
   options = [],
   placeholder,
   required,
@@ -149,6 +150,7 @@ export default function AutoCompleteInput({
           }
         }}
         onKeyDown={handleKeyDown}
+        onBlur={onBlur}
       />
       {isOpen && filteredOptions.length > 0 &&
         createPortal(
