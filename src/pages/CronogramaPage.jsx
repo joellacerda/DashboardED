@@ -1,11 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  getSalasConfig,
-  saveSalasConfig,
-  getCronogramaList,
-  saveCronogramaSlot,
-  deleteCronogramaSlot,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   DIAS_SEMANA,
   normalizeDiaId,
@@ -17,25 +11,20 @@ import { useToast } from '../contexts/ToastContext';
 
 export default function CronogramaPage() {
   const toast = useToast();
-
-  // Data state
-  const [salas, setSalas] = useState(() => getSalasConfig());
-  const [allSlots, setAllSlots] = useState(() => getCronogramaList());
+  const {
+    salasConfig: salas = [],
+    cronogramaSalas: allSlots = [],
+    saveSalasConfig,
+    saveCronogramaSlot,
+    deleteCronogramaSlot,
+  } = useData();
 
   // Modals state
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [activeSlotTarget, setActiveSlotTarget] = useState(null); // { slot, sala, day, turnoInfo }
   const [salasModalOpen, setSalasModalOpen] = useState(false);
 
-  // Reload data
-  const refresh = () => {
-    setSalas(getSalasConfig());
-    setAllSlots(getCronogramaList());
-  };
-
-  useEffect(() => {
-    refresh();
-  }, []);
+  const refresh = () => {};
 
   // Visible active rooms sorted by ordem
   const visibleSalas = useMemo(() => {

@@ -1,12 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  getData,
-  addItem,
-  updateItem,
-  deleteItem,
-  setData,
-  syncAllConveniosToDetalhes,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
   getAcquisitionPeriod,
@@ -23,11 +16,18 @@ import { useToast } from '../contexts/ToastContext';
 
 export default function RepassePage() {
   const toast = useToast();
+  const {
+    medicos: medicosList = [],
+    repassesAjustes: ajustesList = [],
+    detalhesExames = [],
+    fluxoCaixa = [],
+    addItem,
+    updateItem,
+    deleteItem,
+    setData,
+    syncAllConveniosToDetalhes,
+  } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
-  const [medicosList, setMedicosList] = useState(() => getData('medicos'));
-  const [ajustesList, setAjustesList] = useState(() => getData('repassesAjustes'));
-  const [detalhesExames, setDetalhesExames] = useState(() => getData('detalhesExames'));
-  const [fluxoCaixa, setFluxoCaixa] = useState(() => getData('fluxoCaixa'));
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
@@ -42,17 +42,11 @@ export default function RepassePage() {
   const [newMedicoSocio, setNewMedicoSocio] = useState(true);
   const [deleteMedicoId, setDeleteMedicoId] = useState(null);
 
-  const refreshAll = () => {
-    setMedicosList(getData('medicos'));
-    setAjustesList(getData('repassesAjustes'));
-    setDetalhesExames(getData('detalhesExames'));
-    setFluxoCaixa(getData('fluxoCaixa'));
-  };
+  const refreshAll = () => {};
 
   useEffect(() => {
     syncAllConveniosToDetalhes();
-    refreshAll();
-  }, []);
+  }, [syncAllConveniosToDetalhes]);
 
   // --- Calculate Clinic Deficit for current period ---
   const periodFluxo = useMemo(
@@ -177,13 +171,13 @@ export default function RepassePage() {
     if (!selectedMedico) return;
 
     // Update socio status in medicosList if modified
-    const currentMedicos = getData('medicos');
+    const currentMedicos = [...medicosList];
     const existingIndex = currentMedicos.findIndex(
       (m) => m.nome.trim().toLowerCase() === selectedMedico.nome.trim().toLowerCase()
     );
 
     if (existingIndex !== -1) {
-      currentMedicos[existingIndex].socio = ajusteForm.isSocio;
+      currentMedicos[existingIndex] = { ...currentMedicos[existingIndex], socio: ajusteForm.isSocio };
       setData('medicos', currentMedicos);
     } else {
       currentMedicos.push({
@@ -196,7 +190,7 @@ export default function RepassePage() {
 
     // Save adjustment record
     const key = `${selectedMedico.nome.trim().toLowerCase()}_${period.start}`;
-    const currentAjustes = getData('repassesAjustes');
+    const currentAjustes = [...ajustesList];
     const ajusteIndex = currentAjustes.findIndex((a) => a.key === key);
 
     const ajusteData = {
@@ -227,7 +221,7 @@ export default function RepassePage() {
     e.preventDefault();
     if (!newMedicoNome.trim()) return;
 
-    const currentMedicos = getData('medicos') || [];
+    const currentMedicos = medicosList || [];
     const nomeUpper = newMedicoNome.trim().toUpperCase();
     const existing = currentMedicos.find((m) => m.nome.trim().toUpperCase() === nomeUpper);
     if (existing) {
@@ -257,7 +251,7 @@ export default function RepassePage() {
   };
 
   const toggleMedicoSocio = (medico) => {
-    const currentMedicos = getData('medicos') || [];
+    const currentMedicos = medicosList || [];
     const index = currentMedicos.findIndex(
       (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
     );
@@ -274,7 +268,7 @@ export default function RepassePage() {
   };
 
   const toggleMedicoAtivo = (medico) => {
-    const currentMedicos = getData('medicos') || [];
+    const currentMedicos = medicosList || [];
     const index = currentMedicos.findIndex(
       (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
     );

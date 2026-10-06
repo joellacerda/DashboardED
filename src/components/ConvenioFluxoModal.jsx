@@ -1,11 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  getData,
-  addItem,
-  updateItem,
-  syncConvenioToDetalhes,
-  getActiveMedicosOptions,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatDate,
   getTodayISO,
@@ -22,6 +16,13 @@ import { validateDate, validateRequired, validatePositiveNumber } from '../utils
 
 export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess }) {
   const toast = useToast();
+  const {
+    fluxoCaixa: fluxoList = [],
+    addItem,
+    updateItem,
+    syncConvenioToDetalhes,
+    activeMedicosOptions,
+  } = useData();
   const [fluxoPeriod, setFluxoPeriod] = useState(() => getAcquisitionPeriod());
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -69,7 +70,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
 
   const hasError = (field) => Boolean((submitted || touched[field]) && validationErrors[field]);
 
-  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [isOpen]);
+  const medicosOptions = activeMedicosOptions;
 
   useEffect(() => {
     if (!isOpen || !item) {
@@ -220,7 +221,6 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
     const valorLancado = Number(fluxoForm.valor);
 
     // Verificar se já existe lançamento vinculado a este exame
-    const fluxoList = getData('fluxoCaixa') || [];
     const existingFluxo = item.fluxoCaixaId
       ? fluxoList.find((f) => f.id === item.fluxoCaixaId)
       : fluxoList.find((f) => f.convenioId === item.id);

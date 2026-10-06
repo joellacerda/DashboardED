@@ -1,11 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  getData,
-  addItem,
-  updateItem,
-  deleteItem,
-  getActiveMedicosOptions,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   roundCurrency,
   formatCurrency,
@@ -85,6 +79,15 @@ export default function DetalhesFormModal({
   onSuccess,
 }) {
   const toast = useToast();
+  const {
+    fluxoCaixa = [],
+    exames = [],
+    detalhesExames = [],
+    addItem,
+    updateItem,
+    deleteItem,
+    activeMedicosOptions,
+  } = useData();
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -134,23 +137,20 @@ export default function DetalhesFormModal({
     return Boolean((submitted || touched[field]) && validationErrors[field]);
   };
 
-  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [isOpen]);
+  const medicosOptions = activeMedicosOptions;
 
   const examesOptions = useMemo(() => {
     const set = new Set(DEFAULT_EXAMES);
-    const exames = getData('exames') || [];
-    const detalhes = getData('detalhesExames') || [];
-
     exames.forEach((e) => {
       if (e.exame && e.exame.trim()) set.add(e.exame.trim().toUpperCase());
     });
-    detalhes.forEach((d) => {
+    detalhesExames.forEach((d) => {
       if (d.tipoExame && d.tipoExame.trim()) set.add(d.tipoExame.trim().toUpperCase());
       if (d.exame && d.exame.trim()) set.add(d.exame.trim().toUpperCase());
     });
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [isOpen]);
+  }, [exames, detalhesExames]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -287,7 +287,7 @@ export default function DetalhesFormModal({
 
   const syncFluxoCaixaEntries = (detalheItem) => {
     if (!detalheItem || !detalheItem.id) return;
-    const fluxoList = getData('fluxoCaixa') || [];
+    const fluxoList = fluxoCaixa || [];
 
     // 1. Sync Taxa Clínica
     const valorTaxa = Number(detalheItem.taxaClinica || 0);
@@ -425,7 +425,7 @@ export default function DetalhesFormModal({
     if (savedItem) {
       syncFluxoCaixaEntries(savedItem);
 
-      const examesList = getData('exames') || [];
+      const examesList = exames || [];
       const matchingExames = examesList.filter(
         (e) =>
           e.id === savedItem.id ||

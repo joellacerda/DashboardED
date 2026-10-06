@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { getData, addItem, updateItem, deleteItem } from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
   formatDate,
@@ -49,7 +49,7 @@ const columns = [
 
 export default function FluxoCaixaPage() {
   const toast = useToast();
-  const [data, setData] = useState(() => getData('fluxoCaixa'));
+  const { fluxoCaixa: data = [], addItem, updateItem, deleteItem } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -97,7 +97,7 @@ export default function FluxoCaixaPage() {
     setCurrentPage(1);
   }, [period, search, typeFilter, categoryFilter]);
 
-  const refresh = () => setData(getData('fluxoCaixa'));
+  const refresh = () => {};
 
   const filtered = useMemo(() => {
     let items = data.filter((f) => isDateInPeriod(f.data, period));

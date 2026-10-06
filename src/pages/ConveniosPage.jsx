@@ -1,14 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  getData,
-  addItem,
-  updateItem,
-  deleteItem,
-  getActiveMedicosOptions,
-  syncConvenioToDetalhes,
-  syncAllConveniosToDetalhes,
-  removeConvenioFromDetalhes,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatDate,
   getTodayISO,
@@ -87,7 +78,16 @@ const columns = [
 
 export default function ConveniosPage({ onNavigateToFluxo }) {
   const toast = useToast();
-  const [data, setData] = useState(() => getData('examesConvenio'));
+  const {
+    examesConvenio: data = [],
+    addItem,
+    updateItem,
+    deleteItem,
+    syncConvenioToDetalhes,
+    syncAllConveniosToDetalhes,
+    removeConvenioFromDetalhes,
+    activeMedicosOptions,
+  } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
@@ -136,13 +136,13 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
   // Fluxo de Caixa Modal de Partilha
   const [fluxoModalItem, setFluxoModalItem] = useState(null);
 
-  const refresh = () => setData(getData('examesConvenio'));
+  const refresh = () => {};
 
   useEffect(() => {
     syncAllConveniosToDetalhes();
-  }, []);
+  }, [syncAllConveniosToDetalhes]);
 
-  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [modalOpen]);
+  const medicosOptions = activeMedicosOptions;
 
   const conveniosOptions = useMemo(() => {
     const set = new Set(DEFAULT_CONVENIOS);

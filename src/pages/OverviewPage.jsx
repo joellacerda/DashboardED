@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getData } from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
   getAcquisitionPeriod,
@@ -50,11 +50,12 @@ function TrendBadge({ value, invert = false }) {
 
 export default function OverviewPage() {
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
-
-  const examesParticulares = getData('exames') || [];
-  const examesConvenio = getData('examesConvenio') || [];
-  const fluxo = getData('fluxoCaixa') || [];
-  const detalhes = getData('detalhesExames') || [];
+  const {
+    exames: examesParticulares = [],
+    examesConvenio = [],
+    fluxoCaixa: fluxo = [],
+    detalhesExames: detalhes = [],
+  } = useData();
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;

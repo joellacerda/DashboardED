@@ -1,9 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  getData,
-  deleteItem,
-  syncAllConveniosToDetalhes,
-} from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
   roundCurrency,
@@ -30,7 +26,12 @@ import { useToast } from '../contexts/ToastContext';
 
 export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const toast = useToast();
-  const [data, setData] = useState(() => getData('detalhesExames'));
+  const {
+    detalhesExames: data = [],
+    fluxoCaixa = [],
+    deleteItem,
+    syncAllConveniosToDetalhes,
+  } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [search, setSearch] = useState('');
@@ -103,10 +104,9 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   useEffect(() => {
     syncAllConveniosToDetalhes();
-    setData(getData('detalhesExames'));
-  }, []);
+  }, [syncAllConveniosToDetalhes]);
 
-  const refresh = () => setData(getData('detalhesExames'));
+  const refresh = () => {};
 
   // --- Filtered items: exams that either were performed in this period
   //     OR have installments falling in this period ---
@@ -197,7 +197,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   const handleDelete = () => {
     if (deleteId) {
-      const fluxoList = getData('fluxoCaixa') || [];
+      const fluxoList = fluxoCaixa || [];
       const linked = fluxoList.filter(
         (f) =>
           f.detalheId === deleteId ||

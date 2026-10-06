@@ -5,6 +5,7 @@ import CloudSyncModal from './components/CloudSyncModal';
 import LoginPage from './components/LoginPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { DataProvider, useData } from './contexts/DataContext';
 import { isCloudConfigured, initFirebase } from './services/firebase';
 import OverviewPage from './pages/OverviewPage';
 import ExamesPage from './pages/ExamesPage';
@@ -98,7 +99,10 @@ function AppContent() {
     refreshConfig();
   };
 
+  const { reloadAll } = useData();
+
   const handleDataUpdated = () => {
+    reloadAll();
     setRefreshKey((k) => k + 1);
     setCloudConnected(isCloudConfigured());
     refreshConfig();
@@ -220,7 +224,9 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <ToastProvider>
-          <AppContent />
+          <DataProvider>
+            <AppContent />
+          </DataProvider>
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>

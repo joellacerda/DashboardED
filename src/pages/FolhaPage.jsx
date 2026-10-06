@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { getData, addItem, updateItem, deleteItem, getItem } from '../utils/storage';
+import { useData } from '../contexts/DataContext';
+import { getItem } from '../utils/storage';
 import {
   formatCurrency,
   formatDate,
@@ -52,8 +53,14 @@ const columns = [
 
 export default function FolhaPage() {
   const toast = useToast();
-  const [data, setData] = useState(() => getData('folhaPagamento'));
-  const [fluxoCaixa, setFluxoCaixa] = useState(() => getData('fluxoCaixa'));
+  const {
+    folhaPagamento: data = [],
+    fluxoCaixa = [],
+    addItem,
+    updateItem,
+    deleteItem,
+    setData: setModuleData,
+  } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -89,10 +96,7 @@ export default function FolhaPage() {
     setCurrentPage(1);
   }, [period, search]);
 
-  const refresh = () => {
-    setData(getData('folhaPagamento'));
-    setFluxoCaixa(getData('fluxoCaixa'));
-  };
+  const refresh = () => {};
 
   // Resolve employees for the current selected acquisition period
   const resolvedEmployees = useMemo(() => {
@@ -324,8 +328,7 @@ export default function FolhaPage() {
       return;
     }
 
-    setData(updatedData);
-    localStorage.setItem('endodiagnose_folha_pagamento', JSON.stringify(updatedData));
+    setModuleData('folhaPagamento', updatedData);
     updatedData.forEach((emp) => updateItem('folhaPagamento', emp.id, emp));
     toast.success(`Lançamentos de ${copiedCount} colaborador(es) copiados do período anterior!`);
   };
@@ -358,7 +361,6 @@ export default function FolhaPage() {
       });
       toast.success(`Folha de ${formatCurrency(totalFolha)} lançada com sucesso no Fluxo de Caixa!`);
     }
-    setFluxoCaixa(getData('fluxoCaixa'));
   };
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));

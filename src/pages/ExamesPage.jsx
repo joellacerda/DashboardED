@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { getData, addItem, updateItem, deleteItem, getItem, getActiveMedicosOptions } from '../utils/storage';
+import { useData } from '../contexts/DataContext';
+import { getItem } from '../utils/storage';
 import {
   formatDate,
   getTodayISO,
@@ -39,7 +40,14 @@ const columns = [
 
 export default function ExamesPage({ onNavigateToDetalhes }) {
   const toast = useToast();
-  const [data, setData] = useState(() => getData('exames'));
+  const {
+    exames: data = [],
+    detalhesExames = [],
+    addItem,
+    updateItem,
+    deleteItem,
+    activeMedicosOptions,
+  } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
@@ -81,12 +89,12 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     setCurrentPage(1);
   }, [period, search]);
 
-  const refresh = () => setData(getData('exames'));
+  const refresh = () => {};
 
   // Combine exames particulares with standalone details so every particular exam is visible
   const allParticulares = useMemo(() => {
     const examesList = data || [];
-    const detalhesList = getData('detalhesExames') || [];
+    const detalhesList = detalhesExames || [];
 
     const getMatchedDetalhe = (e) =>
       detalhesList.find(
@@ -155,7 +163,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     [filtered, startIndex, pageSize]
   );
 
-  const medicosOptions = useMemo(() => getActiveMedicosOptions(), [modalOpen]);
+  const medicosOptions = activeMedicosOptions;
 
   const examesOptions = useMemo(() => {
     const set = new Set(DEFAULT_EXAMES);
@@ -228,7 +236,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       }
 
       // Also sync matching record in detalhesExames by ID or (data + paciente)
-      const detalhesList = getData('detalhesExames') || [];
+      const detalhesList = detalhesExames || [];
       const matchingDetalhes = detalhesList.filter(
         (d) =>
           d.id === editId ||

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
 import { MOTIVOS_TRANCA } from '../utils/helpers';
-import { getActiveMedicosOptions } from '../utils/storage';
+import { useData } from '../contexts/DataContext';
 
 export default function SlotModal({
   isOpen,
@@ -15,6 +15,7 @@ export default function SlotModal({
   allSlotsInPeriod = [],
   salas = [],
 }) {
+  const { activeMedicosOptions = [] } = useData();
   const [isTrancado, setIsTrancado] = useState(false);
   const [motivoTranca, setMotivoTranca] = useState(MOTIVOS_TRANCA[0]);
   const [motivoCustom, setMotivoCustom] = useState('');
@@ -30,13 +31,10 @@ export default function SlotModal({
   const [novoMedico2, setNovoMedico2] = useState('');
   const [isCustomMedico2, setIsCustomMedico2] = useState(false);
 
-  const [activeMedicos, setActiveMedicos] = useState([]);
+  const activeMedicos = activeMedicosOptions;
 
   useEffect(() => {
     if (isOpen) {
-      const doctors = getActiveMedicosOptions();
-      setActiveMedicos(doctors);
-
       if (slot) {
         setIsTrancado(Boolean(slot.trancado));
         const matchedMotivo = MOTIVOS_TRANCA.includes(slot.motivoTranca)

@@ -211,8 +211,19 @@ export function getData(module) {
   }
 }
 
+export function notifyDataChanged(module) {
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    try {
+      window.dispatchEvent(new CustomEvent('endodiagnose:data-updated', { detail: { module } }));
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function setData(module, data) {
   localStorage.setItem(STORAGE_KEYS[module], JSON.stringify(data));
+  notifyDataChanged(module);
 }
 
 export const MODULE_KEYS = Object.keys(STORAGE_KEYS);
