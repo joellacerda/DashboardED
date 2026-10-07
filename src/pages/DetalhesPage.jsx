@@ -126,7 +126,19 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
           (e.pagamentos || []).some((p) => (p.forma || '').toLowerCase().includes(q))
       );
     }
-    return items.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    const seen = new Set();
+    const unique = [];
+    for (const item of items) {
+      if (item && item.id) {
+        if (seen.has(String(item.id))) continue;
+        seen.add(String(item.id));
+      } else {
+        unique.push(item);
+        continue;
+      }
+      unique.push(item);
+    }
+    return unique.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
   }, [data, search, period]);
 
   const totalPages = Math.ceil(filtered.length / pageSize) || 1;

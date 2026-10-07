@@ -126,7 +126,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       );
 
     const standalone = detalhesList
-      .filter((d) => !isMatched(d))
+      .filter((d) => !d.isConvenio && !d.origemConvenioId && !isMatched(d))
       .map((d) => ({
         id: d.id,
         data: d.data,
@@ -137,8 +137,18 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         isDetailOnly: true,
       }));
 
-    return [...mergedExames, ...standalone];
-  }, [data, modalOpen]);
+    const combined = [...mergedExames, ...standalone];
+    const seen = new Set();
+    const unique = [];
+    for (const item of combined) {
+      if (item && item.id) {
+        if (seen.has(String(item.id))) continue;
+        seen.add(String(item.id));
+      }
+      unique.push(item);
+    }
+    return unique;
+  }, [data, detalhesExames]);
 
   const filtered = useMemo(() => {
     let items = allParticulares.filter((e) => e && e.data && isDateInPeriod(e.data, period));

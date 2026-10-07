@@ -176,7 +176,19 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
     if (convenioFilter) {
       items = items.filter((e) => e.convenio === convenioFilter);
     }
-    return items.sort((a, b) => {
+    const seen = new Set();
+    const unique = [];
+    for (const item of items) {
+      if (item && item.id) {
+        if (seen.has(String(item.id))) continue;
+        seen.add(String(item.id));
+      } else {
+        unique.push(item);
+        continue;
+      }
+      unique.push(item);
+    }
+    return unique.sort((a, b) => {
       const dateCompare = (b.data || '').localeCompare(a.data || '');
       if (dateCompare !== 0) return dateCompare;
       if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);

@@ -74,13 +74,11 @@ export function DataProvider({ children }) {
   // Mutação reativa: Adicionar item
   const addItem = useCallback((module, item) => {
     const newItem = storageAddItem(module, item);
-    setDataState((prev) => {
-      const currentList = prev[module] || [];
-      return {
-        ...prev,
-        [module]: [...currentList, newItem],
-      };
-    });
+    const fresh = getData(module);
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
     return newItem;
   }, []);
 
@@ -88,39 +86,33 @@ export function DataProvider({ children }) {
   const updateItem = useCallback((module, id, updates) => {
     const updated = storageUpdateItem(module, id, updates);
     if (!updated) return null;
-    setDataState((prev) => {
-      const currentList = prev[module] || [];
-      return {
-        ...prev,
-        [module]: currentList.map((item) => (String(item.id) === String(id) ? updated : item)),
-      };
-    });
+    const fresh = getData(module);
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
     return updated;
   }, []);
 
   // Mutação reativa: Deletar item
   const deleteItem = useCallback((module, id) => {
     storageDeleteItem(module, id);
-    setDataState((prev) => {
-      const currentList = prev[module] || [];
-      return {
-        ...prev,
-        [module]: currentList.filter((item) => String(item.id) !== String(id)),
-      };
-    });
+    const fresh = getData(module);
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
   }, []);
 
   // Mutação reativa: Substituir conjunto inteiro de um módulo
   const setData = useCallback((module, nextData) => {
-    setDataState((prev) => {
-      const currentModuleData = prev[module] || [];
-      const resolved = typeof nextData === 'function' ? nextData(currentModuleData) : nextData;
-      storageSetData(module, resolved);
-      return {
-        ...prev,
-        [module]: resolved,
-      };
-    });
+    const currentModuleData = getData(module);
+    const resolved = typeof nextData === 'function' ? nextData(currentModuleData) : nextData;
+    storageSetData(module, resolved);
+    setDataState((prev) => ({
+      ...prev,
+      [module]: resolved,
+    }));
   }, []);
 
   // Sincronização de convênio com detalhes
