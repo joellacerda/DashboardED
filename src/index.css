@@ -4297,17 +4297,185 @@ select:-webkit-autofill:focus {
   font-size: 1.5rem;
   color: var(--accent-primary);
 }
+/* ==========================================================================
+   Relatório Financeiro Consolidado (Deliverable 5.3)
+   ========================================================================== */
 
-/* --- Print Stylesheet --- */
+.relatorio-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 4rem;
+  color: var(--text-secondary);
+}
+
+.relatorio-print-header {
+  display: none;
+}
+
+/* DRE Table Styles */
+.dre-table th {
+  background: var(--bg-surface-elevated);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.75rem 1rem;
+}
+
+.dre-table td {
+  padding: 0.65rem 1rem;
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dre-row-header td {
+  background: var(--bg-surface-hover);
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  border-top: 1px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-medium);
+}
+
+.dre-row-item td {
+  color: var(--text-secondary);
+}
+
+.dre-row-item:hover td {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+}
+
+.dre-row-subtotal td {
+  background: rgba(59, 130, 246, 0.05);
+  border-top: 1.5px solid rgba(59, 130, 246, 0.3);
+  border-bottom: 1.5px solid rgba(59, 130, 246, 0.3);
+  font-size: 0.94rem;
+  color: var(--text-primary);
+}
+
+.dre-row-total td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-top: 2px solid var(--border-medium);
+  border-bottom: 2px solid var(--border-medium);
+}
+
+.dre-total-superavit td {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.dre-total-deficit td {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Breakdown Progress Lists */
+.relatorio-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.breakdown-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.breakdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.86rem;
+}
+
+.breakdown-count {
+  font-weight: normal;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  margin-left: 0.35rem;
+}
+
+.breakdown-value {
+  font-weight: 600;
+}
+
+.breakdown-pct {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: normal;
+  margin-left: 0.2rem;
+}
+
+.breakdown-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-surface-elevated);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.breakdown-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.fill-primary {
+  background: var(--color-emerald, #10b981);
+}
+
+.fill-danger {
+  background: var(--color-red, #ef4444);
+}
+
+/* Folha Summary Grid */
+.folha-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.folha-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.folha-summary-highlight {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.folha-summary-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.folha-summary-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Print Stylesheet for Executive Relatório */
 @media print {
+  .no-print,
   .sidebar,
   .mobile-header,
-  .page-actions,
-  .cronograma-toolbar,
-  .week-nav-right,
-  .btn-quick-lock-toggle,
-  .btn-quick-unlock,
-  .btn-quick-lock-ghost {
+  .period-selector-wrapper,
+  .header-actions,
+  .page-header {
     display: none !important;
   }
 
@@ -4315,36 +4483,118 @@ select:-webkit-autofill:focus {
   .app-layout,
   .main-content,
   .page-container {
-    background: #fff !important;
-    color: #000 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
     padding: 0 !important;
     margin: 0 !important;
-  }
-
-  .cronograma-week-nav-bar,
-  .sala-block-card,
-  .summary-card {
-    border: 1px solid #ccc !important;
-    background: #fff !important;
-    color: #000 !important;
     box-shadow: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  .slot-cell.slot-locked,
-  .matrix-slot-cell.slot-locked {
-    background: #f5f5f5 !important;
-    color: #666 !important;
-    border-left: 3px solid #999 !important;
+  .relatorio-print-header {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 1rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid #000000;
   }
 
-  .slot-cell.slot-occupied,
-  .matrix-slot-cell.slot-occupied {
+  .print-brand h2 {
+    font-size: 18pt;
+    margin: 0 0 2px 0;
+    color: #064e3b !important;
+    font-weight: 800;
+  }
+
+  .print-subtitle {
+    font-size: 10pt;
+    color: #4b5563;
+  }
+
+  .print-meta {
+    text-align: right;
+    font-size: 9pt;
+    color: #374151;
+  }
+
+  .summary-cards {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .summary-card,
+  .chart-card,
+  .table-container {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    margin-bottom: 1rem !important;
+  }
+
+  .summary-card-label {
+    color: #4b5563 !important;
+  }
+
+  .summary-card-value {
+    color: #111827 !important;
+  }
+
+  .dre-table,
+  .data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .dre-table th,
+  .data-table th {
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    padding: 6px 8px !important;
+    font-size: 8.5pt !important;
+  }
+
+  .dre-table td,
+  .data-table td {
+    border: 1px solid #e5e7eb !important;
+    color: #1f2937 !important;
+    padding: 5px 8px !important;
+    font-size: 8pt !important;
+  }
+
+  .dre-row-header td {
+    background: #f9fafb !important;
+    font-weight: bold !important;
+  }
+
+  .dre-row-subtotal td {
     background: #f0fdf4 !important;
-    color: #000 !important;
-    border-left: 3px solid #16a34a !important;
+    font-weight: bold !important;
+  }
+
+  .dre-row-total td {
+    background: #e5e7eb !important;
+    font-weight: bold !important;
+    border-top: 2px solid #000 !important;
+    border-bottom: 2px solid #000 !important;
+  }
+
+  .breakdown-bar-bg {
+    border: 1px solid #d1d5db !important;
+    background: #e5e7eb !important;
+  }
+
+  .breakdown-bar-fill {
+    background: #4b5563 !important;
   }
 }
-
-
-
 

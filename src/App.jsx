@@ -15,6 +15,7 @@ import RepassePage from './pages/RepassePage';
 import FolhaPage from './pages/FolhaPage';
 import ConveniosPage from './pages/ConveniosPage';
 import CronogramaPage from './pages/CronogramaPage';
+import RelatorioPage from './pages/RelatorioPage';
 
 const VALID_TABS = [
   'overview',
@@ -25,6 +26,7 @@ const VALID_TABS = [
   'detalhes',
   'repasses',
   'folha',
+  'relatorio',
 ];
 
 const TAB_TITLES = {
@@ -36,6 +38,7 @@ const TAB_TITLES = {
   detalhes: 'Detalhes de Exames',
   repasses: 'Repasse Médico',
   folha: 'Folha de Pagamento',
+  relatorio: 'Relatório Consolidado',
 };
 
 function getTabFromHash() {
@@ -159,6 +162,8 @@ function AppContent() {
         return <RepassePage />;
       case 'folha':
         return <FolhaPage />;
+      case 'relatorio':
+        return <RelatorioPage />;
       default:
         return <OverviewPage />;
     }

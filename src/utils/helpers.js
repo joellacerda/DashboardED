@@ -462,7 +462,7 @@ export function exportPDF(data, columns, title) {
   setTimeout(() => printWindow.print(), 300);
 }
 
-function downloadBlob(blob, filename) {
+export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
