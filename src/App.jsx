@@ -16,6 +16,7 @@ import FolhaPage from './pages/FolhaPage';
 import ConveniosPage from './pages/ConveniosPage';
 import CronogramaPage from './pages/CronogramaPage';
 import RelatorioPage from './pages/RelatorioPage';
+import MedicoDashboardPage from './pages/MedicoDashboardPage';
 
 const VALID_TABS = [
   'overview',
@@ -25,6 +26,7 @@ const VALID_TABS = [
   'fluxo-caixa',
   'detalhes',
   'repasses',
+  'medicos',
   'folha',
   'relatorio',
 ];
@@ -37,6 +39,7 @@ const TAB_TITLES = {
   'fluxo-caixa': 'Fluxo de Caixa',
   detalhes: 'Detalhes de Exames',
   repasses: 'Repasse Médico',
+  medicos: 'Dashboard por Médico',
   folha: 'Folha de Pagamento',
   relatorio: 'Relatório Consolidado',
 };
@@ -48,6 +51,9 @@ function getTabFromHash() {
   if (cleanHash === 'cronograma-salas' || cleanHash === 'salas' || cleanHash === 'escala') {
     return 'cronograma';
   }
+  if (cleanHash === 'medico' || cleanHash === 'doutor' || cleanHash === 'doutores') {
+    return 'medicos';
+  }
   return VALID_TABS.includes(cleanHash) ? cleanHash : 'overview';
 }
 
@@ -57,6 +63,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState(() => getTabFromHash());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [prefillDetalhe, setPrefillDetalhe] = useState(null);
+  const [selectedDoctorForDashboard, setSelectedDoctorForDashboard] = useState(null);
   const [cloudModalOpen, setCloudModalOpen] = useState(false);
   const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
   const [refreshKey, setRefreshKey] = useState(0);
@@ -94,6 +101,13 @@ function AppContent() {
 
   const handleClearPrefill = () => {
     setPrefillDetalhe(null);
+  };
+
+  const handleNavigateToDoctor = (doctorName) => {
+    if (doctorName) {
+      setSelectedDoctorForDashboard(doctorName);
+    }
+    setActiveTab('medicos');
   };
 
   const handleCloudModalClose = () => {
@@ -159,11 +173,17 @@ function AppContent() {
           />
         );
       case 'repasses':
-        return <RepassePage />;
+        return <RepassePage onNavigateToDoctor={handleNavigateToDoctor} />;
+      case 'medicos':
+        return (
+          <MedicoDashboardPage
+            initialDoctor={selectedDoctorForDashboard}
+          />
+        );
       case 'folha':
         return <FolhaPage />;
       case 'relatorio':
-        return <RelatorioPage />;
+        return <RelatorioPage onNavigateToDoctor={handleNavigateToDoctor} />;
       default:
         return <OverviewPage />;
     }

@@ -10,7 +10,7 @@ import {
   exportConsolidatedReportCSV,
 } from '../utils/relatorioConsolidado';
 
-export default function RelatorioPage() {
+export default function RelatorioPage({ onNavigateToDoctor = null }) {
   const data = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
 
@@ -542,7 +542,16 @@ export default function RelatorioPage() {
                   repassesPorMedico.map((r) => (
                     <tr key={r.medicoId || r.nome}>
                       <td>
-                        <strong>{r.nome}</strong>
+                        <strong
+                          style={{
+                            cursor: onNavigateToDoctor ? 'pointer' : 'default',
+                            color: onNavigateToDoctor ? 'var(--color-emerald)' : 'inherit',
+                          }}
+                          onClick={() => onNavigateToDoctor && onNavigateToDoctor(r.nome)}
+                          title="Abrir Dashboard Individual deste Médico"
+                        >
+                          {r.nome}
+                        </strong>
                       </td>
                       <td>
                         {r.isSocio ? (

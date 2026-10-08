@@ -14,7 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import { useToast } from '../contexts/ToastContext';
 
-export default function RepassePage() {
+export default function RepassePage({ onNavigateToDoctor = null }) {
   const toast = useToast();
   const {
     medicos: medicosList = [],
@@ -430,7 +430,18 @@ export default function RepassePage() {
                       <tr key={row.nome}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 500 }}>
-                            <span>{row.nome}</span>
+                            <span
+                              style={{
+                                cursor: onNavigateToDoctor ? 'pointer' : 'default',
+                                color: onNavigateToDoctor ? 'var(--color-emerald)' : 'inherit',
+                                textDecoration: onNavigateToDoctor ? 'underline' : 'none',
+                                textUnderlineOffset: '2px',
+                              }}
+                              onClick={() => onNavigateToDoctor && onNavigateToDoctor(row.nome)}
+                              title="Abrir Dashboard Individual deste Médico"
+                            >
+                              {row.nome}
+                            </span>
                             {row.isSocio && (
                               <span className="badge badge-success" title="Médico Sócio da Clínica">
                                 Sócio
