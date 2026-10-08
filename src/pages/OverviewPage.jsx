@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
+import StorageMonitorWidget from '../components/StorageMonitorWidget';
 import {
   formatCurrency,
   getAcquisitionPeriod,
@@ -48,7 +49,7 @@ function TrendBadge({ value, invert = false }) {
   );
 }
 
-export default function OverviewPage() {
+export default function OverviewPage({ onOpenStorageManager }) {
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const {
     exames: examesParticulares = [],
@@ -521,6 +522,9 @@ export default function OverviewPage() {
               </div>
             </div>
           </div>
+
+          {/* Chart 6: Monitor de Armazenamento Local */}
+          <StorageMonitorWidget onOpenStorageManager={onOpenStorageManager} />
         </div>
       </div>
     </>

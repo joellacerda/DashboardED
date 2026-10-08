@@ -14,6 +14,10 @@ import {
   saveCronogramaSlot as storageSaveCronogramaSlot,
   deleteCronogramaSlot as storageDeleteCronogramaSlot,
   replicateWeekSchedule as storageReplicateWeekSchedule,
+  getStorageUsageInfo,
+  previewArchiveData,
+  archiveAndPurgeData,
+  exportAllDataAsJSON,
 } from '../utils/storage';
 
 const DataContext = createContext(null);
@@ -24,6 +28,8 @@ export function DataProvider({ children }) {
     initial.salasConfig = getSalasConfig();
     return initial;
   });
+
+  const [storageInfo, setStorageInfo] = useState(() => getStorageUsageInfo());
 
   // Atualiza um módulo específico no estado React a partir do localStorage
   const refreshModule = useCallback((module) => {
@@ -235,6 +241,24 @@ export function DataProvider({ children }) {
     return Array.from(activeSet).sort((a, b) => a.localeCompare(b));
   }, [data.medicos, data.exames, data.detalhesExames, data.examesConvenio]);
 
+  const refreshStorageInfo = useCallback(() => {
+    setStorageInfo(getStorageUsageInfo());
+  }, []);
+
+  useEffect(() => {
+    setStorageInfo(getStorageUsageInfo());
+  }, [data]);
+
+  const archiveAndPurge = useCallback(
+    async (cutoffDate) => {
+      const result = await archiveAndPurgeData(cutoffDate);
+      reloadAll();
+      setStorageInfo(getStorageUsageInfo());
+      return result;
+    },
+    [reloadAll]
+  );
+
   const value = useMemo(
     () => ({
       data,
@@ -248,6 +272,11 @@ export function DataProvider({ children }) {
       cronogramaSalas: data.cronogramaSalas || [],
       salasConfig: data.salasConfig || [],
       activeMedicosOptions,
+      storageInfo,
+      refreshStorageInfo,
+      archiveAndPurge,
+      previewArchiveData,
+      exportAllDataAsJSON,
       addItem,
       updateItem,
       deleteItem,
@@ -265,6 +294,9 @@ export function DataProvider({ children }) {
     [
       data,
       activeMedicosOptions,
+      storageInfo,
+      refreshStorageInfo,
+      archiveAndPurge,
       addItem,
       updateItem,
       deleteItem,

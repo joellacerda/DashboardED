@@ -59,14 +59,28 @@ function getTabFromHash() {
 
 function AppContent() {
   const { user, loading, isConfigured, refreshConfig } = useAuth();
+  const { reloadAll, storageInfo } = useData();
 
   const [activeTab, setActiveTab] = useState(() => getTabFromHash());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [prefillDetalhe, setPrefillDetalhe] = useState(null);
   const [selectedDoctorForDashboard, setSelectedDoctorForDashboard] = useState(null);
   const [cloudModalOpen, setCloudModalOpen] = useState(false);
+  const [cloudModalTab, setCloudModalTab] = useState('storage');
+  const [storageQuotaExceeded, setStorageQuotaExceeded] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Monitora evento de limite de armazenamento atingido
+  useEffect(() => {
+    const handleQuota = () => {
+      setStorageQuotaExceeded(true);
+      setBannerDismissed(false);
+    };
+    window.addEventListener('endodiagnose:storage-quota-exceeded', handleQuota);
+    return () => window.removeEventListener('endodiagnose:storage-quota-exceeded', handleQuota);
+  }, []);
 
   // Synchronize browser history / hashchange (e.g. Back/Forward button, manual URL change)
   useEffect(() => {
@@ -110,19 +124,23 @@ function AppContent() {
     setActiveTab('medicos');
   };
 
+  const handleOpenCloudModal = (tab = 'sync') => {
+    setCloudModalTab(tab);
+    setCloudModalOpen(true);
+  };
+
   const handleCloudModalClose = () => {
     setCloudModalOpen(false);
     setCloudConnected(isCloudConfigured());
     refreshConfig();
   };
 
-  const { reloadAll } = useData();
-
   const handleDataUpdated = () => {
     reloadAll();
     setRefreshKey((k) => k + 1);
     setCloudConnected(isCloudConfigured());
     refreshConfig();
+    setStorageQuotaExceeded(false);
   };
 
   // If Firebase is configured and auth is verifying, show full-page loading
@@ -156,7 +174,7 @@ function AppContent() {
   const renderPage = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewPage />;
+        return <OverviewPage onOpenStorageManager={() => handleOpenCloudModal('storage')} />;
       case 'cronograma':
         return <CronogramaPage />;
       case 'exames':
@@ -185,7 +203,7 @@ function AppContent() {
       case 'relatorio':
         return <RelatorioPage onNavigateToDoctor={handleNavigateToDoctor} />;
       default:
-        return <OverviewPage />;
+        return <OverviewPage onOpenStorageManager={() => handleOpenCloudModal('storage')} />;
     }
   };
 
@@ -213,7 +231,7 @@ function AppContent() {
           type="button"
           className="btn btn-ghost btn-sm"
           style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: 'var(--text-xs)' }}
-          onClick={() => setCloudModalOpen(true)}
+          onClick={() => handleOpenCloudModal('sync')}
           title="Nuvem & Backup"
         >
           <span>{cloudConnected ? '🟢' : '☁️'}</span>
@@ -226,10 +244,53 @@ function AppContent() {
         onTabChange={setActiveTab}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onOpenCloudModal={() => setCloudModalOpen(true)}
+        onOpenCloudModal={(tab = 'sync') => handleOpenCloudModal(tab)}
         isCloudConnected={cloudConnected}
       />
       <main className="main-content" key={`${activeTab}-${refreshKey}`}>
+        {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
+        {!bannerDismissed && (storageQuotaExceeded || storageInfo?.status === 'critical' || (storageInfo?.status === 'warning' && storageInfo?.usedPercentage >= 75)) && (
+          <div className={`storage-alert-banner ${storageQuotaExceeded || storageInfo?.status === 'critical' ? 'critical' : 'warning'}`}>
+            <div className="storage-alert-content">
+              <span className="storage-alert-icon">
+                {storageQuotaExceeded || storageInfo?.status === 'critical' ? '🚨' : '⚠️'}
+              </span>
+              <div className="storage-alert-text">
+                <span className="storage-alert-title">
+                  {storageQuotaExceeded
+                    ? 'Limite de armazenamento do navegador atingido!'
+                    : storageInfo?.status === 'critical'
+                      ? `Armazenamento crítico (${storageInfo?.usedPercentage}% ocupado)`
+                      : `Armazenamento em atenção (${storageInfo?.usedPercentage}% ocupado)`}
+                </span>
+                <span className="storage-alert-desc">
+                  {storageQuotaExceeded
+                    ? 'O navegador não possui mais espaço para novos exames. É necessário arquivar registros antigos.'
+                    : 'Recomendamos arquivar atendimentos antigos para liberar espaço e garantir o carregamento instantâneo.'}
+                </span>
+              </div>
+            </div>
+            <div className="storage-alert-actions">
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => handleOpenCloudModal('storage')}
+              >
+                Gerenciar & Arquivar
+              </button>
+              <button
+                type="button"
+                className="btn-close-banner"
+                onClick={() => setBannerDismissed(true)}
+                aria-label="Dispensar aviso"
+                title="Dispensar aviso"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         <ErrorBoundary>
           {renderPage()}
         </ErrorBoundary>
@@ -239,6 +300,7 @@ function AppContent() {
         isOpen={cloudModalOpen}
         onClose={handleCloudModalClose}
         onDataUpdated={handleDataUpdated}
+        initialTab={cloudModalTab}
       />
     </div>
   );
