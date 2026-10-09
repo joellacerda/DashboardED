@@ -531,7 +531,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
                     value={fluxoForm.porcentagemMedico1}
                     onChange={(e) => {
                       const p1 = Number(e.target.value);
-                      const p2 = Math.round((100 - p1) * 10) / 10;
+                      const p2 = Math.round((100 - p1) * 100) / 100;
                       setFluxoForm({ ...fluxoForm, porcentagemMedico1: p1, porcentagemMedico2: p2 });
                     }}
                     style={{

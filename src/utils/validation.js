@@ -61,7 +61,7 @@ export function validatePositiveNumber(val, fieldName = 'Valor', allowZero = fal
 export function validatePercentageSum(pct1, pct2) {
   const p1 = Number(pct1) || 0;
   const p2 = Number(pct2) || 0;
-  const sum = Math.round((p1 + p2) * 10) / 10;
+  const sum = Math.round((p1 + p2) * 100) / 100;
   if (sum !== 100) {
     return `A soma dos percentuais (${sum}%) deve totalizar exatamente 100%.`;
   }

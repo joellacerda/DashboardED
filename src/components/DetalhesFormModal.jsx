@@ -446,8 +446,8 @@ export default function DetalhesFormModal({
       honorariosMedicos: roundCurrency(form.honorariosMedicos),
       valorMedico1: form.valorMedico1 ? roundCurrency(form.valorMedico1) : '',
       valorMedico2: form.valorMedico2 ? roundCurrency(form.valorMedico2) : '',
-      porcentagemMedico1: form.porcentagemMedico1 !== '' ? Math.round(Number(form.porcentagemMedico1) * 10) / 10 : 50,
-      porcentagemMedico2: form.porcentagemMedico2 !== '' ? Math.round(Number(form.porcentagemMedico2) * 10) / 10 : 50,
+      porcentagemMedico1: form.porcentagemMedico1 !== '' ? Math.round(Number(form.porcentagemMedico1) * 100) / 100 : 50,
+      porcentagemMedico2: form.porcentagemMedico2 !== '' ? Math.round(Number(form.porcentagemMedico2) * 100) / 100 : 50,
     };
 
     let savedItem;
@@ -690,8 +690,8 @@ export default function DetalhesFormModal({
                         className="input-field"
                         min="0"
                         max="100"
-                        step="0.1"
-                        placeholder="50.0"
+                        step="0.01"
+                        placeholder="50.00"
                         value={form.porcentagemMedico1}
                         onChange={(e) => {
                           const raw = e.target.value;
@@ -702,7 +702,7 @@ export default function DetalhesFormModal({
                           const val = Number(raw);
                           if (isNaN(val)) return;
                           const clamped = Math.min(100, Math.max(0, val));
-                          const other = Math.round((100 - clamped) * 10) / 10;
+                          const other = Math.round((100 - clamped) * 100) / 100;
                           setForm((f) => ({ ...f, porcentagemMedico1: raw, porcentagemMedico2: other }));
                         }}
                       />
@@ -714,8 +714,8 @@ export default function DetalhesFormModal({
                         className="input-field"
                         min="0"
                         max="100"
-                        step="0.1"
-                        placeholder="50.0"
+                        step="0.01"
+                        placeholder="50.00"
                         value={form.porcentagemMedico2}
                         onChange={(e) => {
                           const raw = e.target.value;
@@ -726,7 +726,7 @@ export default function DetalhesFormModal({
                           const val = Number(raw);
                           if (isNaN(val)) return;
                           const clamped = Math.min(100, Math.max(0, val));
-                          const other = Math.round((100 - clamped) * 10) / 10;
+                          const other = Math.round((100 - clamped) * 100) / 100;
                           setForm((f) => ({ ...f, porcentagemMedico2: raw, porcentagemMedico1: other }));
                         }}
                       />
