@@ -14,6 +14,29 @@ export default function DetalhesExpandedRow({ item, period }) {
     <tr className="expanded-detail-row">
       <td colSpan="8">
         <div className="expanded-detail-panel">
+          {item.isConvenio && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '0.75rem',
+              padding: '0.4rem 0.75rem',
+              borderRadius: '6px',
+              background: item.manualOverride ? 'oklch(0.25 0.05 240 / 0.3)' : 'oklch(0.2 0.04 160 / 0.3)',
+              border: `1px solid ${item.manualOverride ? 'oklch(0.4 0.1 240 / 0.4)' : 'oklch(0.35 0.08 160 / 0.4)'}`,
+              fontSize: 'var(--text-xs)',
+            }}>
+              <span>{item.manualOverride ? '🛡️' : '⚡'}</span>
+              <span style={{ fontWeight: 600 }}>
+                {item.manualOverride ? 'Sincronização Personalizada:' : 'Sincronizado do Convênio:'}
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                {item.manualOverride
+                  ? 'Valores manuais protegidos contra sobreposição automática do Convênio.'
+                  : 'Cálculos sincronizados diretamente do módulo de Convênios.'}
+              </span>
+            </div>
+          )}
           <div className="expanded-detail-grid">
             {/* Coluna 1: Financeiro Bruto */}
             <div className="expanded-detail-section">

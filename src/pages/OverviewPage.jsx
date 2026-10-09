@@ -49,7 +49,7 @@ function TrendBadge({ value, invert = false }) {
   );
 }
 
-export default function OverviewPage({ onOpenStorageManager }) {
+export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal }) {
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const {
     exames: examesParticulares = [],
@@ -259,6 +259,18 @@ export default function OverviewPage({ onOpenStorageManager }) {
               </button>
             )}
           </div>
+          {onOpenAuditModal && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onOpenAuditModal}
+              title="Abrir Histórico de Atividades e Auditoria"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <span>📋</span>
+              <span>Auditoria</span>
+            </button>
+          )}
         </div>
       </div>
 

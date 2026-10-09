@@ -12,10 +12,16 @@ const STORAGE_KEYS = {
   examesConvenio: 'endodiagnose_exames_convenio',
   cronogramaSalas: 'endodiagnose_cronograma_salas',
   salasConfig: 'endodiagnose_salas_config',
+  auditLogs: 'endodiagnose_audit_logs',
 };
 
-// Automatic migration for legacy values in localStorage
-function migrateLegacyData() {
+let _hasRunMigrations = false;
+
+// Controlled migration for legacy values in localStorage
+export function runDataMigrations() {
+  if (_hasRunMigrations) return;
+  _hasRunMigrations = true;
+
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
 
@@ -200,8 +206,6 @@ function migrateLegacyData() {
   }
 }
 
-migrateLegacyData();
-
 export function getData(module) {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS[module]);
@@ -256,6 +260,51 @@ export function getAllData() {
   return result;
 }
 
+export function addAuditLog(entry) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const raw = localStorage.getItem(STORAGE_KEYS.auditLogs);
+    const logs = raw ? JSON.parse(raw) : [];
+    const newEntry = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      acao: entry.acao || 'MODIFICAÇÃO',
+      modulo: entry.modulo || 'geral',
+      descricao: entry.descricao || '',
+      detalhes: entry.detalhes || null,
+      usuario: entry.usuario || (typeof window !== 'undefined' && window.__currentUserEmail) || 'Usuário Atual',
+    };
+    logs.unshift(newEntry);
+    if (logs.length > 500) {
+      logs.length = 500;
+    }
+    localStorage.setItem(STORAGE_KEYS.auditLogs, JSON.stringify(logs));
+    notifyDataChanged('auditLogs');
+    return newEntry;
+  } catch (e) {
+    console.error('Audit log error:', e);
+    return null;
+  }
+}
+
+export function getAuditLogs() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.auditLogs);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearAuditLogs() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.auditLogs, JSON.stringify([]));
+    notifyDataChanged('auditLogs');
+  } catch (e) {
+    console.error('Clear audit logs error:', e);
+  }
+}
+
 export function restoreAllData(allData) {
   if (!allData || typeof allData !== 'object') return;
   const payload = allData.backupCompletoDeTodasAsColecoes || allData.dados || allData;
@@ -263,6 +312,12 @@ export function restoreAllData(allData) {
     if (Array.isArray(payload[m])) {
       setData(m, payload[m]);
     }
+  });
+  addAuditLog({
+    acao: 'RESTAURAR',
+    modulo: 'sistema',
+    descricao: 'Restauração de backup completo executada com sucesso',
+    detalhes: { data: new Date().toISOString() },
   });
 }
 
@@ -276,6 +331,19 @@ export function addItem(module, item) {
   data.push(newItem);
   setData(module, data);
   saveToCloud(module, newItem);
+  if (module !== 'auditLogs') {
+    const desc = newItem.paciente
+      ? `Paciente: ${newItem.paciente} (${newItem.exame || newItem.tipoExame || module})`
+      : newItem.nome
+        ? `${newItem.nome}`
+        : `Registro ${newItem.id}`;
+    addAuditLog({
+      acao: 'CRIAR',
+      modulo: module,
+      descricao: `Adicionado em ${module}: ${desc}`,
+      detalhes: { id: newItem.id },
+    });
+  }
   return newItem;
 }
 
@@ -283,17 +351,45 @@ export function updateItem(module, id, updates) {
   const data = getData(module);
   const index = data.findIndex((item) => String(item.id) === String(id));
   if (index === -1) return null;
+  const oldItem = data[index];
   data[index] = { ...data[index], ...updates, updatedAt: new Date().toISOString() };
   setData(module, data);
   saveToCloud(module, data[index]);
+  if (module !== 'auditLogs') {
+    const desc = oldItem.paciente
+      ? `Paciente: ${oldItem.paciente}`
+      : oldItem.nome
+        ? `${oldItem.nome}`
+        : `ID: ${id}`;
+    addAuditLog({
+      acao: 'EDITAR',
+      modulo: module,
+      descricao: `Atualizado em ${module}: ${desc}`,
+      detalhes: { id, updates: Object.keys(updates) },
+    });
+  }
   return data[index];
 }
 
 export function deleteItem(module, id) {
   const data = getData(module);
+  const oldItem = data.find((item) => String(item.id) === String(id));
   const filtered = data.filter((item) => String(item.id) !== String(id));
   setData(module, filtered);
   deleteFromCloud(module, id);
+  if (module !== 'auditLogs') {
+    const desc = oldItem?.paciente
+      ? `Paciente: ${oldItem.paciente}`
+      : oldItem?.nome
+        ? `${oldItem.nome}`
+        : `ID: ${id}`;
+    addAuditLog({
+      acao: 'EXCLUIR',
+      modulo: module,
+      descricao: `Excluído de ${module}: ${desc}`,
+      detalhes: { id },
+    });
+  }
   return filtered;
 }
 
@@ -354,7 +450,7 @@ export function getActiveMedicosOptions() {
 /**
  * Synchronize a single examesConvenio record with detalhesExames
  */
-export function syncConvenioToDetalhes(convenioItem) {
+export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
   if (!convenioItem || !convenioItem.id) return null;
 
   const hasDivisao =
@@ -408,10 +504,34 @@ export function syncConvenioToDetalhes(convenioItem) {
   const formaStr = cNome ? `Convênio (${cNome})` : 'Convênio';
   const effectiveData = convenioItem.fluxoData || convenioItem.data;
 
+  // Se o exame já existe e possui manualOverride ativado (e não foi solicitada restauração forçada),
+  // protegemos os campos financeiros customizados pelo usuário
+  if (existingIdx !== -1) {
+    const existing = detalhesList[existingIdx];
+    if (existing.manualOverride && !forceOverride) {
+      const preservedRecord = {
+        ...existing,
+        convenio: cNome,
+        dataOriginalExame: convenioItem.data,
+        paciente: (convenioItem.paciente || existing.paciente || '').trim().toUpperCase(),
+        tipoExame: (convenioItem.exame || existing.tipoExame || '').trim().toUpperCase(),
+        procedimentoComplementar: convenioItem.procedimentoComplementar || existing.procedimentoComplementar || '',
+        medico: (convenioItem.medico || existing.medico || '').trim().toUpperCase(),
+        medico2: temDiv2 && convenioItem.medico2 ? convenioItem.medico2.trim().toUpperCase() : (existing.medico2 || ''),
+        temDivisao: temDiv2 || Boolean(existing.temDivisao),
+        manualOverride: true,
+        updatedAt: new Date().toISOString(),
+      };
+      updateItem('detalhesExames', existing.id, preservedRecord);
+      return preservedRecord;
+    }
+  }
+
   const detalheRecord = {
     id: syncId,
     origemConvenioId: convenioItem.id,
     isConvenio: true,
+    manualOverride: false,
     convenio: cNome,
     data: effectiveData,
     dataOriginalExame: convenioItem.data,
@@ -447,6 +567,24 @@ export function syncConvenioToDetalhes(convenioItem) {
     addItem('detalhesExames', detalheRecord);
   }
   return detalheRecord;
+}
+
+/**
+ * Reverts manual override for a synced convenio detail item, restoring calculated defaults
+ */
+export function revertConvenioOverride(detalhesId) {
+  try {
+    const detalhes = getData('detalhesExames') || [];
+    const item = detalhes.find((d) => d.id === detalhesId);
+    if (!item || !item.origemConvenioId) return null;
+    const convenios = getData('examesConvenio') || [];
+    const conv = convenios.find((c) => c.id === item.origemConvenioId);
+    if (!conv) return null;
+    return syncConvenioToDetalhes(conv, true);
+  } catch (err) {
+    console.error('Error reverting convenio override:', err);
+    return null;
+  }
 }
 
 /**
@@ -608,7 +746,7 @@ export function formatBytes(bytes, decimals = 1) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-const MODULE_LABELS = {
+export const MODULE_LABELS = {
   exames: 'Exames Particulares',
   detalhesExames: 'Detalhes Financeiros',
   examesConvenio: 'Exames de Convênio',
@@ -618,6 +756,7 @@ const MODULE_LABELS = {
   repassesAjustes: 'Ajustes de Repasse',
   cronogramaSalas: 'Cronograma de Salas',
   salasConfig: 'Configurações de Salas',
+  auditLogs: 'Histórico de Atividades',
 };
 
 /**
@@ -884,7 +1023,14 @@ export async function archiveAndPurgeData(cutoffDate) {
     console.warn('Aviso: erro ao sincronizar deleção na nuvem:', cloudErr);
   }
 
-  // 4. NOTIFICAR ATUALIZAÇÃO GERAL
+  // 4. NOTIFICAR ATUALIZAÇÃO GERAL E AUDITORIA
+  addAuditLog({
+    acao: 'ARQUIVAR',
+    modulo: 'sistema',
+    descricao: `Expurgo executado: ${totalArchivedCount} registros anteriores a ${cutoffDate} foram arquivados com backup`,
+    detalhes: { cutoffDate, totalArchived: totalArchivedCount, backupFileName },
+  });
+
   notifyDataChanged();
 
   return {

@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { DataProvider, useData } from './contexts/DataContext';
 import { isCloudConfigured, initFirebase } from './services/firebase';
+import { runDataMigrations } from './utils/storage';
+import AuditLogModal from './components/AuditLogModal';
 import OverviewPage from './pages/OverviewPage';
 import ExamesPage from './pages/ExamesPage';
 import FluxoCaixaPage from './pages/FluxoCaixaPage';
@@ -67,10 +69,18 @@ function AppContent() {
   const [selectedDoctorForDashboard, setSelectedDoctorForDashboard] = useState(null);
   const [cloudModalOpen, setCloudModalOpen] = useState(false);
   const [cloudModalTab, setCloudModalTab] = useState('storage');
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [storageQuotaExceeded, setStorageQuotaExceeded] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Define usuário atual para log de auditoria
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__currentUserEmail = user?.email || user?.displayName || 'Usuário Local';
+    }
+  }, [user]);
 
   // Monitora evento de limite de armazenamento atingido
   useEffect(() => {
@@ -104,6 +114,7 @@ function AppContent() {
   }, [activeTab]);
 
   useEffect(() => {
+    runDataMigrations();
     initFirebase();
     setCloudConnected(isCloudConfigured());
   }, []);
@@ -174,7 +185,12 @@ function AppContent() {
   const renderPage = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewPage onOpenStorageManager={() => handleOpenCloudModal('storage')} />;
+        return (
+          <OverviewPage
+            onOpenStorageManager={() => handleOpenCloudModal('storage')}
+            onOpenAuditModal={() => setAuditModalOpen(true)}
+          />
+        );
       case 'cronograma':
         return <CronogramaPage />;
       case 'exames':
@@ -203,7 +219,12 @@ function AppContent() {
       case 'relatorio':
         return <RelatorioPage onNavigateToDoctor={handleNavigateToDoctor} />;
       default:
-        return <OverviewPage onOpenStorageManager={() => handleOpenCloudModal('storage')} />;
+        return (
+          <OverviewPage
+            onOpenStorageManager={() => handleOpenCloudModal('storage')}
+            onOpenAuditModal={() => setAuditModalOpen(true)}
+          />
+        );
     }
   };
 
@@ -245,6 +266,7 @@ function AppContent() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onOpenCloudModal={(tab = 'sync') => handleOpenCloudModal(tab)}
+        onOpenAuditModal={() => setAuditModalOpen(true)}
         isCloudConnected={cloudConnected}
       />
       <main className="main-content" key={`${activeTab}-${refreshKey}`}>
@@ -301,6 +323,11 @@ function AppContent() {
         onClose={handleCloudModalClose}
         onDataUpdated={handleDataUpdated}
         initialTab={cloudModalTab}
+      />
+
+      <AuditLogModal
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
       />
     </div>
   );

@@ -87,6 +87,7 @@ export default function DetalhesFormModal({
     updateItem,
     deleteItem,
     activeMedicosOptions,
+    revertConvenioOverride,
   } = useData();
   const [form, setForm] = useState({ ...emptyForm, data: getTodayISO() });
   const [touched, setTouched] = useState({});
@@ -166,6 +167,11 @@ export default function DetalhesFormModal({
         parcelas: String(p.parcelas || 1),
       }));
       setForm({
+        id: editItem.id,
+        origemConvenioId: editItem.origemConvenioId || '',
+        isConvenio: Boolean(editItem.isConvenio || editItem.origemConvenioId),
+        manualOverride: Boolean(editItem.manualOverride),
+        convenio: editItem.convenio || '',
         data: editItem.data || '',
         paciente: editItem.paciente || '',
         tipoExame: editItem.tipoExame || editItem.exame || '',
@@ -198,12 +204,28 @@ export default function DetalhesFormModal({
         tipoExame: prefillData.tipoExame || prefillData.exame || '',
         procedimentoComplementar: prefillData.procedimentoComplementar || '',
         medico: prefillData.medico || '',
+        origemConvenioId: prefillData.origemConvenioId || '',
+        isConvenio: Boolean(prefillData.isConvenio || prefillData.origemConvenioId),
+        manualOverride: Boolean(prefillData.manualOverride),
+        convenio: prefillData.convenio || '',
         pagamentos: [{ ...emptyPagamento }],
       });
     } else {
       setForm({ ...emptyForm, data: getTodayISO(), pagamentos: [{ ...emptyPagamento }] });
     }
   }, [isOpen, editItem, prefillData]);
+
+  const handleRevertConvenio = () => {
+    if (!editItem?.id) return;
+    const restored = revertConvenioOverride(editItem.id);
+    if (restored) {
+      toast.success('Valores padrão do convênio restaurados com sucesso!');
+      if (onSuccess) onSuccess(restored);
+      onClose();
+    } else {
+      toast.error('Não foi possível restaurar os dados do convênio.');
+    }
+  };
 
   const updateField = (field, value) => {
     setForm((f) => {
@@ -388,8 +410,19 @@ export default function DetalhesFormModal({
     const formaLabel = sanitizedPagamentos.length === 1 ? sanitizedPagamentos[0].forma : 'Misto';
 
     const allowsCompl = examePermiteComplementar(form.tipoExame);
+    const isFromConvenio = Boolean(
+      editItem?.origemConvenioId ||
+      editItem?.isConvenio ||
+      form.origemConvenioId ||
+      form.isConvenio
+    );
+
     const sanitizedForm = {
       ...form,
+      origemConvenioId: editItem?.origemConvenioId || form.origemConvenioId || undefined,
+      isConvenio: isFromConvenio,
+      manualOverride: isFromConvenio ? true : undefined,
+      convenio: editItem?.convenio || form.convenio || undefined,
       paciente: form.paciente.trim().toUpperCase(),
       tipoExame: form.tipoExame.trim().toUpperCase(),
       procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
@@ -504,6 +537,53 @@ export default function DetalhesFormModal({
       }
     >
       <form onSubmit={handleSave} noValidate autoComplete="off">
+        {(form.isConvenio || editItem?.origemConvenioId) && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              marginBottom: '1.25rem',
+              background: 'oklch(0.24 0.05 240 / 0.4)',
+              border: '1px solid oklch(0.4 0.1 240 / 0.5)',
+              gap: '0.75rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.3rem' }}>{form.manualOverride ? '🛡️' : '⚡'}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                  {form.manualOverride
+                    ? `Personalizado Manualmente (${form.convenio || 'Convênio'})`
+                    : `Sincronizado do Convênio (${form.convenio || 'Convênio'})`}
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                  {form.manualOverride
+                    ? 'Ajustes manuais protegidos contra sobreposição automática do módulo de Convênios.'
+                    : 'Qualquer alteração manual salva aqui será protegida contra sobreposição automática.'}
+                </div>
+              </div>
+            </div>
+            {form.manualOverride && editItem?.id && (
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={handleRevertConvenio}
+                style={{
+                  color: 'var(--color-primary)',
+                  borderColor: 'var(--border-subtle)',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Restaurar valores calculados originalmente do convênio"
+              >
+                ↺ Restaurar Padrão do Convênio
+              </button>
+            )}
+          </div>
+        )}
         <div className="modal-form-grid">
           <div className="input-group">
             <label className="input-label">Data <span className="required">*</span></label>

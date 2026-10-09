@@ -122,7 +122,7 @@ const navItems = [
   },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, isCloudConnected }) {
+export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, onOpenAuditModal, isCloudConnected }) {
   const { user, logout, isConfigured } = useAuth();
   const [avatarError, setAvatarError] = useState(false);
 
@@ -216,6 +216,31 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
           >
             <span>{isCloudConnected ? '🟢' : '☁️'}</span>
             <span>{isCloudConnected ? 'Nuvem Conectada' : 'Salvar na Nuvem'}</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm sidebar-cloud-btn"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              marginTop: '0.4rem',
+              fontSize: 'var(--text-xs)',
+              background: 'var(--bg-surface-elevated)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-secondary)',
+            }}
+            onClick={() => {
+              if (onClose) onClose();
+              if (onOpenAuditModal) onOpenAuditModal();
+            }}
+            title="Ver histórico de atividades e auditoria de ações"
+          >
+            <span>📋</span>
+            <span>Auditoria & Logs</span>
           </button>
 
           {/* User Profile Card if logged in */}

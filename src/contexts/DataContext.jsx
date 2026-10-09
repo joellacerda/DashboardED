@@ -18,6 +18,10 @@ import {
   previewArchiveData,
   archiveAndPurgeData,
   exportAllDataAsJSON,
+  revertConvenioOverride as storageRevertConvenioOverride,
+  addAuditLog as storageAddAuditLog,
+  getAuditLogs as storageGetAuditLogs,
+  clearAuditLogs as storageClearAuditLogs,
 } from '../utils/storage';
 
 const DataContext = createContext(null);
@@ -259,6 +263,29 @@ export function DataProvider({ children }) {
     [reloadAll]
   );
 
+  const revertConvenioOverride = useCallback(
+    (detalhesId) => {
+      const res = storageRevertConvenioOverride(detalhesId);
+      refreshModule('detalhesExames');
+      return res;
+    },
+    [refreshModule]
+  );
+
+  const addAuditLog = useCallback(
+    (entry) => {
+      const res = storageAddAuditLog(entry);
+      refreshModule('auditLogs');
+      return res;
+    },
+    [refreshModule]
+  );
+
+  const clearAuditLogs = useCallback(() => {
+    storageClearAuditLogs();
+    refreshModule('auditLogs');
+  }, [refreshModule]);
+
   const value = useMemo(
     () => ({
       data,
@@ -271,6 +298,7 @@ export function DataProvider({ children }) {
       examesConvenio: data.examesConvenio || [],
       cronogramaSalas: data.cronogramaSalas || [],
       salasConfig: data.salasConfig || [],
+      auditLogs: data.auditLogs || [],
       activeMedicosOptions,
       storageInfo,
       refreshStorageInfo,
@@ -286,6 +314,10 @@ export function DataProvider({ children }) {
       syncConvenioToDetalhes,
       syncAllConveniosToDetalhes,
       removeConvenioFromDetalhes,
+      revertConvenioOverride,
+      addAuditLog,
+      getAuditLogs: storageGetAuditLogs,
+      clearAuditLogs,
       saveSalasConfig,
       saveCronogramaSlot,
       deleteCronogramaSlot,
@@ -306,6 +338,9 @@ export function DataProvider({ children }) {
       syncConvenioToDetalhes,
       syncAllConveniosToDetalhes,
       removeConvenioFromDetalhes,
+      revertConvenioOverride,
+      addAuditLog,
+      clearAuditLogs,
       saveSalasConfig,
       saveCronogramaSlot,
       deleteCronogramaSlot,

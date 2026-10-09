@@ -1,3 +1,6 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 export const DEFAULT_EXAMES = [
   'CONSULTA',
   'ENDOSCOPIA',
@@ -411,9 +414,9 @@ export function exportCSV(data, columns, filename) {
 }
 
 /**
- * Export data to PDF (simple HTML-to-print approach)
+ * Fallback HTML print generator if jsPDF fails
  */
-export function exportPDF(data, columns, title) {
+function fallbackHtmlPrint(data, columns, title) {
   const tableRows = data
     .map(
       (item) =>
@@ -456,10 +459,125 @@ export function exportPDF(data, columns, title) {
 </html>`;
 
   const printWindow = window.open('', '_blank');
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => printWindow.print(), 300);
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  }
+}
+
+/**
+ * Export data to a styled, native PDF file using jsPDF and jspdf-autotable
+ */
+export function exportPDF(data, columns, title) {
+  try {
+    const isLandscape = columns.length > 5;
+    const doc = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'pt',
+      format: 'a4',
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const cleanTitle = title || 'Relatório';
+
+    // Header bar
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, pageWidth, 54, 'F');
+
+    // Accent line
+    doc.setFillColor(14, 165, 233); // sky-500
+    doc.rect(0, 52, pageWidth, 2.5, 'F');
+
+    // Brand title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(255, 255, 255);
+    doc.text('CLÍNICA ENDODIAGNOSE', 40, 27);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.text('Dashboard de Gestão Clínica & Financeira', 40, 42);
+
+    // Section Title & Timestamp
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(30, 41, 59);
+    doc.text(cleanTitle, 40, 78);
+
+    const now = new Date();
+    const dataStr = now.toLocaleDateString('pt-BR');
+    const horaStr = now.toLocaleTimeString('pt-BR');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `Gerado em ${dataStr} às ${horaStr} • ${data.length} ${data.length === 1 ? 'registro' : 'registros'}`,
+      40,
+      93
+    );
+
+    // Prepare table headers and body
+    const head = [columns.map((c) => c.label)];
+    const body = data.map((item) =>
+      columns.map((c) => {
+        const val = c.accessor ? c.accessor(item) : item[c.key] ?? '';
+        return val !== null && val !== undefined ? String(val) : '';
+      })
+    );
+
+    autoTable(doc, {
+      startY: 108,
+      head,
+      body,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: columns.length > 7 ? 8 : 8.5,
+        cellPadding: 5,
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.5,
+      },
+      headStyles: {
+        fillColor: [30, 41, 59],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: columns.length > 7 ? 8 : 8.5,
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      margin: { left: 40, right: 40, bottom: 40 },
+      didDrawPage: (dataHook) => {
+        const pageCount = doc.internal.getNumberOfPages();
+        const currentPage = dataHook.pageNumber;
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Clínica Endodiagnose — Documento gerado automaticamente • Página ${currentPage} de ${pageCount}`,
+          40,
+          pageHeight - 20
+        );
+      },
+    });
+
+    const safeFilename = `${cleanTitle
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_-]/g, '_')}_${now.toISOString().slice(0, 10)}.pdf`;
+
+    doc.save(safeFilename);
+  } catch (err) {
+    console.error('Erro ao gerar PDF nativo:', err);
+    fallbackHtmlPrint(data, columns, title);
+  }
 }
 
 export function downloadBlob(blob, filename) {
