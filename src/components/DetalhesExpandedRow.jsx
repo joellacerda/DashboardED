@@ -4,6 +4,7 @@ import {
   formatCurrency,
   roundCurrency,
   getInstallmentLabels,
+  parsePercentOrDefault,
 } from '../utils/helpers';
 
 export default function DetalhesExpandedRow({ item, period }) {
@@ -145,13 +146,13 @@ export default function DetalhesExpandedRow({ item, period }) {
                       <>
                         <div className="expanded-detail-item">
                           <span className="expanded-detail-label">
-                            {item.medico || 'Médico 1'} ({item.porcentagemMedico1 ?? 50}%)
+                            {item.medico || 'Médico 1'} ({parsePercentOrDefault(item.porcentagemMedico1, 50)}%)
                           </span>
                           <span className="expanded-detail-value">
                             {formatCurrency(
                               roundCurrency(
                                 (Number(item.honorariosMedicos || 0) *
-                                  (Number(item.porcentagemMedico1) ?? 50)) /
+                                  parsePercentOrDefault(item.porcentagemMedico1, 50)) /
                                   100
                               )
                             )}
@@ -159,13 +160,13 @@ export default function DetalhesExpandedRow({ item, period }) {
                         </div>
                         <div className="expanded-detail-item">
                           <span className="expanded-detail-label">
-                            {item.medico2 || 'Médico 2'} ({item.porcentagemMedico2 ?? 50}%)
+                            {item.medico2 || 'Médico 2'} ({parsePercentOrDefault(item.porcentagemMedico2, 50)}%)
                           </span>
                           <span className="expanded-detail-value">
                             {formatCurrency(
                               roundCurrency(
                                 (Number(item.honorariosMedicos || 0) *
-                                  (Number(item.porcentagemMedico2) ?? 50)) /
+                                  parsePercentOrDefault(item.porcentagemMedico2, 50)) /
                                   100
                               )
                             )}

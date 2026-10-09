@@ -6,6 +6,7 @@ import {
   getHonorarioMedicoInPeriod,
   migrateLegacyPayment,
   getInstallmentPeriods,
+  getExamAllocationInPeriod,
   navigateAcquisitionPeriod,
   downloadBlob,
 } from './helpers';
@@ -55,7 +56,6 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     if (exam.isConvenio) return;
 
     const pagamentos = migrateLegacyPayment(exam);
-    const totalParcelas = pagamentos.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
 
     let parcelasNoPeriodo = 0;
     let valorRecebidoNoPeriodo = 0;
@@ -95,15 +95,22 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     }
 
     if (parcelasNoPeriodo > 0) {
-      const ratio = totalParcelasExameSafe(totalParcelas, parcelasNoPeriodo);
+      // Deduções alocadas por cascata: o que entra à vista absorve primeiro; taxa de cartão
+      // só nas parcelas do cartão; o excedente é dividido igualmente entre as parcelas.
+      const alloc = getExamAllocationInPeriod(exam, period);
       faturamentoParticulares += valorRecebidoNoPeriodo;
-      deducoesTaxasCartao += (Number(exam.valorRetidoTaxas) || 0) * ratio;
-      deducoesImpostosNF += (Number(exam.valorNotaFiscal) || 0) * ratio;
-      custosBiopsias += (Number(exam.valorBiopsia) || 0) * ratio;
-      custosAcessorios += (exam.acessorioParaMedico ? 0 : Number(exam.valorAcessorios) || 0) * ratio;
-      custosAnestesistas += (Number(exam.valorAnestesista) || 0) * ratio;
+      deducoesTaxasCartao += alloc.taxaCartao;
+      deducoesImpostosNF += alloc.cats.nf;
+      custosBiopsias += alloc.cats.biopsia;
+      custosAcessorios += alloc.cats.acessorios;
+      custosAnestesistas += alloc.cats.anestesista;
       honorariosParticulares += getHonorarioInPeriod(exam, period);
-      receitaClinicaParticulares += (Number(exam.taxaClinica) || 0) * ratio;
+    }
+
+    // Taxa de clínica: para fins de fluxo de caixa, entra integralmente no período do exame
+    // (nos honorários ela é diluída nas parcelas — ver getExamParcelAllocations).
+    if (isDateInPeriod(exam.data, period)) {
+      receitaClinicaParticulares += Number(exam.taxaClinica) || 0;
     }
   });
 
@@ -369,11 +376,6 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     margemLiquidaPercent: Math.round(margemLiquidaPercent * 10) / 10,
     isSuperavit: resultadoLiquidoClinica >= 0,
   };
-}
-
-function totalParcelasExameSafe(totalParcelas, parcelasNoPeriodo) {
-  if (totalParcelas <= 0) return 1;
-  return parcelasNoPeriodo / totalParcelas;
 }
 
 /**

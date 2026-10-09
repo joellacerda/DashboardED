@@ -158,7 +158,7 @@ export function isDateInPeriod(dateStr, period) {
 export function getMonthRange(year, month) {
   const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
   const lastDay = new Date(year, month + 1, 0).getDate();
-  const end = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`;
+  const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   return { start, end };
 }
 
@@ -179,6 +179,14 @@ export function isCreditCardPayment(formaPagamento, numParcelas) {
     return true;
   }
   return false;
+}
+
+/**
+ * Pagamento em cartão de débito (entra no período corrente, mas paga taxa de cartão).
+ */
+export function isDebitCardPayment(formaPagamento) {
+  const fp = String(formaPagamento || '').toLowerCase();
+  return fp.includes('débito') || fp.includes('debito');
 }
 
 /**
@@ -217,10 +225,13 @@ export function getInstallmentPeriods(examDate, numParcelas, formaPagamento) {
   const monthOffset = isCredit ? 1 : 0;
 
   for (let i = 0; i < n; i++) {
+    const targetMonth = baseDate.getMonth() + monthOffset + i;
+    // Limita o dia ao último dia do mês de destino (ex.: 31/jan + 1 mês => 28/fev, sem overflow para março)
+    const lastDayOfTarget = new Date(baseDate.getFullYear(), targetMonth + 1, 0).getDate();
     const refDate = new Date(
       baseDate.getFullYear(),
-      baseDate.getMonth() + monthOffset + i,
-      baseDate.getDate() || 16
+      targetMonth,
+      Math.min(baseDate.getDate(), lastDayOfTarget)
     );
     periods.push(getAcquisitionPeriod(refDate));
   }
@@ -243,30 +254,208 @@ export function getAllInstallmentPeriods(exam) {
 }
 
 /**
+ * Distribui recebimentos e deduções de um exame pelas parcelas/períodos.
+ *
+ * Regras:
+ *  - Taxa de cartão (valorRetidoTaxas) recai apenas sobre o valor pago no cartão
+ *    (crédito e débito), proporcional ao valor de cada parcela. A taxa do crédito
+ *    acompanha as parcelas; a do débito fica no período corrente. Se não houver
+ *    cartão, a taxa entra no período corrente.
+ *  - As demais deduções (nota fiscal, biópsia, acessórios, anestesista, taxa de clínica)
+ *    caem primeiro sobre os pagamentos que entram no período corrente (Pix, débito,
+ *    espécie...), já líquidos da taxa de débito. O que esses pagamentos não cobrirem é
+ *    dividido igualmente entre as parcelas do crédito. Sem crédito, tudo fica no
+ *    período corrente.
+ *  - A taxa de clínica entra na cascata apenas para fins de honorários; no fluxo de caixa
+ *    ela é integral no período do exame (ver relatório consolidado).
+ *
+ * @param {object} exam - The exam detail record
+ * @returns {Array<{start:string,end:string,label:string,recebido:number,taxaCartao:number,deducoes:number,cats:object}>}
+ *   um item por parcela. `cats` traz a parte de cada categoria de dedução (nf, biopsia,
+ *   acessorios, anestesista, clinica) alocada naquela parcela.
+ */
+export function getExamParcelAllocations(exam) {
+  const pagamentos = migrateLegacyPayment(exam);
+  const parcelas = [];
+  for (const pag of pagamentos) {
+    const n = Math.max(1, Number(pag.parcelas) || 1);
+    const credit = isCreditCardPayment(pag.forma, n);
+    const debit = !credit && isDebitCardPayment(pag.forma);
+    const periods = getInstallmentPeriods(exam.data, n, pag.forma);
+    const valParcela = (Number(pag.valor) || 0) / n;
+    for (const p of periods) {
+      parcelas.push({ start: p.start, end: p.end, label: p.label, credit, debit, recebido: valParcela });
+    }
+  }
+  if (parcelas.length === 0) return [];
+
+  const credit = parcelas.filter((p) => p.credit);
+  const imediatas = parcelas.filter((p) => !p.credit);
+  const cartao = parcelas.filter((p) => p.credit || p.debit);
+  const cartaoTotal = cartao.reduce((s, p) => s + p.recebido, 0);
+  const imediatoTotal = imediatas.reduce((s, p) => s + p.recebido, 0);
+
+  const taxaCartao = Number(exam.valorRetidoTaxas) || 0;
+  const cats = {
+    nf: Number(exam.valorNotaFiscal) || 0,
+    biopsia: Number(exam.valorBiopsia) || 0,
+    acessorios: exam.acessorioParaMedico ? 0 : Number(exam.valorAcessorios) || 0,
+    anestesista: Number(exam.valorAnestesista) || 0,
+    clinica: Number(exam.taxaClinica) || 0,
+  };
+  const totalDeducoes = Object.values(cats).reduce((s, v) => s + v, 0);
+
+  parcelas.forEach((p) => {
+    p.taxaCartao = 0;
+    p.deducoes = 0;
+  });
+
+  // Taxa de cartão: apenas sobre o valor pago no cartão (crédito e débito), proporcional
+  // ao valor. Sem cartão, entra no período corrente (pagamentos à vista).
+  const taxaAlvo = cartao.length > 0 ? cartao : imediatas;
+  const taxaAlvoTotal = cartao.length > 0 ? cartaoTotal : imediatoTotal;
+  taxaAlvo.forEach((p) => {
+    const peso = taxaAlvoTotal > 0 ? p.recebido / taxaAlvoTotal : 1 / taxaAlvo.length;
+    p.taxaCartao = taxaCartao * peso;
+  });
+
+  // Demais deduções: cascata (à vista primeiro, já líquido da taxa de débito;
+  // o restante é dividido igualmente entre as parcelas do crédito)
+  const taxaNoImediato = imediatas.reduce((s, p) => s + p.taxaCartao, 0);
+  const capacidade = Math.max(0, imediatoTotal - taxaNoImediato);
+  const absorvido = credit.length === 0 ? totalDeducoes : Math.min(totalDeducoes, capacidade);
+  const restante = totalDeducoes - absorvido;
+
+  imediatas.forEach((p) => {
+    const peso = imediatoTotal > 0 ? p.recebido / imediatoTotal : 1 / imediatas.length;
+    p.deducoes = absorvido * peso;
+  });
+  if (credit.length > 0) {
+    // Se não há pagamento à vista, nada foi absorvido e `restante` = totalDeducoes
+    credit.forEach((p) => {
+      p.deducoes = restante / credit.length;
+    });
+  }
+
+  return parcelas.map((p) => {
+    const fator = totalDeducoes > 0 ? p.deducoes / totalDeducoes : 0;
+    return {
+      start: p.start,
+      end: p.end,
+      label: p.label,
+      recebido: p.recebido,
+      taxaCartao: p.taxaCartao,
+      deducoes: p.deducoes,
+      cats: {
+        nf: cats.nf * fator,
+        biopsia: cats.biopsia * fator,
+        acessorios: cats.acessorios * fator,
+        anestesista: cats.anestesista * fator,
+        clinica: cats.clinica * fator,
+      },
+    };
+  });
+}
+
+/**
+ * Totais de um exame que caem em um determinado período de apuração
+ * (recebido, taxa de cartão e cada categoria de dedução).
+ * @returns {{parcelas:number,recebido:number,taxaCartao:number,deducoes:number,cats:object}}
+ */
+export function getExamAllocationInPeriod(exam, targetPeriod) {
+  const result = {
+    parcelas: 0,
+    recebido: 0,
+    taxaCartao: 0,
+    deducoes: 0,
+    cats: { nf: 0, biopsia: 0, acessorios: 0, anestesista: 0, clinica: 0 },
+  };
+  for (const p of getExamParcelAllocations(exam)) {
+    if (p.start !== targetPeriod.start || p.end !== targetPeriod.end) continue;
+    result.parcelas += 1;
+    result.recebido += p.recebido;
+    result.taxaCartao += p.taxaCartao;
+    result.deducoes += p.deducoes;
+    for (const k of Object.keys(result.cats)) result.cats[k] += p.cats[k];
+  }
+  return result;
+}
+
+/**
+ * Cronograma de honorários de um exame: um item por período de apuração em que haja
+ * recebimento, em ordem cronológica.
+ *
+ * O honorário de cada período é o que sobra do que foi recebido nele depois de
+ * aplicadas as deduções alocadas (ver {@link getExamParcelAllocations}). O valor
+ * gravado em `honorariosMedicos` continua sendo o total: o cálculo apenas define
+ * a proporção de cada período, de modo que a soma de todos os períodos é sempre
+ * igual ao total. Períodos negativos são zerados.
+ *
+ * Fallback (sem valores de pagamento informados): divide igualmente entre as
+ * formas de pagamento e, dentro de cada uma, igualmente entre as parcelas.
+ * @param {object} exam - The exam detail record
+ * @returns {Array<{start:string,end:string,label:string,honorario:number}>}
+ */
+export function getHonorarioSchedule(exam) {
+  const totalHonorarios = Number(exam.honorariosMedicos) || 0;
+  const parcelas = getExamParcelAllocations(exam);
+  if (parcelas.length === 0) return [];
+
+  const byPeriod = new Map();
+  for (const p of parcelas) {
+    const entry = byPeriod.get(p.start) || { start: p.start, end: p.end, label: p.label, net: 0, fallback: 0 };
+    entry.net += p.recebido - p.taxaCartao - p.deducoes;
+    byPeriod.set(p.start, entry);
+  }
+  const entries = Array.from(byPeriod.values()).sort((a, b) => a.start.localeCompare(b.start));
+  const totalNet = entries.reduce((s, e) => s + Math.max(0, e.net), 0);
+
+  if (totalNet > 0) {
+    entries.forEach((e) => {
+      e.honorario = roundCurrency((totalHonorarios * Math.max(0, e.net)) / totalNet);
+    });
+  } else {
+    // Fallback: sem valores informados
+    const pagamentos = migrateLegacyPayment(exam);
+    for (const pag of pagamentos) {
+      const n = Math.max(1, Number(pag.parcelas) || 1);
+      const porParcela = totalHonorarios / pagamentos.length / n;
+      for (const period of getInstallmentPeriods(exam.data, n, pag.forma)) {
+        const e = byPeriod.get(period.start);
+        if (e) e.fallback += porParcela;
+      }
+    }
+    entries.forEach((e) => {
+      e.honorario = roundCurrency(e.fallback);
+    });
+  }
+
+  // Ajusta centavos de arredondamento no último período com honorário
+  const soma = entries.reduce((s, e) => s + e.honorario, 0);
+  const diff = roundCurrency(totalHonorarios - soma);
+  if (diff !== 0 && Math.abs(diff) < 0.1 * entries.length + 0.01) {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].honorario > 0) {
+        entries[i].honorario = roundCurrency(entries[i].honorario + diff);
+        break;
+      }
+    }
+  }
+
+  return entries.map(({ start, end, label, honorario }) => ({ start, end, label, honorario }));
+}
+
+/**
  * Calculate how much of an exam's honorário falls in a given acquisition period.
- * Honorários are evenly distributed across installment periods.
+ * Ver {@link getHonorarioSchedule} para a regra.
  * @param {object} exam - The exam detail record
  * @param {object} targetPeriod - The acquisition period to check against
  * @returns {number} The honorário amount attributable to this period
  */
 export function getHonorarioInPeriod(exam, targetPeriod) {
-  const totalHonorarios = Number(exam.honorariosMedicos) || 0;
-  if (totalHonorarios === 0) return 0;
-
-  const pagamentos = migrateLegacyPayment(exam);
-  const totalParcelas = pagamentos.reduce((s, p) => s + Math.max(1, Number(p.parcelas) || 1), 0);
-  const honorarioPorParcela = totalHonorarios / totalParcelas;
-
-  let total = 0;
-  for (const pag of pagamentos) {
-    const periods = getInstallmentPeriods(exam.data, pag.parcelas, pag.forma);
-    for (const period of periods) {
-      if (period.start === targetPeriod.start && period.end === targetPeriod.end) {
-        total += honorarioPorParcela;
-      }
-    }
-  }
-  return roundCurrency(total);
+  if (!(Number(exam.honorariosMedicos) || 0)) return 0;
+  const entry = getHonorarioSchedule(exam).find((e) => e.start === targetPeriod.start);
+  return entry ? entry.honorario : 0;
 }
 
 /**
@@ -279,6 +468,12 @@ export function getHonorarioInPeriod(exam, targetPeriod) {
 export function examHasInstallmentInPeriod(exam, targetPeriod) {
   const allPeriods = getAllInstallmentPeriods(exam);
   return allPeriods.some((p) => p.start === targetPeriod.start && p.end === targetPeriod.end);
+}
+
+// Converte para número; valores vazios/inválidos (null, undefined, '', 'abc') usam o padrão.
+export function parsePercentOrDefault(value, fallback) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 /**
@@ -312,7 +507,7 @@ export function getHonorarioMedicoInPeriod(exam, doctorName, targetPeriod) {
       const val1 = Number(exam.valorMedico1) || 0;
       return roundCurrency(totalHonorarios > 0 ? (periodHonorario * val1) / totalHonorarios : periodHonorario * 0.5);
     }
-    const pct1 = Number(exam.porcentagemMedico1) ?? 50;
+    const pct1 = parsePercentOrDefault(exam.porcentagemMedico1, 50);
     return roundCurrency((periodHonorario * pct1) / 100);
   }
 
@@ -321,7 +516,7 @@ export function getHonorarioMedicoInPeriod(exam, doctorName, targetPeriod) {
       const val2 = Number(exam.valorMedico2) || 0;
       return roundCurrency(totalHonorarios > 0 ? (periodHonorario * val2) / totalHonorarios : periodHonorario * 0.5);
     }
-    const pct2 = Number(exam.porcentagemMedico2) ?? 50;
+    const pct2 = parsePercentOrDefault(exam.porcentagemMedico2, 50);
     return roundCurrency((periodHonorario * pct2) / 100);
   }
 

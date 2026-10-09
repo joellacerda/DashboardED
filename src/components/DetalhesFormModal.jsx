@@ -12,6 +12,9 @@ import {
   migrateLegacyPayment,
   isCreditCardPayment,
   getInstallmentLabel,
+  getHonorarioSchedule,
+  getHonorarioMedicoInPeriod,
+  parsePercentOrDefault,
 } from '../utils/helpers';
 import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
@@ -490,31 +493,22 @@ export default function DetalhesFormModal({
     0
   );
 
-  const formHonorarioMensal = roundCurrency(
-    Number(form.honorariosMedicos || 0) / Math.max(1, totalParcelasForm)
-  );
+  // Distribuição por período (mesma regra usada em Detalhes, Visão Geral e Relatório)
+  const honorarioSchedule = form.data ? getHonorarioSchedule(form) : [];
 
   const totalHonForm = Number(form.honorariosMedicos || 0);
   let honDoc1Total = 0;
   let honDoc2Total = 0;
-  let honDoc1Mensal = 0;
-  let honDoc2Mensal = 0;
 
   if (form.temDivisao && form.medico2) {
     if (form.divisaoTipo === 'valor') {
-      const val1 = Number(form.valorMedico1) || 0;
-      const val2 = Number(form.valorMedico2) || 0;
-      honDoc1Total = roundCurrency(val1);
-      honDoc2Total = roundCurrency(val2);
-      honDoc1Mensal = roundCurrency(val1 / Math.max(1, totalParcelasForm));
-      honDoc2Mensal = roundCurrency(val2 / Math.max(1, totalParcelasForm));
+      honDoc1Total = roundCurrency(Number(form.valorMedico1) || 0);
+      honDoc2Total = roundCurrency(Number(form.valorMedico2) || 0);
     } else {
-      const pct1 = Number(form.porcentagemMedico1 ?? 50);
-      const pct2 = Number(form.porcentagemMedico2 ?? 50);
+      const pct1 = parsePercentOrDefault(form.porcentagemMedico1, 50);
+      const pct2 = parsePercentOrDefault(form.porcentagemMedico2, 50);
       honDoc1Total = roundCurrency((totalHonForm * pct1) / 100);
       honDoc2Total = roundCurrency((totalHonForm * pct2) / 100);
-      honDoc1Mensal = roundCurrency((formHonorarioMensal * pct1) / 100);
-      honDoc2Mensal = roundCurrency((formHonorarioMensal * pct2) / 100);
     }
   }
 
@@ -1093,13 +1087,32 @@ export default function DetalhesFormModal({
             <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
               📅 Distribuição de Honorários
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                Honorário por parcela ({totalParcelasForm}x):
-              </span>
-              <span style={{ fontWeight: 700, color: 'var(--color-blue)', fontSize: 'var(--text-lg)' }}>
-                {formatCurrency(formHonorarioMensal)}
-              </span>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+              O que entra à vista (Pix, débito, espécie) absorve primeiro as deduções; a taxa de cartão recai só sobre o valor pago no cartão e o que faltar é dividido entre as parcelas do crédito.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              {honorarioSchedule.map((row) => {
+                const doc1 = form.temDivisao && form.medico2 ? getHonorarioMedicoInPeriod(form, form.medico, row) : null;
+                const doc2 = form.temDivisao && form.medico2 ? getHonorarioMedicoInPeriod(form, form.medico2, row) : null;
+                return (
+                  <div
+                    key={row.start}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}
+                  >
+                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{row.label}</span>
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
+                      {doc1 !== null && (
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                          {form.medico || 'Médico 1'}: {formatCurrency(doc1)} · {form.medico2 || 'Médico 2'}: {formatCurrency(doc2)}
+                        </span>
+                      )}
+                      <span style={{ fontWeight: 700, color: 'var(--color-blue)', fontSize: 'var(--text-base)' }}>
+                        {formatCurrency(row.honorario)}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             {form.data &&
               (form.pagamentos || []).map((pag, idx) => {
@@ -1125,7 +1138,7 @@ export default function DetalhesFormModal({
                 }}
               >
                 <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  👥 Divisão entre Médicos ({totalParcelasForm}x parcelas):
+                  👥 Divisão entre Médicos (total):
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.2rem' }}>
                   <div style={{ background: 'var(--bg-input)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
@@ -1135,9 +1148,6 @@ export default function DetalhesFormModal({
                     <div style={{ fontWeight: 700, color: 'var(--color-emerald)', fontSize: 'var(--text-sm)', marginTop: '0.15rem' }}>
                       {formatCurrency(honDoc1Total)} <span style={{ fontSize: 'var(--text-xs)', fontWeight: 'normal', color: 'var(--text-muted)' }}>total</span>
                     </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      {formatCurrency(honDoc1Mensal)} / parcela
-                    </div>
                   </div>
                   <div style={{ background: 'var(--bg-input)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1145,9 +1155,6 @@ export default function DetalhesFormModal({
                     </div>
                     <div style={{ fontWeight: 700, color: 'var(--color-emerald)', fontSize: 'var(--text-sm)', marginTop: '0.15rem' }}>
                       {formatCurrency(honDoc2Total)} <span style={{ fontSize: 'var(--text-xs)', fontWeight: 'normal', color: 'var(--text-muted)' }}>total</span>
-                    </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      {formatCurrency(honDoc2Mensal)} / parcela
                     </div>
                   </div>
                 </div>
@@ -1163,7 +1170,7 @@ export default function DetalhesFormModal({
                 color: 'var(--color-emerald)',
               }}
             >
-              💡 A taxa de clínica ({formatCurrency(form.taxaClinica)}) entra integralmente no período em que o exame foi realizado.
+              💡 A taxa de clínica ({formatCurrency(form.taxaClinica)}) entra integralmente no fluxo de caixa do período em que o exame foi realizado; no cálculo dos honorários ela é diluída nas parcelas.
             </div>
           </div>
         )}
