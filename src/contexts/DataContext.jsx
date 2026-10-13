@@ -22,7 +22,9 @@ import {
   addAuditLog as storageAddAuditLog,
   getAuditLogs as storageGetAuditLogs,
   clearAuditLogs as storageClearAuditLogs,
+  MODULES,
 } from '../utils/storage';
+import { getActiveMedicosOptions } from '../utils/helpers';
 
 const DataContext = createContext(null);
 
@@ -129,8 +131,8 @@ export function DataProvider({ children }) {
   const syncConvenioToDetalhes = useCallback((convenioItem) => {
     const result = storageSyncConvenioToDetalhes(convenioItem);
     // Atualiza imediatamente detalhesExames e examesConvenio no estado
-    const freshDetalhes = getData('detalhesExames');
-    const freshConvenios = getData('examesConvenio');
+    const freshDetalhes = getData(MODULES.detalhesExames);
+    const freshConvenios = getData(MODULES.examesConvenio);
     setDataState((prev) => ({
       ...prev,
       detalhesExames: freshDetalhes,
@@ -142,7 +144,7 @@ export function DataProvider({ children }) {
   // Sincronização geral de convênios para detalhes
   const syncAllConveniosToDetalhes = useCallback(() => {
     storageSyncAllConveniosToDetalhes();
-    const freshDetalhes = getData('detalhesExames');
+    const freshDetalhes = getData(MODULES.detalhesExames);
     setDataState((prev) => ({
       ...prev,
       detalhesExames: freshDetalhes,
@@ -152,7 +154,7 @@ export function DataProvider({ children }) {
   // Remoção de convênio sincronizado em detalhes
   const removeConvenioFromDetalhes = useCallback((convenioId) => {
     storageRemoveConvenioFromDetalhes(convenioId);
-    const freshDetalhes = getData('detalhesExames');
+    const freshDetalhes = getData(MODULES.detalhesExames);
     setDataState((prev) => ({
       ...prev,
       detalhesExames: freshDetalhes,
@@ -170,7 +172,7 @@ export function DataProvider({ children }) {
 
   const saveCronogramaSlot = useCallback((slot) => {
     const saved = storageSaveCronogramaSlot(slot);
-    const freshSlots = getData('cronogramaSalas');
+    const freshSlots = getData(MODULES.cronogramaSalas);
     setDataState((prev) => ({
       ...prev,
       cronogramaSalas: freshSlots,
@@ -191,7 +193,7 @@ export function DataProvider({ children }) {
 
   const replicateWeekSchedule = useCallback((sourceDays, targetDays, overwrite) => {
     const result = storageReplicateWeekSchedule(sourceDays, targetDays, overwrite);
-    const freshSlots = getData('cronogramaSalas');
+    const freshSlots = getData(MODULES.cronogramaSalas);
     setDataState((prev) => ({
       ...prev,
       cronogramaSalas: freshSlots,
@@ -200,50 +202,16 @@ export function DataProvider({ children }) {
   }, []);
 
   // Lista dinâmica e reativa de médicos ativos para seleção em exames e cronograma
-  const activeMedicosOptions = useMemo(() => {
-    const list = data.medicos || [];
-    const inactiveNames = new Set(
-      list
-        .filter((m) => m.ativo === false)
-        .map((m) => m.nome.trim().toUpperCase())
-    );
-    const activeSet = new Set(
-      list
-        .filter((m) => m.ativo !== false)
-        .map((m) => m.nome.trim().toUpperCase())
-    );
-
-    const examesList = data.exames || [];
-    const detalhesList = data.detalhesExames || [];
-    const convsList = data.examesConvenio || [];
-
-    examesList.forEach((e) => {
-      if (e.medico && e.medico.trim()) {
-        const name = e.medico.trim().toUpperCase();
-        if (!inactiveNames.has(name)) activeSet.add(name);
-      }
-    });
-
-    detalhesList.forEach((d) => {
-      if (d.medico && d.medico.trim()) {
-        const name = d.medico.trim().toUpperCase();
-        if (!inactiveNames.has(name)) activeSet.add(name);
-      }
-      if (d.medico2 && d.medico2.trim()) {
-        const name = d.medico2.trim().toUpperCase();
-        if (!inactiveNames.has(name)) activeSet.add(name);
-      }
-    });
-
-    convsList.forEach((c) => {
-      if (c.medico && c.medico.trim()) {
-        const name = c.medico.trim().toUpperCase();
-        if (!inactiveNames.has(name)) activeSet.add(name);
-      }
-    });
-
-    return Array.from(activeSet).sort((a, b) => a.localeCompare(b));
-  }, [data.medicos, data.exames, data.detalhesExames, data.examesConvenio]);
+  const activeMedicosOptions = useMemo(
+    () =>
+      getActiveMedicosOptions({
+        medicos: data.medicos,
+        exames: data.exames,
+        detalhesExames: data.detalhesExames,
+        examesConvenio: data.examesConvenio,
+      }),
+    [data.medicos, data.exames, data.detalhesExames, data.examesConvenio]
+  );
 
   const refreshStorageInfo = useCallback(() => {
     setStorageInfo(getStorageUsageInfo());
@@ -266,7 +234,7 @@ export function DataProvider({ children }) {
   const revertConvenioOverride = useCallback(
     (detalhesId) => {
       const res = storageRevertConvenioOverride(detalhesId);
-      refreshModule('detalhesExames');
+      refreshModule(MODULES.detalhesExames);
       return res;
     },
     [refreshModule]
@@ -275,7 +243,7 @@ export function DataProvider({ children }) {
   const addAuditLog = useCallback(
     (entry) => {
       const res = storageAddAuditLog(entry);
-      refreshModule('auditLogs');
+      refreshModule(MODULES.auditLogs);
       return res;
     },
     [refreshModule]
@@ -283,7 +251,7 @@ export function DataProvider({ children }) {
 
   const clearAuditLogs = useCallback(() => {
     storageClearAuditLogs();
-    refreshModule('auditLogs');
+    refreshModule(MODULES.auditLogs);
   }, [refreshModule]);
 
   const value = useMemo(

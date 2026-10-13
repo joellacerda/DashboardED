@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
-  roundCurrency,
   formatDate,
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
@@ -23,6 +22,7 @@ import DetalhesExpandedRow from '../components/DetalhesExpandedRow';
 import DetalhesFormModal from '../components/DetalhesFormModal';
 import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
+import { MODULES } from '../utils/storage';
 
 export default function DetalhesPage({ prefillData, onClearPrefill }) {
   const toast = useToast();
@@ -181,16 +181,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     [examsInPeriod]
   );
 
-  const totalNotaFiscal = useMemo(
-    () => examsInPeriod.reduce((s, d) => s + Number(d.valorNotaFiscal || 0), 0),
-    [examsInPeriod]
-  );
-
-  const totalAnestesista = useMemo(
-    () => examsInPeriod.reduce((s, d) => s + Number(d.valorAnestesista || 0), 0),
-    [examsInPeriod]
-  );
-
   // Honorários: distributed monthly amounts that fall in this period
   const totalHonorariosPeriodo = useMemo(
     () => filtered.reduce((s, d) => s + getHonorarioInPeriod(d, period), 0),
@@ -217,8 +207,8 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
           f.detalheId === `${deleteId}_acessorios` ||
           f.detalheId === `${deleteId}_biopsia`
       );
-      linked.forEach((entry) => deleteItem('fluxoCaixa', entry.id));
-      deleteItem('detalhesExames', deleteId);
+      linked.forEach((entry) => deleteItem(MODULES.fluxoCaixa, entry.id));
+      deleteItem(MODULES.detalhesExames, deleteId);
       refresh();
       toast.success('Registro de detalhes excluído.');
     }

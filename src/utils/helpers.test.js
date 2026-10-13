@@ -8,6 +8,7 @@ import {
   getMonthRange,
   getExamAllocationInPeriod,
   getHonorarioSchedule,
+  getActiveMedicosOptions,
 } from './helpers';
 
 const d = (y, m, day) => new Date(y, m - 1, day);
@@ -361,5 +362,26 @@ describe('robustez com dados de formulário (strings / campos vazios)', () => {
     };
     const rows = getHonorarioSchedule(e);
     expect(rows.every((r) => r.honorario >= 0)).toBe(true);
+  });
+});
+
+describe('getActiveMedicosOptions', () => {
+  it('une cadastrados ativos e médicos de registros, sem inativos e sem duplicatas', () => {
+    const lista = getActiveMedicosOptions({
+      medicos: [
+        { nome: 'ana', ativo: true },
+        { nome: 'Bruno', ativo: false },
+        { nome: 'Carla' },
+      ],
+      exames: [{ medico: ' ana ' }, { medico: 'Bruno' }, { medico: 'Diego' }],
+      detalhesExames: [{ medico: 'Eva', medico2: 'bruno' }, { medico: '', medico2: undefined }],
+      examesConvenio: [{ medico: 'diego' }, { medico: 'Fábio' }],
+    });
+    expect(lista).toEqual(['ANA', 'CARLA', 'DIEGO', 'EVA', 'FÁBIO']);
+  });
+
+  it('aceita dados ausentes ou nome inválido', () => {
+    expect(getActiveMedicosOptions()).toEqual([]);
+    expect(getActiveMedicosOptions({ medicos: [{ nome: undefined }] })).toEqual([]);
   });
 });

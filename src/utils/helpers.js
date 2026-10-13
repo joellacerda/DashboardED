@@ -912,3 +912,32 @@ export function navigateWeek(currentMondayISO, weeksDelta) {
   return getWeekMondayToSaturday(base);
 }
 
+
+/**
+ * Lista ordenada de médicos disponíveis para seleção em exames e cronograma.
+ * Inclui os médicos cadastrados ativos e os que aparecem em registros históricos,
+ * exceto os marcados com `ativo === false`.
+ * @param {{medicos?:Array, exames?:Array, detalhesExames?:Array, examesConvenio?:Array}} data
+ * @returns {string[]}
+ */
+export function getActiveMedicosOptions({ medicos = [], exames = [], detalhesExames = [], examesConvenio = [] } = {}) {
+  const normalize = (name) => (typeof name === 'string' ? name.trim().toUpperCase() : '');
+
+  const inactive = new Set(medicos.filter((m) => m.ativo === false).map((m) => normalize(m.nome)));
+  const active = new Set(medicos.filter((m) => m.ativo !== false).map((m) => normalize(m.nome)));
+  active.delete('');
+
+  const addIfActive = (name) => {
+    const n = normalize(name);
+    if (n && !inactive.has(n)) active.add(n);
+  };
+
+  exames.forEach((e) => addIfActive(e.medico));
+  detalhesExames.forEach((d) => {
+    addIfActive(d.medico);
+    addIfActive(d.medico2);
+  });
+  examesConvenio.forEach((c) => addIfActive(c.medico));
+
+  return Array.from(active).sort((a, b) => a.localeCompare(b));
+}

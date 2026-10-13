@@ -51,13 +51,19 @@ function ToastItem({ toast, onRemove }) {
     }, 250);
   };
 
+  // Mantém sempre a versão mais recente de handleDismiss sem reiniciar o timer a cada render
+  const handleDismissRef = useRef(handleDismiss);
+  useEffect(() => {
+    handleDismissRef.current = handleDismiss;
+  });
+
   useEffect(() => {
     if (!toast.duration || toast.duration <= 0) return;
 
     const startTimer = () => {
       startTimeRef.current = Date.now();
       timerRef.current = setTimeout(() => {
-        handleDismiss();
+        handleDismissRef.current();
       }, remainingRef.current);
     };
 

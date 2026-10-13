@@ -7,7 +7,6 @@ import {
   migrateLegacyPayment,
   getInstallmentPeriods,
   getExamAllocationInPeriod,
-  navigateAcquisitionPeriod,
   downloadBlob,
 } from './helpers';
 
@@ -347,6 +346,10 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     totalDeducoesReceita: roundCurrency(totalDeducoesReceita),
     // Receita Líquida
     receitaOperacionalLiquida: roundCurrency(receitaOperacionalLiquida),
+    // Receita da clínica (taxa de clínica dos particulares: integral no período do exame;
+    // convênios: parte da clínica no faturamento lançado)
+    receitaClinicaParticulares: roundCurrency(receitaClinicaParticulares),
+    receitaClinicaConvenios: roundCurrency(receitaClinicaConvenios),
     // Repasses Médicos
     honorariosParticulares: roundCurrency(honorariosParticulares),
     honorariosConvenios: roundCurrency(honorariosConvenios),

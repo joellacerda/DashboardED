@@ -23,6 +23,7 @@ import Pagination from '../components/Pagination';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired } from '../utils/validation';
+import { MODULES } from '../utils/storage';
 
 const DEFAULT_CONVENIOS = [
   'ABERTTA SAUDE',
@@ -76,7 +77,7 @@ const columns = [
   },
 ];
 
-export default function ConveniosPage({ onNavigateToFluxo }) {
+export default function ConveniosPage() {
   const toast = useToast();
   const {
     examesConvenio: data = [],
@@ -245,10 +246,10 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
       procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
     };
     if (editId) {
-      const updated = updateItem('examesConvenio', editId, sanitizedForm);
+      const updated = updateItem(MODULES.examesConvenio, editId, sanitizedForm);
       if (updated) syncConvenioToDetalhes(updated);
     } else {
-      addItem('examesConvenio', sanitizedForm);
+      addItem(MODULES.examesConvenio, sanitizedForm);
     }
     refresh();
     setModalOpen(false);
@@ -257,7 +258,7 @@ export default function ConveniosPage({ onNavigateToFluxo }) {
 
   const handleDelete = () => {
     if (deleteId) {
-      deleteItem('examesConvenio', deleteId);
+      deleteItem(MODULES.examesConvenio, deleteId);
       removeConvenioFromDetalhes(deleteId);
       refresh();
       toast.success('Exame de convênio excluído.');

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { getItem } from '../utils/storage';
+import { getItem, MODULES } from '../utils/storage';
 import {
   formatDate,
   getTodayISO,
@@ -228,13 +228,13 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
     let savedItem = null;
     if (editId) {
-      const existingInExames = getItem('exames', editId);
+      const existingInExames = getItem(MODULES.exames, editId);
       if (existingInExames) {
-        savedItem = updateItem('exames', editId, sanitizedForm);
+        savedItem = updateItem(MODULES.exames, editId, sanitizedForm);
       } else {
-        const existingInDetalhes = getItem('detalhesExames', editId);
+        const existingInDetalhes = getItem(MODULES.detalhesExames, editId);
         if (existingInDetalhes) {
-          updateItem('detalhesExames', editId, {
+          updateItem(MODULES.detalhesExames, editId, {
             data: sanitizedForm.data,
             paciente: sanitizedForm.paciente,
             medico: sanitizedForm.medico,
@@ -242,7 +242,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
             procedimentoComplementar: sanitizedForm.procedimentoComplementar,
           });
         }
-        savedItem = addItem('exames', { ...sanitizedForm, id: editId });
+        savedItem = addItem(MODULES.exames, { ...sanitizedForm, id: editId });
       }
 
       // Also sync matching record in detalhesExames by ID or (data + paciente)
@@ -255,7 +255,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
             d.paciente.trim().toUpperCase() === sanitizedForm.paciente)
       );
       matchingDetalhes.forEach((det) => {
-        updateItem('detalhesExames', det.id, {
+        updateItem(MODULES.detalhesExames, det.id, {
           data: sanitizedForm.data,
           paciente: sanitizedForm.paciente,
           medico: sanitizedForm.medico,
@@ -264,7 +264,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         });
       });
     } else {
-      savedItem = addItem('exames', sanitizedForm);
+      savedItem = addItem(MODULES.exames, sanitizedForm);
     }
 
     refresh();
@@ -285,13 +285,13 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
   const handleDelete = () => {
     if (deleteId) {
-      const existingInExames = getItem('exames', deleteId);
+      const existingInExames = getItem(MODULES.exames, deleteId);
       if (existingInExames) {
-        deleteItem('exames', deleteId);
+        deleteItem(MODULES.exames, deleteId);
       }
-      const existingInDetalhes = getItem('detalhesExames', deleteId);
+      const existingInDetalhes = getItem(MODULES.detalhesExames, deleteId);
       if (existingInDetalhes) {
-        deleteItem('detalhesExames', deleteId);
+        deleteItem(MODULES.detalhesExames, deleteId);
       }
       refresh();
       toast.success('Exame particular excluído.');

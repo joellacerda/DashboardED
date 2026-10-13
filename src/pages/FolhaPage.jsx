@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { getItem } from '../utils/storage';
+import { getItem, MODULES } from '../utils/storage';
 import {
   formatCurrency,
   formatDate,
@@ -257,7 +257,7 @@ export default function FolhaPage() {
     if (editId) {
       const existing =
         data.find((emp) => String(emp.id) === String(editId)) ||
-        getItem('folhaPagamento', editId) ||
+        getItem(MODULES.folhaPagamento, editId) ||
         {};
 
       const updatedPeriodos = {
@@ -271,7 +271,7 @@ export default function FolhaPage() {
         periodos: updatedPeriodos,
       };
 
-      updateItem('folhaPagamento', editId, updatedEmployee);
+      updateItem(MODULES.folhaPagamento, editId, updatedEmployee);
       toast.success(`Alterações de ${nomeTrimmed} salvas com sucesso!`);
     } else {
       const newEmployee = {
@@ -282,7 +282,7 @@ export default function FolhaPage() {
         },
       };
 
-      addItem('folhaPagamento', newEmployee);
+      addItem(MODULES.folhaPagamento, newEmployee);
       toast.success(`Colaborador ${nomeTrimmed} cadastrado com sucesso!`);
     }
 
@@ -292,7 +292,7 @@ export default function FolhaPage() {
 
   const handleDelete = () => {
     if (deleteId) {
-      deleteItem('folhaPagamento', deleteId);
+      deleteItem(MODULES.folhaPagamento, deleteId);
       refresh();
       toast.success('Colaborador removido da folha.');
     }
@@ -329,7 +329,7 @@ export default function FolhaPage() {
     }
 
     setModuleData('folhaPagamento', updatedData);
-    updatedData.forEach((emp) => updateItem('folhaPagamento', emp.id, emp));
+    updatedData.forEach((emp) => updateItem(MODULES.folhaPagamento, emp.id, emp));
     toast.success(`Lançamentos de ${copiedCount} colaborador(es) copiados do período anterior!`);
   };
 
@@ -343,7 +343,7 @@ export default function FolhaPage() {
     const descricao = `FOLHA DE PAGAMENTO — ${period.label}`;
 
     if (folhaLancamentoNoCaixa) {
-      updateItem('fluxoCaixa', folhaLancamentoNoCaixa.id, {
+      updateItem(MODULES.fluxoCaixa, folhaLancamentoNoCaixa.id, {
         valor: totalFolha,
         nome: descricao,
         data: folhaLancamentoNoCaixa.data || getTodayISO(),
@@ -351,7 +351,7 @@ export default function FolhaPage() {
       });
       toast.success(`Lançamento no Fluxo de Caixa atualizado para ${formatCurrency(totalFolha)}!`);
     } else {
-      addItem('fluxoCaixa', {
+      addItem(MODULES.fluxoCaixa, {
         data: getTodayISO(),
         nome: descricao,
         categoria: 'Folha de Pagamento / Pessoal',

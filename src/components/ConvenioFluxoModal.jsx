@@ -13,6 +13,7 @@ import Modal from './Modal';
 import AutoCompleteInput from './AutoCompleteInput';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
+import { MODULES } from '../utils/storage';
 
 export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess }) {
   const toast = useToast();
@@ -236,10 +237,10 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
 
     let savedFluxoId = item.fluxoCaixaId;
     if (existingFluxo) {
-      updateItem('fluxoCaixa', existingFluxo.id, fluxoEntry);
+      updateItem(MODULES.fluxoCaixa, existingFluxo.id, fluxoEntry);
       savedFluxoId = existingFluxo.id;
     } else {
-      const added = addItem('fluxoCaixa', fluxoEntry);
+      const added = addItem(MODULES.fluxoCaixa, fluxoEntry);
       savedFluxoId = added.id;
     }
 
@@ -264,7 +265,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
       fluxoPeriodoEnd: fluxoPeriod.end,
       fluxoNome: fluxoForm.nome.trim().toUpperCase(),
     };
-    updateItem('examesConvenio', item.id, updatedItem);
+    updateItem(MODULES.examesConvenio, item.id, updatedItem);
     syncConvenioToDetalhes(updatedItem);
 
     toast.success('Partilha salva e lançada no Fluxo de Caixa!');

@@ -24,6 +24,7 @@ import {
   validateRequired,
   validatePercentageSum,
 } from '../utils/validation';
+import { MODULES } from '../utils/storage';
 
 const emptyPagamento = { forma: 'Cartão de Crédito', valor: '', parcelas: '1' };
 
@@ -331,12 +332,12 @@ export default function DetalhesFormModal({
 
     if (valorTaxa > 0) {
       if (existingTaxa) {
-        updateItem('fluxoCaixa', existingTaxa.id, entryTaxa);
+        updateItem(MODULES.fluxoCaixa, existingTaxa.id, entryTaxa);
       } else {
-        addItem('fluxoCaixa', entryTaxa);
+        addItem(MODULES.fluxoCaixa, entryTaxa);
       }
     } else if (existingTaxa) {
-      deleteItem('fluxoCaixa', existingTaxa.id);
+      deleteItem(MODULES.fluxoCaixa, existingTaxa.id);
     }
 
     // 2. Sync Valor de Acessórios
@@ -356,12 +357,12 @@ export default function DetalhesFormModal({
 
     if (acessGoesToClinic && valorAcess > 0) {
       if (existingAcess) {
-        updateItem('fluxoCaixa', existingAcess.id, entryAcess);
+        updateItem(MODULES.fluxoCaixa, existingAcess.id, entryAcess);
       } else {
-        addItem('fluxoCaixa', entryAcess);
+        addItem(MODULES.fluxoCaixa, entryAcess);
       }
     } else if (existingAcess) {
-      deleteItem('fluxoCaixa', existingAcess.id);
+      deleteItem(MODULES.fluxoCaixa, existingAcess.id);
     }
 
     // 3. Sync Valor de Biópsia
@@ -380,12 +381,12 @@ export default function DetalhesFormModal({
 
     if (valorBiop > 0) {
       if (existingBiop) {
-        updateItem('fluxoCaixa', existingBiop.id, entryBiop);
+        updateItem(MODULES.fluxoCaixa, existingBiop.id, entryBiop);
       } else {
-        addItem('fluxoCaixa', entryBiop);
+        addItem(MODULES.fluxoCaixa, entryBiop);
       }
     } else if (existingBiop) {
-      deleteItem('fluxoCaixa', existingBiop.id);
+      deleteItem(MODULES.fluxoCaixa, existingBiop.id);
     }
   };
 
@@ -452,10 +453,10 @@ export default function DetalhesFormModal({
 
     let savedItem;
     if (editItem && editItem.id) {
-      savedItem = updateItem('detalhesExames', editItem.id, sanitizedForm);
+      savedItem = updateItem(MODULES.detalhesExames, editItem.id, sanitizedForm);
     } else {
       const newItem = prefillData?.id ? { ...sanitizedForm, id: prefillData.id } : sanitizedForm;
-      savedItem = addItem('detalhesExames', newItem);
+      savedItem = addItem(MODULES.detalhesExames, newItem);
     }
 
     if (savedItem) {
@@ -471,7 +472,7 @@ export default function DetalhesFormModal({
       );
       if (matchingExames.length > 0) {
         matchingExames.forEach((ex) => {
-          updateItem('exames', ex.id, {
+          updateItem(MODULES.exames, ex.id, {
             data: savedItem.data,
             paciente: savedItem.paciente,
             medico: savedItem.medico,

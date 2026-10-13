@@ -1,24 +1,32 @@
 import Modal from './Modal';
 
-export default function ConfirmDialog({ isOpen, onClose, onConfirm, message }) {
+export default function ConfirmDialog({
+  isOpen,
+  onClose,
+  onConfirm,
+  message,
+  title = 'Confirmar',
+  confirmLabel = 'Excluir',
+  confirmVariant = 'danger',
+}) {
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Confirmar"
+      title={title || 'Confirmar'}
       footer={
         <div className="confirm-actions">
           <button className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
           <button
-            className="btn btn-danger"
+            className={`btn btn-${confirmVariant}`}
             onClick={() => {
               onConfirm();
               onClose();
             }}
           >
-            Excluir
+            {confirmLabel || 'Excluir'}
           </button>
         </div>
       }

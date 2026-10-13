@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { DataProvider, useData } from './contexts/DataContext';
 import { isCloudConfigured, initFirebase } from './services/firebase';
-import { runDataMigrations } from './utils/storage';
+import { runDataMigrations, setAuditUser } from './utils/storage';
 import AuditLogModal from './components/AuditLogModal';
 import OverviewPage from './pages/OverviewPage';
 import ExamesPage from './pages/ExamesPage';
@@ -77,9 +77,7 @@ function AppContent() {
 
   // Define usuário atual para log de auditoria
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.__currentUserEmail = user?.email || user?.displayName || 'Usuário Local';
-    }
+    setAuditUser(user?.email || user?.displayName || 'Usuário Local');
   }, [user]);
 
   // Monitora evento de limite de armazenamento atingido
@@ -196,7 +194,7 @@ function AppContent() {
       case 'exames':
         return <ExamesPage onNavigateToDetalhes={handleNavigateToDetalhes} />;
       case 'convenios':
-        return <ConveniosPage onNavigateToFluxo={() => setActiveTab('fluxo-caixa')} />;
+        return <ConveniosPage />;
       case 'fluxo-caixa':
         return <FluxoCaixaPage />;
       case 'detalhes':

@@ -48,3 +48,22 @@ describe('relatório consolidado × alocação por período', () => {
     });
   });
 });
+
+describe('receita da clínica (fluxo de caixa × honorários)', () => {
+  it('taxa de clínica entra integral no período do exame, mesmo com pagamento no cartão', () => {
+    const e = {
+      id: 'x2',
+      data: '2026-03-10', // período do exame: 16/fev–15/mar
+      medico: 'ANA',
+      pagamentos: [{ forma: 'Cartão de Crédito', valor: 600, parcelas: 3 }],
+      taxaClinica: 120,
+      honorariosMedicos: 480,
+    };
+    const rs = PERIODOS.map((p) => getConsolidatedFinancialReport({ detalhesExames: [e] }, p));
+    expect(rs[0].receitaClinicaParticulares).toBe(120); // período do exame
+    expect(rs.slice(1).every((r) => r.receitaClinicaParticulares === 0)).toBe(true);
+    // honorários, porém, só começam nas parcelas (crédito entra no período seguinte)
+    expect(rs[0].honorariosParticulares).toBe(0);
+    expect(rs[1].honorariosParticulares).toBeGreaterThan(0);
+  });
+});

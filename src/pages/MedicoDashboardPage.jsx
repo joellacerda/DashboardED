@@ -103,7 +103,6 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
   }
 
   const {
-    doctor,
     nome,
     isSocio,
     isAtivo,

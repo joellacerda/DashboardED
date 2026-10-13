@@ -13,6 +13,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import { useToast } from '../contexts/ToastContext';
+import { MODULES } from '../utils/storage';
 
 export default function RepassePage({ onNavigateToDoctor = null }) {
   const toast = useToast();
@@ -178,14 +179,14 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
 
     if (existingIndex !== -1) {
       currentMedicos[existingIndex] = { ...currentMedicos[existingIndex], socio: ajusteForm.isSocio };
-      setData('medicos', currentMedicos);
+      setData(MODULES.medicos, currentMedicos);
     } else {
       currentMedicos.push({
         id: crypto.randomUUID(),
         nome: selectedMedico.nome,
         socio: ajusteForm.isSocio,
       });
-      setData('medicos', currentMedicos);
+      setData(MODULES.medicos, currentMedicos);
     }
 
     // Save adjustment record
@@ -210,7 +211,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
       currentAjustes.push({ id: crypto.randomUUID(), ...ajusteData });
     }
 
-    setData('repassesAjustes', currentAjustes);
+    setData(MODULES.repassesAjustes, currentAjustes);
     refreshAll();
     setEditAjusteModal(false);
     toast.success('Ajustes de repasse salvos com sucesso!');
@@ -226,7 +227,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
     const existing = currentMedicos.find((m) => m.nome.trim().toUpperCase() === nomeUpper);
     if (existing) {
       if (existing.ativo === false) {
-        updateItem('medicos', existing.id, { ativo: true, socio: newMedicoSocio });
+        updateItem(MODULES.medicos, existing.id, { ativo: true, socio: newMedicoSocio });
         setNewMedicoNome('');
         refreshAll();
         toast.success('Médico reativado com sucesso!');
@@ -236,7 +237,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
       return;
     }
 
-    addItem('medicos', { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
+    addItem(MODULES.medicos, { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
     setNewMedicoNome('');
     refreshAll();
     toast.success('Médico adicionado com sucesso!');
@@ -244,7 +245,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
 
   const handleDeleteMedico = () => {
     if (deleteMedicoId) {
-      deleteItem('medicos', deleteMedicoId);
+      deleteItem(MODULES.medicos, deleteMedicoId);
       refreshAll();
       toast.success('Médico removido com sucesso.');
     }
@@ -256,9 +257,9 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
       (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
     );
     if (index !== -1) {
-      updateItem('medicos', currentMedicos[index].id, { socio: !currentMedicos[index].socio });
+      updateItem(MODULES.medicos, currentMedicos[index].id, { socio: !currentMedicos[index].socio });
     } else {
-      addItem('medicos', {
+      addItem(MODULES.medicos, {
         nome: medico.nome.trim().toUpperCase(),
         socio: !medico.socio,
         ativo: medico.ativo !== false,
@@ -274,9 +275,9 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
     );
     const isCurrentlyActive = medico.ativo !== false;
     if (index !== -1) {
-      updateItem('medicos', currentMedicos[index].id, { ativo: !isCurrentlyActive });
+      updateItem(MODULES.medicos, currentMedicos[index].id, { ativo: !isCurrentlyActive });
     } else {
-      addItem('medicos', {
+      addItem(MODULES.medicos, {
         nome: medico.nome.trim().toUpperCase(),
         socio: medico.socio !== false,
         ativo: !isCurrentlyActive,

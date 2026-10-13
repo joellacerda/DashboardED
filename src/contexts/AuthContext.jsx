@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   subscribeAuthState,
   loginWithEmail,
@@ -49,37 +49,26 @@ export function AuthProvider({ children }) {
     };
   }, [isConfigured]);
 
-  const login = async (email, password) => {
-    return await loginWithEmail(email, password);
-  };
+  const login = useCallback((email, password) => loginWithEmail(email, password), []);
+  const register = useCallback((email, password) => registerWithEmail(email, password), []);
+  const loginGoogle = useCallback(() => loginWithGoogle(), []);
+  const logout = useCallback(() => logoutUser(), []);
+  const sendPasswordReset = useCallback((email) => resetPassword(email), []);
 
-  const register = async (email, password) => {
-    return await registerWithEmail(email, password);
-  };
-
-  const loginGoogle = async () => {
-    return await loginWithGoogle();
-  };
-
-  const logout = async () => {
-    return await logoutUser();
-  };
-
-  const sendPasswordReset = async (email) => {
-    return await resetPassword(email);
-  };
-
-  const value = {
-    user,
-    loading,
-    isConfigured,
-    login,
-    register,
-    loginGoogle,
-    logout,
-    sendPasswordReset,
-    refreshConfig,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      isConfigured,
+      login,
+      register,
+      loginGoogle,
+      logout,
+      sendPasswordReset,
+      refreshConfig,
+    }),
+    [user, loading, isConfigured, login, register, loginGoogle, logout, sendPasswordReset, refreshConfig]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

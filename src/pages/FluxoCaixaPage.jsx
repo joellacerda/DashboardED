@@ -16,6 +16,7 @@ import ExportMenu from '../components/ExportMenu';
 import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
+import { MODULES } from '../utils/storage';
 
 const CATEGORIAS_ENTRADA = [
   'Exames / Procedimentos',
@@ -218,9 +219,9 @@ function formatDescricao(nome) {
       nome: formatDescricao(form.nome.trim().toUpperCase()),
     };
     if (editId) {
-      updateItem('fluxoCaixa', editId, sanitizedForm);
+      updateItem(MODULES.fluxoCaixa, editId, sanitizedForm);
     } else {
-      addItem('fluxoCaixa', sanitizedForm);
+      addItem(MODULES.fluxoCaixa, sanitizedForm);
     }
     refresh();
     setModalOpen(false);
@@ -229,7 +230,7 @@ function formatDescricao(nome) {
 
   const handleDelete = () => {
     if (deleteId) {
-      deleteItem('fluxoCaixa', deleteId);
+      deleteItem(MODULES.fluxoCaixa, deleteId);
       refresh();
       toast.success('Lançamento excluído do Fluxo de Caixa.');
     }

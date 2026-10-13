@@ -2,6 +2,20 @@
 // Uses localStorage for persistence with optional Firebase Cloud Firestore synchronization
 import { saveToCloud, deleteFromCloud } from '../services/firebase';
 
+// Nomes dos módulos de dados — use MODULES.x em vez de strings soltas
+export const MODULES = Object.freeze({
+  exames: 'exames',
+  fluxoCaixa: 'fluxoCaixa',
+  detalhesExames: 'detalhesExames',
+  folhaPagamento: 'folhaPagamento',
+  medicos: 'medicos',
+  repassesAjustes: 'repassesAjustes',
+  examesConvenio: 'examesConvenio',
+  cronogramaSalas: 'cronogramaSalas',
+  salasConfig: 'salasConfig',
+  auditLogs: 'auditLogs',
+});
+
 const STORAGE_KEYS = {
   exames: 'endodiagnose_exames',
   fluxoCaixa: 'endodiagnose_fluxo_caixa',
@@ -16,6 +30,13 @@ const STORAGE_KEYS = {
 };
 
 let _hasRunMigrations = false;
+
+// Usuário atual usado nos registros de auditoria (definido pelo App ao autenticar)
+let _auditUser = 'Usuário Local';
+
+export function setAuditUser(name) {
+  _auditUser = name || 'Usuário Local';
+}
 
 // Controlled migration for legacy values in localStorage
 export function runDataMigrations() {
@@ -34,7 +55,7 @@ export function runDataMigrations() {
         if (m.nome && m.nome !== m.nome.toUpperCase()) {
           changed = true;
           const up = { ...m, nome: m.nome.toUpperCase() };
-          saveToCloud('medicos', up);
+          saveToCloud(MODULES.medicos, up);
           return up;
         }
         return m;
@@ -52,7 +73,7 @@ export function runDataMigrations() {
       const PROC_COMPL_CONV = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
-        let cItem = { ...item };
+        const cItem = { ...item };
         if (cItem.convenio === 'BRADESCO 421715') {
           cItem.convenio = 'BRADESCO';
           itemChanged = true;
@@ -72,7 +93,7 @@ export function runDataMigrations() {
         }
         if (itemChanged) {
           changed = true;
-          saveToCloud('examesConvenio', cItem);
+          saveToCloud(MODULES.examesConvenio, cItem);
           return cItem;
         }
         return item;
@@ -89,7 +110,7 @@ export function runDataMigrations() {
       let changed = false;
       const updated = parsed.map((item) => {
         let itemChanged = false;
-        let cItem = { ...item };
+        const cItem = { ...item };
         if (cItem.nome && cItem.nome.includes('BRADESCO 421715')) {
           cItem.nome = cItem.nome.replaceAll('BRADESCO 421715', 'BRADESCO');
           itemChanged = true;
@@ -116,7 +137,7 @@ export function runDataMigrations() {
         }
         if (itemChanged) {
           changed = true;
-          saveToCloud('fluxoCaixa', cItem);
+          saveToCloud(MODULES.fluxoCaixa, cItem);
           return cItem;
         }
         return item;
@@ -134,7 +155,7 @@ export function runDataMigrations() {
       const PROC_COMPLEMENTARES = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
-        let cItem = { ...item };
+        const cItem = { ...item };
         if (cItem.convenio === 'BRADESCO 421715') {
           cItem.convenio = 'BRADESCO';
           itemChanged = true;
@@ -154,7 +175,7 @@ export function runDataMigrations() {
         }
         if (itemChanged) {
           changed = true;
-          saveToCloud('exames', cItem);
+          saveToCloud(MODULES.exames, cItem);
           return cItem;
         }
         return item;
@@ -172,7 +193,7 @@ export function runDataMigrations() {
       const PROC_COMPL_DET = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
       const updated = parsed.map((item) => {
         let itemChanged = false;
-        let cItem = { ...item };
+        const cItem = { ...item };
         if (cItem.medico && cItem.medico !== cItem.medico.toUpperCase()) {
           cItem.medico = cItem.medico.toUpperCase();
           itemChanged = true;
@@ -192,7 +213,7 @@ export function runDataMigrations() {
         }
         if (itemChanged) {
           changed = true;
-          saveToCloud('detalhesExames', cItem);
+          saveToCloud(MODULES.detalhesExames, cItem);
           return cItem;
         }
         return item;
@@ -272,7 +293,7 @@ export function addAuditLog(entry) {
       modulo: entry.modulo || 'geral',
       descricao: entry.descricao || '',
       detalhes: entry.detalhes || null,
-      usuario: entry.usuario || (typeof window !== 'undefined' && window.__currentUserEmail) || 'Usuário Atual',
+      usuario: entry.usuario || _auditUser,
     };
     logs.unshift(newEntry);
     if (logs.length > 500) {
@@ -399,55 +420,6 @@ export function getItem(module, id) {
 }
 
 /**
- * Returns sorted list of active doctor names for selectors when adding exams.
- * Doctors marked with ativo === false are excluded, even if they have historical records.
- */
-export function getActiveMedicosOptions() {
-  const list = getData('medicos') || [];
-  const inactiveNames = new Set(
-    list
-      .filter((m) => m.ativo === false)
-      .map((m) => m.nome.trim().toUpperCase())
-  );
-  const activeSet = new Set(
-    list
-      .filter((m) => m.ativo !== false)
-      .map((m) => m.nome.trim().toUpperCase())
-  );
-
-  const exames = getData('exames') || [];
-  const detalhes = getData('detalhesExames') || [];
-  const convs = getData('examesConvenio') || [];
-
-  exames.forEach((e) => {
-    if (e.medico && e.medico.trim()) {
-      const name = e.medico.trim().toUpperCase();
-      if (!inactiveNames.has(name)) activeSet.add(name);
-    }
-  });
-
-  detalhes.forEach((d) => {
-    if (d.medico && d.medico.trim()) {
-      const name = d.medico.trim().toUpperCase();
-      if (!inactiveNames.has(name)) activeSet.add(name);
-    }
-    if (d.medico2 && d.medico2.trim()) {
-      const name = d.medico2.trim().toUpperCase();
-      if (!inactiveNames.has(name)) activeSet.add(name);
-    }
-  });
-
-  convs.forEach((c) => {
-    if (c.medico && c.medico.trim()) {
-      const name = c.medico.trim().toUpperCase();
-      if (!inactiveNames.has(name)) activeSet.add(name);
-    }
-  });
-
-  return Array.from(activeSet).sort((a, b) => a.localeCompare(b));
-}
-
-/**
  * Synchronize a single examesConvenio record with detalhesExames
  */
 export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
@@ -459,13 +431,13 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
     convenioItem.fluxoLancado ||
     (convenioItem.valorRepasse !== undefined && Number(convenioItem.valorRepasse) > 0);
 
-  const detalhesList = getData('detalhesExames') || [];
+  const detalhesList = getData(MODULES.detalhesExames) || [];
   const syncId = `conv_${convenioItem.id}`;
   const existingIdx = detalhesList.findIndex((d) => d.id === syncId || d.origemConvenioId === convenioItem.id);
 
   if (!hasDivisao) {
     if (existingIdx !== -1) {
-      deleteItem('detalhesExames', detalhesList[existingIdx].id);
+      deleteItem(MODULES.detalhesExames, detalhesList[existingIdx].id);
     }
     return null;
   }
@@ -522,7 +494,7 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
         manualOverride: true,
         updatedAt: new Date().toISOString(),
       };
-      updateItem('detalhesExames', existing.id, preservedRecord);
+      updateItem(MODULES.detalhesExames, existing.id, preservedRecord);
       return preservedRecord;
     }
   }
@@ -562,9 +534,9 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
   };
 
   if (existingIdx !== -1) {
-    updateItem('detalhesExames', detalhesList[existingIdx].id, detalheRecord);
+    updateItem(MODULES.detalhesExames, detalhesList[existingIdx].id, detalheRecord);
   } else {
-    addItem('detalhesExames', detalheRecord);
+    addItem(MODULES.detalhesExames, detalheRecord);
   }
   return detalheRecord;
 }
@@ -574,10 +546,10 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
  */
 export function revertConvenioOverride(detalhesId) {
   try {
-    const detalhes = getData('detalhesExames') || [];
+    const detalhes = getData(MODULES.detalhesExames) || [];
     const item = detalhes.find((d) => d.id === detalhesId);
     if (!item || !item.origemConvenioId) return null;
-    const convenios = getData('examesConvenio') || [];
+    const convenios = getData(MODULES.examesConvenio) || [];
     const conv = convenios.find((c) => c.id === item.origemConvenioId);
     if (!conv) return null;
     return syncConvenioToDetalhes(conv, true);
@@ -592,14 +564,14 @@ export function revertConvenioOverride(detalhesId) {
  */
 export function syncAllConveniosToDetalhes() {
   try {
-    const convenios = getData('examesConvenio') || [];
+    const convenios = getData(MODULES.examesConvenio) || [];
     const validConvenioIds = new Set(convenios.map((c) => c.id));
-    const detalhesList = getData('detalhesExames') || [];
+    const detalhesList = getData(MODULES.detalhesExames) || [];
 
     // Remove orphaned synced records whose source convenio was deleted
     detalhesList.forEach((d) => {
       if (d.origemConvenioId && !validConvenioIds.has(d.origemConvenioId)) {
-        deleteItem('detalhesExames', d.id);
+        deleteItem(MODULES.detalhesExames, d.id);
       }
     });
 
@@ -616,11 +588,11 @@ export function syncAllConveniosToDetalhes() {
  */
 export function removeConvenioFromDetalhes(convenioId) {
   try {
-    const detalhesList = getData('detalhesExames') || [];
+    const detalhesList = getData(MODULES.detalhesExames) || [];
     const syncId = `conv_${convenioId}`;
     const found = detalhesList.find((d) => d.id === syncId || d.origemConvenioId === convenioId);
     if (found) {
-      deleteItem('detalhesExames', found.id);
+      deleteItem(MODULES.detalhesExames, found.id);
     }
   } catch (err) {
     console.error('Error removing convenio from detalhes:', err);
@@ -630,7 +602,7 @@ export function removeConvenioFromDetalhes(convenioId) {
 // Initial sync on startup
 try {
   syncAllConveniosToDetalhes();
-} catch (e) {
+} catch {
   // ignore during initial bundle load
 }
 
@@ -643,29 +615,29 @@ export const DEFAULT_SALAS = [
 ];
 
 export function getSalasConfig() {
-  const saved = getData('salasConfig');
+  const saved = getData(MODULES.salasConfig);
   if (saved && Array.isArray(saved) && saved.length > 0) {
     return [...saved].sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   }
   // Initialize default rooms in localStorage if empty
-  setData('salasConfig', DEFAULT_SALAS);
+  setData(MODULES.salasConfig, DEFAULT_SALAS);
   return DEFAULT_SALAS;
 }
 
 export function saveSalasConfig(salas) {
-  setData('salasConfig', salas);
+  setData(MODULES.salasConfig, salas);
   if (Array.isArray(salas)) {
-    salas.forEach((s) => saveToCloud('salasConfig', s));
+    salas.forEach((s) => saveToCloud(MODULES.salasConfig, s));
   }
 }
 
 export function getCronogramaList() {
-  return getData('cronogramaSalas') || [];
+  return getData(MODULES.cronogramaSalas) || [];
 }
 
 export function saveCronogramaSlot(slot) {
   if (!slot || !slot.data || !slot.salaId || !slot.turno) return null;
-  const list = getData('cronogramaSalas') || [];
+  const list = getData(MODULES.cronogramaSalas) || [];
   
   // Find if slot exists by ID or by composite key (data + salaId + turno)
   const existingIdx = list.findIndex(
@@ -674,14 +646,14 @@ export function saveCronogramaSlot(slot) {
 
   if (existingIdx !== -1) {
     const existingId = list[existingIdx].id;
-    return updateItem('cronogramaSalas', existingId, slot);
+    return updateItem(MODULES.cronogramaSalas, existingId, slot);
   } else {
-    return addItem('cronogramaSalas', slot);
+    return addItem(MODULES.cronogramaSalas, slot);
   }
 }
 
 export function deleteCronogramaSlot(id) {
-  return deleteItem('cronogramaSalas', id);
+  return deleteItem(MODULES.cronogramaSalas, id);
 }
 
 /**
@@ -694,7 +666,7 @@ export function replicateWeekSchedule(sourceDays, targetDays, overwrite = true) 
   if (!Array.isArray(sourceDays) || !Array.isArray(targetDays) || sourceDays.length !== 6 || targetDays.length !== 6) {
     return { replicated: 0, skipped: 0 };
   }
-  const allSlots = getData('cronogramaSalas') || [];
+  const allSlots = getData(MODULES.cronogramaSalas) || [];
   let replicated = 0;
   let skipped = 0;
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
 import {
@@ -69,6 +70,10 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
+  // Confirmação genérica ({ title, message, confirmLabel, action }) — substitui window.confirm
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  const askConfirm = (options) => setPendingConfirm(options);
+
   const activeCutoffDate = useMemo(
     () => getCutoffDateString(cutoffType, customCutoffDate),
     [cutoffType, customCutoffDate]
@@ -77,6 +82,9 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   const archivePreview = useMemo(() => {
     if (!previewArchiveData || !activeCutoffDate) return null;
     return previewArchiveData(activeCutoffDate);
+  // storageInfo é dependência intencional: previewArchiveData lê o localStorage, então a
+  // prévia precisa ser recalculada sempre que o uso de armazenamento muda.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [previewArchiveData, activeCutoffDate, storageInfo]);
 
   useEffect(() => {
@@ -193,21 +201,26 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     setActiveTab('sync');
   };
 
-  const handleDisconnect = async () => {
-    if (window.confirm('Deseja realmente desconectar o Firebase? Seus dados locais serão mantidos no navegador.')) {
-      await reinitFirebase(null);
-      setConfig({
-        apiKey: '',
-        authDomain: '',
-        projectId: '',
-        storageBucket: '',
-        messagingSenderId: '',
-        appId: '',
-      });
-      setConfigured(false);
-      setStatusMessage({ type: 'info', text: 'Firebase desconectado. O sistema voltou ao modo local.' });
-      toast.info('Firebase desconectado.');
-    }
+  const handleDisconnect = () => {
+    askConfirm({
+      title: 'Desconectar nuvem',
+      message: 'Deseja realmente desconectar o Firebase? Seus dados locais serão mantidos no navegador.',
+      confirmLabel: 'Desconectar',
+      action: async () => {
+        await reinitFirebase(null);
+        setConfig({
+          apiKey: '',
+          authDomain: '',
+          projectId: '',
+          storageBucket: '',
+          messagingSenderId: '',
+          appId: '',
+        });
+        setConfigured(false);
+        setStatusMessage({ type: 'info', text: 'Firebase desconectado. O sistema voltou ao modo local.' });
+        toast.info('Firebase desconectado.');
+      },
+    });
   };
 
   const handleUploadToCloud = async () => {
@@ -230,14 +243,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     }
   };
 
-  const handleDownloadFromCloud = async () => {
-    if (!isCloudConfigured()) {
-      setStatusMessage({ type: 'error', text: 'Conecte o Firebase primeiro na aba de Configuração.' });
-      return;
-    }
-    if (!window.confirm('Isso irá substituir os dados atuais deste navegador pelos dados salvos na nuvem. Deseja continuar?')) {
-      return;
-    }
+  const runDownloadFromCloud = async () => {
     setIsLoading(true);
     setStatusMessage(null);
     try {
@@ -252,6 +258,19 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       setStatusMessage({ type: 'error', text: `Erro ao baixar dados da nuvem: ${err.message}` });
       toast.error('Erro ao baixar dados da nuvem.');
     }
+  };
+
+  const handleDownloadFromCloud = () => {
+    if (!isCloudConfigured()) {
+      setStatusMessage({ type: 'error', text: 'Conecte o Firebase primeiro na aba de Configuração.' });
+      return;
+    }
+    askConfirm({
+      title: 'Restaurar da nuvem',
+      message: 'Isso irá substituir os dados atuais deste navegador pelos dados salvos na nuvem. Deseja continuar?',
+      confirmLabel: 'Substituir dados',
+      action: runDownloadFromCloud,
+    });
   };
 
   const handleExportJSON = () => {
@@ -271,25 +290,37 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
+      let parsed;
       try {
-        const parsed = JSON.parse(event.target.result);
-        if (window.confirm('Deseja restaurar as informações deste arquivo de backup? Os dados locais serão atualizados.')) {
-          restoreAllData(parsed);
-          setStatusMessage({ type: 'success', text: 'Backup em JSON restaurado com sucesso!' });
-          if (onDataUpdated) onDataUpdated();
-        }
+        parsed = JSON.parse(event.target.result);
       } catch (err) {
         setStatusMessage({ type: 'error', text: 'Arquivo inválido: ' + err.message });
+        return;
       }
+      askConfirm({
+        title: 'Restaurar backup',
+        message: 'Deseja restaurar as informações deste arquivo de backup? Os dados locais serão atualizados.',
+        confirmLabel: 'Restaurar',
+        action: () => {
+          try {
+            restoreAllData(parsed);
+            setStatusMessage({ type: 'success', text: 'Backup em JSON restaurado com sucesso!' });
+            if (onDataUpdated) onDataUpdated();
+          } catch (err) {
+            setStatusMessage({ type: 'error', text: 'Falha ao restaurar o backup: ' + err.message });
+          }
+        },
+      });
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={pendingConfirm ? () => {} : onClose}
       title="Armazenamento, Nuvem & Backup"
       footer={
         <button className="btn btn-secondary" onClick={onClose}>
@@ -1065,5 +1096,14 @@ service cloud.firestore {
         )}
       </div>
     </Modal>
+    <ConfirmDialog
+      isOpen={Boolean(pendingConfirm)}
+      onClose={() => setPendingConfirm(null)}
+      onConfirm={() => pendingConfirm?.action?.()}
+      title={pendingConfirm?.title}
+      confirmLabel={pendingConfirm?.confirmLabel}
+      message={pendingConfirm?.message}
+    />
+    </>
   );
 }
