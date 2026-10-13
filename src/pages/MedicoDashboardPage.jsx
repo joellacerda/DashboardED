@@ -77,7 +77,13 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
   }, [metrics, searchFilter, tipoFilter]);
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    const docName = (metrics?.nome || 'Medico').replace(/[^a-zA-Z0-9]/g, '_');
+    document.title = `Extrato_Repasse_${docName}_${period?.start || ''}_${period?.end || ''}`;
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
   };
 
   const handleExportCSV = () => {

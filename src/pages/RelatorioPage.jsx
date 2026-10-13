@@ -23,7 +23,12 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
   }, [data, period]);
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = `Relatorio_Consolidado_${period?.start || ''}_${period?.end || ''}`;
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
   };
 
   const handleExportCSV = () => {

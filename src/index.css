@@ -4622,18 +4622,39 @@ select:-webkit-autofill:focus {
   border-radius: var(--radius-sm);
 }
 
-/* Print Stylesheet for Executive Relatório */
+/* ==========================================================================
+   Print Stylesheet for Executive Relatórios & Extratos de Repasse
+   ========================================================================== */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 12mm 10mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide interactive, navigational and screen-only elements */
   .no-print,
   .sidebar,
   .mobile-header,
   .period-selector-wrapper,
   .header-actions,
-  .page-header {
+  .page-header,
+  .table-actions,
+  .search-input-wrapper,
+  .storage-alert-banner,
+  .btn,
+  button {
     display: none !important;
   }
 
+  /* Root & Layout containers reset for multi-page document pagination */
+  html,
   body,
+  #root,
   .app-layout,
   .main-content,
   .page-container {
@@ -4644,68 +4665,326 @@ select:-webkit-autofill:focus {
     box-shadow: none !important;
     overflow: visible !important;
     height: auto !important;
+    min-height: 0 !important;
     max-height: none !important;
     width: 100% !important;
     max-width: 100% !important;
+    display: block !important;
+    position: static !important;
+    float: none !important;
   }
 
+  /* Printable Header */
   .relatorio-print-header {
     display: flex !important;
-    justify-content: space-between;
-    align-items: flex-end;
-    padding-bottom: 1rem;
-    margin-bottom: 1.25rem;
-    border-bottom: 2px solid #000000;
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+    padding-bottom: 0.75rem !important;
+    margin-bottom: 1rem !important;
+    border-bottom: 2px solid #111827 !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .print-brand h2 {
-    font-size: 18pt;
-    margin: 0 0 2px 0;
+    font-size: 16pt !important;
+    margin: 0 0 2px 0 !important;
     color: #064e3b !important;
-    font-weight: 800;
+    font-weight: 800 !important;
   }
 
   .print-subtitle {
-    font-size: 10pt;
-    color: #4b5563;
+    font-size: 9.5pt !important;
+    color: #4b5563 !important;
+    font-weight: 500 !important;
   }
 
   .print-meta {
-    text-align: right;
-    font-size: 9pt;
-    color: #374151;
+    text-align: right !important;
+    font-size: 8.5pt !important;
+    color: #374151 !important;
+    line-height: 1.35 !important;
   }
 
+  /* Doctor Profile Banner */
+  .medico-profile-banner {
+    background: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    color: #111827 !important;
+    padding: 10px 14px !important;
+    margin-bottom: 0.85rem !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .medico-profile-avatar {
+    background: #064e3b !important;
+    color: #ffffff !important;
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 14pt !important;
+  }
+
+  .medico-profile-name {
+    font-size: 14pt !important;
+    color: #111827 !important;
+    font-weight: 800 !important;
+  }
+
+  .medico-profile-sub {
+    font-size: 8pt !important;
+    color: #4b5563 !important;
+  }
+
+  /* Summary KPI Cards (4 columns on A4) */
   .summary-cards {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
     gap: 8px !important;
-    margin-bottom: 1rem !important;
+    margin-bottom: 0.85rem !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
-  .summary-card,
-  .chart-card,
-  .table-container {
+  .summary-card {
     background: #ffffff !important;
     color: #111827 !important;
     border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
     box-shadow: none !important;
+    padding: 8px 10px !important;
+    overflow: visible !important;
     page-break-inside: avoid;
-    margin-bottom: 1rem !important;
+    break-inside: avoid;
+    margin-bottom: 0 !important;
+  }
+
+  .summary-card-header {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    margin-bottom: 3px !important;
   }
 
   .summary-card-label {
+    font-size: 8pt !important;
+    font-weight: 600 !important;
     color: #4b5563 !important;
+    line-height: 1.2 !important;
+  }
+
+  .summary-card-icon {
+    font-size: 1rem !important;
+    width: auto !important;
+    height: auto !important;
+    background: transparent !important;
+    color: inherit !important;
+    opacity: 0.8 !important;
+    margin: 0 !important;
   }
 
   .summary-card-value {
     color: #111827 !important;
+    font-size: 13pt !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    letter-spacing: -0.3px !important;
   }
 
+  .summary-card-footer {
+    font-size: 7.5pt !important;
+    color: #6b7280 !important;
+    margin-top: 3px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Doctor Historical Trend Chart (Compact & Clean in Print) */
+  .medico-history-grid {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 6px !important;
+    padding-top: 4px !important;
+    margin: 0 !important;
+  }
+
+  .medico-history-bar-col {
+    padding: 2px !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .medico-history-bar-col.is-active-period {
+    background: #f0fdf4 !important;
+    border: 1px solid #86efac !important;
+    border-radius: 4px !important;
+  }
+
+  .medico-history-val-label {
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+    color: #111827 !important;
+    white-space: nowrap !important;
+  }
+
+  .medico-history-bar-track {
+    height: 48px !important;
+    max-width: 32px !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 3px !important;
+    padding: 2px !important;
+  }
+
+  .medico-history-bar-fill {
+    background: #9ca3af !important;
+    border-radius: 2px !important;
+  }
+
+  .medico-history-bar-fill.fill-active {
+    background: #059669 !important;
+    box-shadow: none !important;
+  }
+
+  .medico-history-month-label {
+    font-size: 7pt !important;
+    font-weight: 600 !important;
+    color: #374151 !important;
+  }
+
+  .medico-history-count-label {
+    font-size: 6.5pt !important;
+    color: #6b7280 !important;
+  }
+
+  /* Analytical Overview (Composition & Rankings in 2 side-by-side columns) */
+  .overview-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 0.85rem !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .chart-card {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    padding: 8px 12px !important;
+    margin-bottom: 0.85rem !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .overview-grid .chart-card {
+    margin-bottom: 0 !important;
+  }
+
+  .chart-card-title {
+    font-size: 9pt !important;
+    font-weight: 700 !important;
+    color: #111827 !important;
+    margin-bottom: 6px !important;
+  }
+
+  .relatorio-breakdown-list {
+    gap: 5px !important;
+  }
+
+  .breakdown-item {
+    margin-bottom: 5px !important;
+  }
+
+  .breakdown-header {
+    font-size: 7.5pt !important;
+    color: #1f2937 !important;
+    margin-bottom: 2px !important;
+  }
+
+  .breakdown-bar-bg {
+    height: 6px !important;
+    background: #e5e7eb !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 2px !important;
+  }
+
+  .breakdown-bar-fill {
+    border-radius: 1px !important;
+  }
+
+  /* Table Container & Table Scroll */
+  .table-container {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-bottom: 1rem !important;
+    overflow: visible !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .table-header {
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #d1d5db !important;
+    background: #f9fafb !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .table-title {
+    font-size: 9.5pt !important;
+    font-weight: 700 !important;
+    color: #111827 !important;
+    margin: 0 !important;
+  }
+
+  .table-scroll {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+
+  /* DRE Table & Detailed Tables */
   .dre-table,
   .data-table {
     width: 100% !important;
     border-collapse: collapse !important;
+    white-space: normal !important;
+    table-layout: auto !important;
+  }
+
+  .dre-table {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .data-table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .data-table thead,
+  .dre-table thead {
+    display: table-header-group !important;
+  }
+
+  .data-table tfoot,
+  .dre-table tfoot {
+    display: table-footer-group !important;
+  }
+
+  .data-table tr,
+  .dre-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .dre-table th,
@@ -4713,16 +4992,19 @@ select:-webkit-autofill:focus {
     background: #f3f4f6 !important;
     color: #111827 !important;
     border: 1px solid #d1d5db !important;
-    padding: 6px 8px !important;
-    font-size: 8.5pt !important;
+    padding: 5px 6px !important;
+    font-size: 7.5pt !important;
+    font-weight: 700 !important;
   }
 
   .dre-table td,
   .data-table td {
     border: 1px solid #e5e7eb !important;
     color: #1f2937 !important;
-    padding: 5px 8px !important;
-    font-size: 8pt !important;
+    padding: 4px 6px !important;
+    font-size: 7.5pt !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
   }
 
   .dre-row-header td {
@@ -4738,36 +5020,50 @@ select:-webkit-autofill:focus {
   .dre-row-total td {
     background: #e5e7eb !important;
     font-weight: bold !important;
-    border-top: 2px solid #000 !important;
-    border-bottom: 2px solid #000 !important;
+    border-top: 2px solid #000000 !important;
+    border-bottom: 2px solid #000000 !important;
   }
 
-  .breakdown-bar-bg {
+  .table-total-row td {
+    background: #f3f4f6 !important;
+    font-weight: bold !important;
+    border-top: 2px solid #111827 !important;
+  }
+
+  /* Badges in Print */
+  .badge {
     border: 1px solid #d1d5db !important;
-    background: #e5e7eb !important;
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+    font-size: 6.5pt !important;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
+    font-weight: 600 !important;
+    display: inline-block !important;
   }
 
-  .breakdown-bar-fill {
-    background: #4b5563 !important;
+  .badge-success {
+    background: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+    color: #065f46 !important;
   }
 
-  .medico-profile-banner {
-    background: #f9fafb !important;
-    border: 1px solid #d1d5db !important;
-    color: #111827 !important;
+  .badge-warning {
+    background: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #92400e !important;
   }
 
-  .medico-profile-avatar {
-    background: #064e3b !important;
-    color: #ffffff !important;
+  .badge-info {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #1e40af !important;
   }
 
-  .medico-profile-name {
-    color: #111827 !important;
-  }
-
-  .medico-history-grid {
-    display: none !important;
+  .badge-danger {
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
+    color: #991b1b !important;
   }
 }
 
