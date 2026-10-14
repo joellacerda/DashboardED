@@ -218,7 +218,10 @@ export function DataProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    setStorageInfo(getStorageUsageInfo());
+    const timer = setTimeout(() => {
+      setStorageInfo(getStorageUsageInfo());
+    }, 400);
+    return () => clearTimeout(timer);
   }, [data]);
 
   const archiveAndPurge = useCallback(

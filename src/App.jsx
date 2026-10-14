@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import CloudSyncModal from './components/CloudSyncModal';
@@ -9,54 +9,90 @@ import { DataProvider, useData } from './contexts/DataContext';
 import { isCloudConfigured, initFirebase } from './services/firebase';
 import { runDataMigrations, setAuditUser } from './utils/storage';
 import AuditLogModal from './components/AuditLogModal';
-import OverviewPage from './pages/OverviewPage';
-import ExamesPage from './pages/ExamesPage';
-import FluxoCaixaPage from './pages/FluxoCaixaPage';
-import DetalhesPage from './pages/DetalhesPage';
-import RepassePage from './pages/RepassePage';
-import FolhaPage from './pages/FolhaPage';
-import ConveniosPage from './pages/ConveniosPage';
-import CronogramaPage from './pages/CronogramaPage';
-import RelatorioPage from './pages/RelatorioPage';
-import MedicoDashboardPage from './pages/MedicoDashboardPage';
 
-const VALID_TABS = [
-  'overview',
-  'cronograma',
-  'exames',
-  'convenios',
-  'fluxo-caixa',
-  'detalhes',
-  'repasses',
-  'medicos',
-  'folha',
-  'relatorio',
+const ROUTES = [
+  {
+    id: 'overview',
+    title: 'Visão Geral',
+    component: lazy(() => import('./pages/OverviewPage')),
+  },
+  {
+    id: 'cronograma',
+    title: 'Cronograma de Salas',
+    aliases: ['cronograma-salas', 'salas', 'escala'],
+    component: lazy(() => import('./pages/CronogramaPage')),
+  },
+  {
+    id: 'exames',
+    title: 'Exames Particulares',
+    component: lazy(() => import('./pages/ExamesPage')),
+  },
+  {
+    id: 'convenios',
+    title: 'Exames de Convênio',
+    component: lazy(() => import('./pages/ConveniosPage')),
+  },
+  {
+    id: 'fluxo-caixa',
+    title: 'Fluxo de Caixa',
+    component: lazy(() => import('./pages/FluxoCaixaPage')),
+  },
+  {
+    id: 'detalhes',
+    title: 'Detalhes de Exames',
+    component: lazy(() => import('./pages/DetalhesPage')),
+  },
+  {
+    id: 'repasses',
+    title: 'Repasse Médico',
+    component: lazy(() => import('./pages/RepassePage')),
+  },
+  {
+    id: 'medicos',
+    title: 'Dashboard por Médico',
+    aliases: ['medico', 'doutor', 'doutores'],
+    component: lazy(() => import('./pages/MedicoDashboardPage')),
+  },
+  {
+    id: 'folha',
+    title: 'Folha de Pagamento',
+    component: lazy(() => import('./pages/FolhaPage')),
+  },
+  {
+    id: 'relatorio',
+    title: 'Relatório Consolidado',
+    component: lazy(() => import('./pages/RelatorioPage')),
+  },
 ];
 
-const TAB_TITLES = {
-  overview: 'Visão Geral',
-  cronograma: 'Cronograma de Salas',
-  exames: 'Exames Particulares',
-  convenios: 'Exames de Convênio',
-  'fluxo-caixa': 'Fluxo de Caixa',
-  detalhes: 'Detalhes de Exames',
-  repasses: 'Repasse Médico',
-  medicos: 'Dashboard por Médico',
-  folha: 'Folha de Pagamento',
-  relatorio: 'Relatório Consolidado',
-};
+const ROUTE_MAP = new Map(ROUTES.map((r) => [r.id, r]));
+const DEFAULT_ROUTE_ID = 'overview';
 
 function getTabFromHash() {
-  if (typeof window === 'undefined') return 'overview';
+  if (typeof window === 'undefined') return DEFAULT_ROUTE_ID;
   const rawHash = window.location.hash || '';
   const cleanHash = rawHash.replace(/^#\/?/, '').trim().toLowerCase();
-  if (cleanHash === 'cronograma-salas' || cleanHash === 'salas' || cleanHash === 'escala') {
-    return 'cronograma';
+  if (!cleanHash) return DEFAULT_ROUTE_ID;
+  if (ROUTE_MAP.has(cleanHash)) {
+    return cleanHash;
   }
-  if (cleanHash === 'medico' || cleanHash === 'doutor' || cleanHash === 'doutores') {
-    return 'medicos';
+  for (const route of ROUTES) {
+    if (route.aliases && route.aliases.includes(cleanHash)) {
+      return route.id;
+    }
   }
-  return VALID_TABS.includes(cleanHash) ? cleanHash : 'overview';
+  return DEFAULT_ROUTE_ID;
+}
+
+function PageLoadingFallback() {
+  return (
+    <div className="page-loading-skeleton" role="status" aria-label="Carregando página">
+      <div className="spinner-inline" style={{ width: '28px', height: '28px' }} />
+      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+        Carregando página...
+      </span>
+    </div>
+  );
 }
 
 function AppContent() {
@@ -107,8 +143,8 @@ function AppContent() {
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
-    const label = TAB_TITLES[activeTab] || 'Dashboard';
-    document.title = `${label} — Clínica Endodiagnose`;
+    const currentRoute = ROUTE_MAP.get(activeTab) || ROUTE_MAP.get(DEFAULT_ROUTE_ID);
+    document.title = `${currentRoute.title} — Clínica Endodiagnose`;
   }, [activeTab]);
 
   useEffect(() => {
@@ -180,49 +216,39 @@ function AppContent() {
     );
   }
 
-  const renderPage = () => {
+  const activeRoute = ROUTE_MAP.get(activeTab) || ROUTE_MAP.get(DEFAULT_ROUTE_ID);
+  const ActivePageComponent = activeRoute.component;
+
+  const renderActivePage = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <OverviewPage
+          <ActivePageComponent
             onOpenStorageManager={() => handleOpenCloudModal('storage')}
             onOpenAuditModal={() => setAuditModalOpen(true)}
           />
         );
-      case 'cronograma':
-        return <CronogramaPage />;
       case 'exames':
-        return <ExamesPage onNavigateToDetalhes={handleNavigateToDetalhes} />;
-      case 'convenios':
-        return <ConveniosPage />;
-      case 'fluxo-caixa':
-        return <FluxoCaixaPage />;
+        return <ActivePageComponent onNavigateToDetalhes={handleNavigateToDetalhes} />;
       case 'detalhes':
         return (
-          <DetalhesPage
+          <ActivePageComponent
             prefillData={prefillDetalhe}
             onClearPrefill={handleClearPrefill}
           />
         );
       case 'repasses':
-        return <RepassePage onNavigateToDoctor={handleNavigateToDoctor} />;
+        return <ActivePageComponent onNavigateToDoctor={handleNavigateToDoctor} />;
       case 'medicos':
         return (
-          <MedicoDashboardPage
+          <ActivePageComponent
             initialDoctor={selectedDoctorForDashboard}
           />
         );
-      case 'folha':
-        return <FolhaPage />;
       case 'relatorio':
-        return <RelatorioPage onNavigateToDoctor={handleNavigateToDoctor} />;
+        return <ActivePageComponent onNavigateToDoctor={handleNavigateToDoctor} />;
       default:
-        return (
-          <OverviewPage
-            onOpenStorageManager={() => handleOpenCloudModal('storage')}
-            onOpenAuditModal={() => setAuditModalOpen(true)}
-          />
-        );
+        return <ActivePageComponent />;
     }
   };
 
@@ -267,7 +293,7 @@ function AppContent() {
         onOpenAuditModal={() => setAuditModalOpen(true)}
         isCloudConnected={cloudConnected}
       />
-      <main className="main-content" key={`${activeTab}-${refreshKey}`}>
+      <main className="main-content" key={refreshKey}>
         {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
         {!bannerDismissed && (storageQuotaExceeded || storageInfo?.status === 'critical' || (storageInfo?.status === 'warning' && storageInfo?.usedPercentage >= 75)) && (
           <div className={`storage-alert-banner ${storageQuotaExceeded || storageInfo?.status === 'critical' ? 'critical' : 'warning'}`}>
@@ -312,7 +338,9 @@ function AppContent() {
         )}
 
         <ErrorBoundary>
-          {renderPage()}
+          <Suspense fallback={<PageLoadingFallback />}>
+            {renderActivePage()}
+          </Suspense>
         </ErrorBoundary>
       </main>
 
@@ -344,4 +372,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-

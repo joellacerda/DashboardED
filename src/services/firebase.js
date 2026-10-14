@@ -1,24 +1,3 @@
-import { initializeApp, getApps, deleteApp } from 'firebase/app';
-import {
-  getFirestore,
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  getDocs,
-  writeBatch,
-} from 'firebase/firestore';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-} from 'firebase/auth';
-
 const CONFIG_STORAGE_KEY = 'endodiagnose_firebase_config';
 
 export function getStoredFirebaseConfig() {
@@ -62,39 +41,66 @@ export function saveStoredFirebaseConfig(config) {
   }
 }
 
+let firebaseSdkPromise = null;
+async function getFirebaseSdk() {
+  if (!firebaseSdkPromise) {
+    firebaseSdkPromise = Promise.all([
+      import('firebase/app'),
+      import('firebase/firestore'),
+      import('firebase/auth'),
+    ]).then(([appMod, firestoreMod, authMod]) => ({
+      appMod,
+      firestoreMod,
+      authMod,
+    }));
+  }
+  return firebaseSdkPromise;
+}
+
 let firebaseApp = null;
 let firestoreDb = null;
 let firebaseAuth = null;
+let initPromise = null;
 
-export function initFirebase(config = getStoredFirebaseConfig()) {
+export async function initFirebase(config = getStoredFirebaseConfig()) {
   if (!config || !config.apiKey || !config.projectId) {
     firebaseApp = null;
     firestoreDb = null;
     firebaseAuth = null;
     return null;
   }
-  try {
-    const existingDefault = getApps().find((a) => a.name === '[DEFAULT]');
-    if (existingDefault) {
-      firebaseApp = existingDefault;
-    } else {
-      firebaseApp = initializeApp(config);
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    try {
+      const sdk = await getFirebaseSdk();
+      const existingDefault = sdk.appMod.getApps().find((a) => a.name === '[DEFAULT]');
+      if (existingDefault) {
+        firebaseApp = existingDefault;
+      } else {
+        firebaseApp = sdk.appMod.initializeApp(config);
+      }
+      firestoreDb = sdk.firestoreMod.getFirestore(firebaseApp);
+      firebaseAuth = sdk.authMod.getAuth(firebaseApp);
+      return { db: firestoreDb, auth: firebaseAuth, sdk };
+    } catch (err) {
+      console.error('Erro ao inicializar Firebase:', err);
+      return null;
+    } finally {
+      initPromise = null;
     }
-    firestoreDb = getFirestore(firebaseApp);
-    firebaseAuth = getAuth(firebaseApp);
-    return { db: firestoreDb, auth: firebaseAuth };
-  } catch (err) {
-    console.error('Erro ao inicializar Firebase:', err);
-    return null;
-  }
+  })();
+
+  return initPromise;
 }
 
 export async function reinitFirebase(config) {
   saveStoredFirebaseConfig(config);
   try {
-    const allApps = getApps();
+    const sdk = await getFirebaseSdk();
+    const allApps = sdk.appMod.getApps();
     for (const app of allApps) {
-      await deleteApp(app);
+      await sdk.appMod.deleteApp(app);
     }
   } catch {
     // ignore
@@ -102,20 +108,23 @@ export async function reinitFirebase(config) {
   firebaseApp = null;
   firestoreDb = null;
   firebaseAuth = null;
-  return initFirebase(config);
+  return await initFirebase(config);
+}
+
+async function getServices() {
+  if (!firestoreDb || !firebaseAuth) {
+    await initFirebase();
+  }
+  if (!firestoreDb || !firebaseAuth) return null;
+  const sdk = await getFirebaseSdk();
+  return { db: firestoreDb, auth: firebaseAuth, sdk };
 }
 
 export function getDb() {
-  if (!firestoreDb) {
-    initFirebase();
-  }
   return firestoreDb;
 }
 
 export function getFirebaseAuth() {
-  if (!firebaseAuth) {
-    initFirebase();
-  }
   return firebaseAuth;
 }
 
@@ -126,44 +135,65 @@ export function isCloudConfigured() {
 
 // Authentication Helpers
 export async function loginWithEmail(email, password) {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
-  return await signInWithEmailAndPassword(auth, email.trim(), password);
+  const services = await getServices();
+  if (!services?.auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await services.sdk.authMod.signInWithEmailAndPassword(services.auth, email.trim(), password);
 }
 
 export async function registerWithEmail(email, password) {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
-  return await createUserWithEmailAndPassword(auth, email.trim(), password);
+  const services = await getServices();
+  if (!services?.auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await services.sdk.authMod.createUserWithEmailAndPassword(services.auth, email.trim(), password);
 }
 
 export async function loginWithGoogle() {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
-  const provider = new GoogleAuthProvider();
+  const services = await getServices();
+  if (!services?.auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  const provider = new services.sdk.authMod.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  return await signInWithPopup(auth, provider);
+  return await services.sdk.authMod.signInWithPopup(services.auth, provider);
 }
 
 export async function logoutUser() {
-  const auth = getFirebaseAuth();
-  if (!auth) return;
-  return await signOut(auth);
+  const services = await getServices();
+  if (!services?.auth) return;
+  return await services.sdk.authMod.signOut(services.auth);
 }
 
 export async function resetPassword(email) {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase não configurado ou chaves ausentes.');
-  return await sendPasswordResetEmail(auth, email.trim());
+  const services = await getServices();
+  if (!services?.auth) throw new Error('Firebase não configurado ou chaves ausentes.');
+  return await services.sdk.authMod.sendPasswordResetEmail(services.auth, email.trim());
 }
 
 export function subscribeAuthState(callback) {
-  const auth = getFirebaseAuth();
-  if (!auth) {
+  if (!isCloudConfigured()) {
     callback(null);
     return () => {};
   }
-  return onAuthStateChanged(auth, callback);
+  let unsub = null;
+  let cancelled = false;
+
+  getServices()
+    .then((services) => {
+      if (cancelled) return;
+      if (!services?.auth) {
+        callback(null);
+        return;
+      }
+      unsub = services.sdk.authMod.onAuthStateChanged(services.auth, callback);
+    })
+    .catch((err) => {
+      console.error('Erro ao subscrever auth state:', err);
+      if (!cancelled) callback(null);
+    });
+
+  return () => {
+    cancelled = true;
+    if (typeof unsub === 'function') {
+      unsub();
+    }
+  };
 }
 
 export function getAuthErrorMessage(error) {
@@ -213,12 +243,14 @@ export function getAuthErrorMessage(error) {
 // Test cloud connection without polluting the default app
 export async function testConnection(config) {
   let tempApp = null;
+  let sdk = null;
   try {
+    sdk = await getFirebaseSdk();
     const testAppName = 'temp-test-' + Date.now();
-    tempApp = initializeApp(config, testAppName);
-    const tempDb = getFirestore(tempApp);
-    const testCol = collection(tempDb, '_connection_test');
-    await getDocs(testCol);
+    tempApp = sdk.appMod.initializeApp(config, testAppName);
+    const tempDb = sdk.firestoreMod.getFirestore(tempApp);
+    const testCol = sdk.firestoreMod.collection(tempDb, '_connection_test');
+    await sdk.firestoreMod.getDocs(testCol);
     return { success: true, message: 'Conexão com Firestore estabelecida com sucesso!' };
   } catch (err) {
     // A permission-denied error confirms the database exists, the API key is valid,
@@ -238,9 +270,9 @@ export async function testConnection(config) {
     }
     return { success: false, message: err.message || 'Falha ao conectar com o Firestore.' };
   } finally {
-    if (tempApp) {
+    if (tempApp && sdk) {
       try {
-        await deleteApp(tempApp);
+        await sdk.appMod.deleteApp(tempApp);
       } catch {
         // ignore
       }
@@ -266,12 +298,13 @@ function sanitizeForFirestore(obj) {
 
 // Save single item to Firestore in the background
 export async function saveToCloud(module, item) {
-  const db = getDb();
-  if (!db || !item || !item.id) return;
+  if (!isCloudConfigured() || !item || !item.id) return;
   try {
+    const services = await getServices();
+    if (!services?.db) return;
     const cleanItem = sanitizeForFirestore(item);
-    const docRef = doc(db, module, item.id);
-    await setDoc(docRef, cleanItem, { merge: true });
+    const docRef = services.sdk.firestoreMod.doc(services.db, module, item.id);
+    await services.sdk.firestoreMod.setDoc(docRef, cleanItem, { merge: true });
   } catch (err) {
     console.error(`Erro ao sincronizar item com a nuvem (${module}):`, err);
   }
@@ -279,11 +312,12 @@ export async function saveToCloud(module, item) {
 
 // Delete single item from Firestore in the background
 export async function deleteFromCloud(module, id) {
-  const db = getDb();
-  if (!db || !id) return;
+  if (!isCloudConfigured() || !id) return;
   try {
-    const docRef = doc(db, module, id);
-    await deleteDoc(docRef);
+    const services = await getServices();
+    if (!services?.db) return;
+    const docRef = services.sdk.firestoreMod.doc(services.db, module, id);
+    await services.sdk.firestoreMod.deleteDoc(docRef);
   } catch (err) {
     console.error(`Erro ao excluir item da nuvem (${module}):`, err);
   }
@@ -291,12 +325,10 @@ export async function deleteFromCloud(module, id) {
 
 // Upload all local data to Firestore
 export async function uploadAllLocalToCloud(modulesData) {
-  let db = getDb();
-  if (!db) {
-    // Attempt re-init from stored config
-    db = initFirebase();
-  }
-  if (!db) throw new Error('Firebase não configurado ou chaves inválidas');
+  const services = await getServices();
+  if (!services?.db) throw new Error('Firebase não configurado ou chaves inválidas');
+  const { db, sdk } = services;
+  const { doc, writeBatch } = sdk.firestoreMod;
 
   let totalUploaded = 0;
   for (const [module, items] of Object.entries(modulesData)) {
@@ -322,11 +354,10 @@ export async function uploadAllLocalToCloud(modulesData) {
 
 // Pull all collections from Firestore to local
 export async function downloadAllCloudToLocal(moduleList) {
-  let db = getDb();
-  if (!db) {
-    db = initFirebase();
-  }
-  if (!db) throw new Error('Firebase não configurado ou chaves inválidas');
+  const services = await getServices();
+  if (!services?.db) throw new Error('Firebase não configurado ou chaves inválidas');
+  const { db, sdk } = services;
+  const { collection, getDocs } = sdk.firestoreMod;
 
   const result = {};
   for (const module of moduleList) {

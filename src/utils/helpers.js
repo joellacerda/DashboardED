@@ -1,6 +1,3 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
 export const DEFAULT_EXAMES = [
   'CONSULTA',
   'ENDOSCOPIA',
@@ -665,8 +662,13 @@ function fallbackHtmlPrint(data, columns, title) {
 /**
  * Export data to a styled, native PDF file using jsPDF and jspdf-autotable
  */
-export function exportPDF(data, columns, title) {
+export async function exportPDF(data, columns, title) {
   try {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
+
     const isLandscape = columns.length > 5;
     const doc = new jsPDF({
       orientation: isLandscape ? 'landscape' : 'portrait',
