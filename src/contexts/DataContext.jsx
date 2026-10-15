@@ -9,6 +9,7 @@ import {
   syncConvenioToDetalhes as storageSyncConvenioToDetalhes,
   syncAllConveniosToDetalhes as storageSyncAllConveniosToDetalhes,
   removeConvenioFromDetalhes as storageRemoveConvenioFromDetalhes,
+  syncConveniosFluxoConsolidado as storageSyncConveniosFluxoConsolidado,
   getSalasConfig,
   saveSalasConfig as storageSaveSalasConfig,
   saveCronogramaSlot as storageSaveCronogramaSlot,
@@ -87,10 +88,14 @@ export function DataProvider({ children }) {
   const addItem = useCallback((module, item) => {
     const newItem = storageAddItem(module, item);
     const fresh = getData(module);
-    setDataState((prev) => ({
-      ...prev,
-      [module]: fresh,
-    }));
+    setDataState((prev) => {
+      const next = { ...prev, [module]: fresh };
+      if (module === MODULES.examesConvenio) {
+        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
+        next.detalhesExames = getData(MODULES.detalhesExames);
+      }
+      return next;
+    });
     return newItem;
   }, []);
 
@@ -99,10 +104,14 @@ export function DataProvider({ children }) {
     const updated = storageUpdateItem(module, id, updates);
     if (!updated) return null;
     const fresh = getData(module);
-    setDataState((prev) => ({
-      ...prev,
-      [module]: fresh,
-    }));
+    setDataState((prev) => {
+      const next = { ...prev, [module]: fresh };
+      if (module === MODULES.examesConvenio) {
+        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
+        next.detalhesExames = getData(MODULES.detalhesExames);
+      }
+      return next;
+    });
     return updated;
   }, []);
 
@@ -110,10 +119,14 @@ export function DataProvider({ children }) {
   const deleteItem = useCallback((module, id) => {
     storageDeleteItem(module, id);
     const fresh = getData(module);
-    setDataState((prev) => ({
-      ...prev,
-      [module]: fresh,
-    }));
+    setDataState((prev) => {
+      const next = { ...prev, [module]: fresh };
+      if (module === MODULES.examesConvenio) {
+        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
+        next.detalhesExames = getData(MODULES.detalhesExames);
+      }
+      return next;
+    });
   }, []);
 
   // Mutação reativa: Substituir conjunto inteiro de um módulo
@@ -155,9 +168,21 @@ export function DataProvider({ children }) {
   const removeConvenioFromDetalhes = useCallback((convenioId) => {
     storageRemoveConvenioFromDetalhes(convenioId);
     const freshDetalhes = getData(MODULES.detalhesExames);
+    const freshFluxo = getData(MODULES.fluxoCaixa);
     setDataState((prev) => ({
       ...prev,
       detalhesExames: freshDetalhes,
+      fluxoCaixa: freshFluxo,
+    }));
+  }, []);
+
+  // Sincronização consolidada de convênios no fluxo de caixa
+  const syncConveniosFluxoConsolidado = useCallback(() => {
+    storageSyncConveniosFluxoConsolidado();
+    const freshFluxo = getData(MODULES.fluxoCaixa);
+    setDataState((prev) => ({
+      ...prev,
+      fluxoCaixa: freshFluxo,
     }));
   }, []);
 
@@ -285,6 +310,7 @@ export function DataProvider({ children }) {
       syncConvenioToDetalhes,
       syncAllConveniosToDetalhes,
       removeConvenioFromDetalhes,
+      syncConveniosFluxoConsolidado,
       revertConvenioOverride,
       addAuditLog,
       getAuditLogs: storageGetAuditLogs,
@@ -309,6 +335,7 @@ export function DataProvider({ children }) {
       syncConvenioToDetalhes,
       syncAllConveniosToDetalhes,
       removeConvenioFromDetalhes,
+      syncConveniosFluxoConsolidado,
       revertConvenioOverride,
       addAuditLog,
       clearAuditLogs,

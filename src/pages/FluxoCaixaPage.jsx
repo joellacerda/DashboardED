@@ -190,7 +190,13 @@ export default function FluxoCaixaPage() {
 
 function formatDescricao(nome) {
   if (!nome) return '';
-  let res = nome;
+  let res = nome.trim();
+  if (/^unimed$/i.test(res)) {
+    return 'Unimed';
+  }
+  if (/^coopend$/i.test(res)) {
+    return 'Coopend';
+  }
   if (/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i.test(res)) {
     res = res.replace(/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i, 'TAXA DE CLÍNICA — ');
   }
@@ -214,9 +220,12 @@ function formatDescricao(nome) {
       toast.warning(firstError || 'Por favor, preencha os campos destacados em vermelho.');
       return;
     }
+    const isUnimed = /^unimed$/i.test(form.nome.trim());
+    const isCoopend = /^coopend$/i.test(form.nome.trim());
+    const finalNome = isUnimed ? 'Unimed' : isCoopend ? 'Coopend' : formatDescricao(form.nome.trim().toUpperCase());
     const sanitizedForm = {
       ...form,
-      nome: formatDescricao(form.nome.trim().toUpperCase()),
+      nome: finalNome,
     };
     if (editId) {
       updateItem(MODULES.fluxoCaixa, editId, sanitizedForm);
@@ -407,7 +416,25 @@ function formatDescricao(nome) {
                   paginatedItems.map((item) => (
                     <tr key={item.id}>
                       <td>{formatDate(item.data)}</td>
-                      <td style={{ fontWeight: 500 }}>{formatDescricao(item.nome)}</td>
+                      <td style={{ fontWeight: 500 }}>
+                        {formatDescricao(item.nome)}
+                        {item.isConvenioConsolidado && item.qtdExames > 0 && (
+                          <span
+                            className="badge"
+                            style={{
+                              marginLeft: '0.45rem',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              color: 'var(--color-blue)',
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                            }}
+                            title={`Consolidação de ${item.qtdExames} exame(s) de convênio`}
+                          >
+                            🏢 {item.qtdExames} exame{item.qtdExames > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <span
                           className="badge"

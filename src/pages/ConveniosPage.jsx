@@ -23,9 +23,11 @@ import Pagination from '../components/Pagination';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired } from '../utils/validation';
-import { MODULES } from '../utils/storage';
+import { MODULES, getConvenioFluxoDestino } from '../utils/storage';
 
 const DEFAULT_CONVENIOS = [
+  'UNIMED',
+  'COOPEND',
   'ABERTTA SAUDE',
   'AERONAUTICA - FUNSA',
   'AMIL',
@@ -51,16 +53,18 @@ const DEFAULT_CONVENIOS = [
   'SAUDE CAIXA',
   'SAUDE PETROBRAS',
   'SULAMERICA',
-  'UNIMED',
 ];
 
 const emptyForm = {
   data: '',
   paciente: '',
   medico: '',
-  convenio: '',
+  convenio: 'UNIMED',
   exame: '',
   procedimentoComplementar: '',
+  valorClinica: '',
+  valorMedico: '',
+  percentualMedico: 60,
 };
 
 const columns = [
@@ -75,6 +79,14 @@ const columns = [
       return compl ? `${base} + ${compl}` : base;
     }
   },
+  {
+    key: 'valor',
+    label: 'Valor Caixa',
+    accessor: (item) =>
+      item.fluxoLancado && Number(item.fluxoValorLancado || item.valorClinica) > 0
+        ? formatCurrency(Number(item.fluxoValorLancado || item.valorClinica || 0))
+        : 'Pendente',
+  },
 ];
 
 export default function ConveniosPage() {
@@ -87,6 +99,7 @@ export default function ConveniosPage() {
     syncConvenioToDetalhes,
     syncAllConveniosToDetalhes,
     removeConvenioFromDetalhes,
+    syncConveniosFluxoConsolidado,
     activeMedicosOptions,
   } = useData();
   const [modalOpen, setModalOpen] = useState(false);
@@ -205,9 +218,52 @@ export default function ConveniosPage() {
     [filtered, startIndex, pageSize]
   );
 
+  const conveniosStats = useMemo(() => {
+    let unimedTotal = 0;
+    let unimedCount = 0;
+    let coopendTotal = 0;
+    let coopendCount = 0;
+    let geralTotal = 0;
+    let totalLancados = 0;
+
+    filtered.forEach((item) => {
+      const destino = getConvenioFluxoDestino(item.convenio);
+      const isLancado = Boolean(
+        item.fluxoLancado ||
+        (item.fluxoValorLancado !== undefined && Number(item.fluxoValorLancado) > 0) ||
+        (item.valorClinica !== undefined && item.valorClinica !== '' && Number(item.valorClinica) > 0)
+      );
+      const val = Number(item.fluxoValorLancado) > 0
+        ? Number(item.fluxoValorLancado)
+        : Number(item.valorClinica) || 0;
+
+      if (isLancado && val > 0) {
+        totalLancados++;
+        geralTotal += val;
+        if (destino.isUnimed) {
+          unimedTotal += val;
+          unimedCount++;
+        } else {
+          coopendTotal += val;
+          coopendCount++;
+        }
+      }
+    });
+
+    return {
+      totalExames: filtered.length,
+      totalLancados,
+      unimedTotal,
+      unimedCount,
+      coopendTotal,
+      coopendCount,
+      geralTotal,
+    };
+  }, [filtered]);
+
   const openNew = () => {
     setEditId(null);
-    setForm({ ...emptyForm, data: getTodayISO() });
+    setForm({ ...emptyForm, data: getTodayISO(), convenio: 'UNIMED' });
     setTouched({});
     setSubmitted(false);
     setModalOpen(true);
@@ -222,6 +278,9 @@ export default function ConveniosPage() {
       convenio: item.convenio || '',
       exame: item.exame || '',
       procedimentoComplementar: item.procedimentoComplementar || '',
+      valorClinica: item.valorClinica !== undefined && item.valorClinica !== null ? String(item.valorClinica) : '',
+      valorMedico: item.valorMedico !== undefined && item.valorMedico !== null ? String(item.valorMedico) : '',
+      percentualMedico: item.percentualMedico || 60,
     });
     setTouched({});
     setSubmitted(false);
@@ -237,6 +296,15 @@ export default function ConveniosPage() {
       return;
     }
     const allowsCompl = examePermiteComplementar(form.exame);
+    const valClinicaNum = parseFloat(form.valorClinica) || 0;
+    const valMedicoNum = parseFloat(form.valorMedico) || 0;
+    const hasPayment = valClinicaNum > 0 || valMedicoNum > 0;
+    const pctMed = Number(form.percentualMedico) || 60;
+    const total = valClinicaNum + valMedicoNum;
+    const direitoMed = (total * pctMed) / 100;
+    const repasseMed1 = Math.max(0, direitoMed - valMedicoNum);
+    const destinoFluxo = getConvenioFluxoDestino(form.convenio);
+
     const sanitizedForm = {
       ...form,
       medico: form.medico.trim().toUpperCase(),
@@ -244,13 +312,28 @@ export default function ConveniosPage() {
       convenio: form.convenio.trim().toUpperCase(),
       exame: form.exame.trim().toUpperCase(),
       procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
+      valorClinica: form.valorClinica || '',
+      valorMedico: form.valorMedico || '',
+      percentualMedico: pctMed,
+      ...(hasPayment
+        ? {
+            fluxoLancado: true,
+            fluxoValorLancado: valClinicaNum > 0 ? valClinicaNum : total,
+            fluxoData: form.data,
+            fluxoNome: destinoFluxo.display,
+            valorRepasseMedico1: repasseMed1,
+            valorRepasse: repasseMed1,
+          }
+        : {}),
     };
     if (editId) {
       const updated = updateItem(MODULES.examesConvenio, editId, sanitizedForm);
       if (updated) syncConvenioToDetalhes(updated);
     } else {
-      addItem(MODULES.examesConvenio, sanitizedForm);
+      const added = addItem(MODULES.examesConvenio, sanitizedForm);
+      if (hasPayment && added) syncConvenioToDetalhes(added);
     }
+    syncConveniosFluxoConsolidado();
     refresh();
     setModalOpen(false);
     toast.success(editId ? 'Exame de convênio atualizado com sucesso!' : 'Exame de convênio cadastrado com sucesso!');
@@ -260,6 +343,7 @@ export default function ConveniosPage() {
     if (deleteId) {
       deleteItem(MODULES.examesConvenio, deleteId);
       removeConvenioFromDetalhes(deleteId);
+      syncConveniosFluxoConsolidado();
       refresh();
       toast.success('Exame de convênio excluído.');
     }
@@ -312,13 +396,49 @@ export default function ConveniosPage() {
       </div>
 
       <div className="page-container">
-        <div className="summary-cards summary-cards-single">
+        <div className="summary-cards">
           <div className="summary-card card-accent-blue">
             <div className="summary-card-header">
               <span className="summary-card-label">Exames no Período</span>
-              <div className="summary-card-icon blue">🏢</div>
+              <div className="summary-card-icon blue">📋</div>
             </div>
-            <div className="summary-card-value">{filtered.length}</div>
+            <div className="summary-card-value">{conveniosStats.totalExames}</div>
+            <div className="summary-card-subtitle" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              {conveniosStats.totalLancados} com valor recebido
+            </div>
+          </div>
+
+          <div className="summary-card card-accent-emerald">
+            <div className="summary-card-header">
+              <span className="summary-card-label">Unimed no Caixa</span>
+              <div className="summary-card-icon emerald">🏢</div>
+            </div>
+            <div className="summary-card-value">{formatCurrency(conveniosStats.unimedTotal)}</div>
+            <div className="summary-card-subtitle" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              Consolidado ({conveniosStats.unimedCount} exame{conveniosStats.unimedCount !== 1 ? 's' : ''})
+            </div>
+          </div>
+
+          <div className="summary-card card-accent-purple">
+            <div className="summary-card-header">
+              <span className="summary-card-label">Coopend no Caixa</span>
+              <div className="summary-card-icon purple">🤝</div>
+            </div>
+            <div className="summary-card-value">{formatCurrency(conveniosStats.coopendTotal)}</div>
+            <div className="summary-card-subtitle" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} title="Consolidação no Caixa de todos os convênios que repassam via Coopend (IPM, Bradesco, Cassi, etc.)">
+              Todos não-Unimed ({conveniosStats.coopendCount} exame{conveniosStats.coopendCount !== 1 ? 's' : ''})
+            </div>
+          </div>
+
+          <div className="summary-card card-accent-amber">
+            <div className="summary-card-header">
+              <span className="summary-card-label">Total Convênios</span>
+              <div className="summary-card-icon amber">💰</div>
+            </div>
+            <div className="summary-card-value">{formatCurrency(conveniosStats.geralTotal)}</div>
+            <div className="summary-card-subtitle" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              Entrada consolidada no período
+            </div>
           </div>
         </div>
 
@@ -368,13 +488,14 @@ export default function ConveniosPage() {
                   <th>Médico Realizante</th>
                   <th>Convênio</th>
                   <th>Exame</th>
+                  <th style={{ textAlign: 'right' }}>Valor Caixa</th>
                   <th style={{ width: '120px' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan="6">
+                    <td colSpan="7">
                       <div className="table-empty">
                         <div className="table-empty-icon">🏢</div>
                         <p>Nenhum exame de convênio registrado{search || convenioFilter ? ' para este filtro' : ' neste período'}.</p>
@@ -396,6 +517,18 @@ export default function ConveniosPage() {
                       </td>
                       <td>
                         <span className="badge badge-info">{item.convenio ? item.convenio.toUpperCase() : ''}</span>
+                        {item.convenio && item.convenio.trim().toUpperCase() !== 'UNIMED' && item.convenio.trim().toUpperCase() !== 'COOPEND' && (
+                          <div
+                            style={{
+                              fontSize: '10px',
+                              color: 'var(--text-muted)',
+                              marginTop: '2px',
+                            }}
+                            title="Repasse consolidado via Coopend no Fluxo de Caixa"
+                          >
+                            via Coopend
+                          </div>
+                        )}
                       </td>
                       <td>
                         {item.exame ? item.exame.toUpperCase() : ''}
@@ -412,14 +545,17 @@ export default function ConveniosPage() {
                             </span>
                           );
                         })}
-                        {item.fluxoLancado && (
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {item.fluxoLancado && Number(item.fluxoValorLancado || item.valorClinica) > 0 ? (
                           <span
                             className="badge-fluxo-done"
-                            style={{ marginLeft: '0.5rem' }}
-                            title={`Lançado no Fluxo de Caixa: ${formatCurrency(item.fluxoValorLancado || 0)}`}
+                            title={`Consolidado em "${getConvenioFluxoDestino(item.convenio).display}" no Fluxo de Caixa`}
                           >
-                            ✓ Caixa {formatCurrency(item.fluxoValorLancado || 0)}
+                            {formatCurrency(Number(item.fluxoValorLancado || item.valorClinica || 0))}
                           </span>
+                        ) : (
+                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Pendente</span>
                         )}
                       </td>
                       <td>
@@ -427,7 +563,7 @@ export default function ConveniosPage() {
                           <button
                             className={`btn btn-ghost btn-icon btn-sm ${item.fluxoLancado ? 'btn-active-success' : ''}`}
                             onClick={() => openFluxoModal(item)}
-                            title={item.fluxoLancado ? "Ver / Ajustar Partilha e Lançamento no Fluxo de Caixa (Já Lançado)" : "Calcular Partilha e Lançar Entrada no Fluxo de Caixa"}
+                            title={item.fluxoLancado ? "Ver / Ajustar Partilha e Lançamento Consolidado no Caixa" : "Calcular Partilha e Lançar Entrada Consolidada no Caixa"}
                           >
                             💵
                           </button>
@@ -621,6 +757,63 @@ export default function ConveniosPage() {
                 </div>
               </div>
             )}
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                marginTop: '0.4rem',
+                padding: '0.85rem 1rem',
+                background: 'var(--color-dark-800)',
+                border: '1px solid var(--border-medium)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-emerald)' }}>
+                  💰 Recebimento do Exame (Opcional)
+                </span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                  Consolida automaticamente em "{getConvenioFluxoDestino(form.convenio).display}" no Fluxo de Caixa
+                  {form.convenio && form.convenio.trim().toUpperCase() !== 'UNIMED' && form.convenio.trim().toUpperCase() !== 'COOPEND' && (
+                    <> (repasse via Coopend)</>
+                  )}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: 'var(--text-xs)' }}>
+                    🏢 Valor Recebido pela Clínica (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className="input-field"
+                    value={form.valorClinica}
+                    onChange={(e) => setForm({ ...form, valorClinica: e.target.value })}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: 'var(--text-xs)' }}>
+                    👨‍⚕️ Valor Recebido pelo Médico (R$) (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className="input-field"
+                    value={form.valorMedico}
+                    onChange={(e) => setForm({ ...form, valorMedico: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </form>
       </Modal>

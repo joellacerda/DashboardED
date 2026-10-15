@@ -1,6 +1,7 @@
 // Storage utility for Clínica Endodiagnose Dashboard
 // Uses localStorage for persistence with optional Firebase Cloud Firestore synchronization
 import { saveToCloud, deleteFromCloud } from '../services/firebase';
+import { getAcquisitionPeriod, isDateInPeriod, getTodayISO } from './helpers';
 
 // Nomes dos módulos de dados — use MODULES.x em vez de strings soltas
 export const MODULES = Object.freeze({
@@ -222,6 +223,9 @@ export function runDataMigrations() {
         localStorage.setItem(STORAGE_KEYS.detalhesExames, JSON.stringify(updated));
       }
     }
+
+    // Consolidate any existing convenio entries in Fluxo de Caixa
+    syncConveniosFluxoConsolidado();
   } catch (err) {
     console.error('Migration error:', err);
   }
@@ -449,8 +453,12 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
     ? Number(convenioItem.percentualMedico)
     : 60;
   const pctClinica = Math.max(0, 100 - pctMedicoTotal);
-  const totalHonorariosMedicos = (total * pctMedicoTotal) / 100;
-  const direitoClinica = (total * pctClinica) / 100;
+  const totalHonorariosMedicos = convenioItem.direitoMedico !== undefined && Number(convenioItem.direitoMedico) >= 0
+    ? Number(convenioItem.direitoMedico)
+    : (total * pctMedicoTotal) / 100;
+  const direitoClinica = convenioItem.direitoClinica !== undefined && Number(convenioItem.direitoClinica) >= 0
+    ? Number(convenioItem.direitoClinica)
+    : (total * pctClinica) / 100;
 
   const temDiv2 = !!(convenioItem.temDivisaoMedico2 && convenioItem.medico2);
   const pctMed1 = temDiv2 ? (Number(convenioItem.porcentagemMedico1) || 0) : 100;
@@ -520,6 +528,8 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
     valorMedico2: Math.round(repMed2 * 100) / 100,
     honorariosMedicos: Math.round(repasseTotal * 100) / 100,
     taxaClinica: Math.round(direitoClinica * 100) / 100,
+    valorAcessorios: Math.round((Number(convenioItem.valorAcessorio) || 0) * 100) / 100,
+    acessorioParaMedico: false,
     valorPagamento: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
     numParcelas: '1',
     formaPagamento: formaStr,
@@ -594,14 +604,250 @@ export function removeConvenioFromDetalhes(convenioId) {
     if (found) {
       deleteItem(MODULES.detalhesExames, found.id);
     }
+    syncConveniosFluxoConsolidado();
   } catch (err) {
     console.error('Error removing convenio from detalhes:', err);
+  }
+}
+
+/**
+ * Normalizes convênio names, returning standard key and display name.
+ * Specifically formats Unimed as "Unimed" and Coopend as "Coopend".
+ */
+export function normalizeConvenioName(raw) {
+  if (!raw) return { key: '', display: '' };
+  const trimmed = raw.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'UNIMED' || upper.startsWith('UNIMED')) {
+    return { key: 'UNIMED', display: 'Unimed' };
+  }
+  if (upper === 'COOPEND' || upper.startsWith('COOPEND')) {
+    return { key: 'COOPEND', display: 'Coopend' };
+  }
+  return { key: upper, display: trimmed };
+}
+
+/**
+ * Resolves the Fluxo de Caixa destination for any convênio exam payment.
+ *
+ * Business Rule:
+ * - Unimed is a direct health plan accreditation and consolidates under "Unimed".
+ * - Coopend is NOT an individual health plan; it represents the medical clearing cooperative
+ *   that pays the clinic for ALL health insurance plans that are NOT Unimed
+ *   (e.g., IPM, Bradesco, Cassi, Amil, Cafaz, Camed, SulAmérica, etc.).
+ *   Therefore, any exam that is not Unimed enters the cash flow under the single consolidated entry "Coopend".
+ */
+export function getConvenioFluxoDestino(raw) {
+  if (!raw || !raw.trim()) {
+    return { key: 'COOPEND', display: 'Coopend', isUnimed: false, isCoopend: true };
+  }
+  const trimmed = raw.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'UNIMED' || upper.startsWith('UNIMED')) {
+    return { key: 'UNIMED', display: 'Unimed', isUnimed: true, isCoopend: false, convenioOrigem: trimmed };
+  }
+  return { key: 'COOPEND', display: 'Coopend', isUnimed: false, isCoopend: true, convenioOrigem: trimmed };
+}
+
+/**
+ * Synchronizes launched convenio exams into consolidated Fluxo de Caixa entries.
+ * Ensures that instead of dozens of entries, there is a single entry per convênio and period
+ * (e.g., "Unimed" and "Coopend") whose value increments automatically as exam payments are added.
+ */
+export function syncConveniosFluxoConsolidado() {
+  try {
+    const convenios = getData(MODULES.examesConvenio) || [];
+    const fluxoList = getData(MODULES.fluxoCaixa) || [];
+
+    // Group launched convenio exams by (convenioKey, periodStart)
+    const groups = new Map();
+
+    convenios.forEach((item) => {
+      if (!item || !item.id) return;
+      const isLancado = Boolean(
+        item.fluxoLancado ||
+        (item.fluxoValorLancado !== undefined && Number(item.fluxoValorLancado) > 0) ||
+        (item.valorClinica !== undefined && item.valorClinica !== '' && Number(item.valorClinica) > 0)
+      );
+      if (!isLancado) return;
+
+      const valorLancado = Number(item.fluxoValorLancado) > 0
+        ? Number(item.fluxoValorLancado)
+        : Number(item.valorClinica) || 0;
+      if (valorLancado <= 0) return;
+
+      const destino = getConvenioFluxoDestino(item.convenio);
+      if (!destino.key) return;
+
+      const paymentDate = item.fluxoData || item.data || getTodayISO();
+      let pStart = item.fluxoPeriodoStart;
+      let pEnd = item.fluxoPeriodoEnd;
+      let pLabel = item.fluxoPeriodoLabel;
+
+      if (!pStart || !pEnd) {
+        try {
+          const p = getAcquisitionPeriod(new Date(paymentDate.replace(/-/g, '/')));
+          pStart = p.start;
+          pEnd = p.end;
+          pLabel = p.label;
+        } catch {
+          const p = getAcquisitionPeriod();
+          pStart = p.start;
+          pEnd = p.end;
+          pLabel = p.label;
+        }
+      }
+
+      const groupKey = `${destino.key}_${pStart}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          convenioKey: destino.key,
+          displayNome: destino.display,
+          periodStart: pStart,
+          periodEnd: pEnd,
+          periodLabel: pLabel,
+          totalValor: 0,
+          latestDate: paymentDate,
+          examIds: [],
+        });
+      }
+
+      const grp = groups.get(groupKey);
+      grp.totalValor += valorLancado;
+      grp.examIds.push(item.id);
+      if (paymentDate > grp.latestDate) {
+        grp.latestDate = paymentDate;
+      }
+    });
+
+    let fluxoChanged = false;
+    let nextFluxo = [...fluxoList];
+
+    // 1. Remove obsolete legacy individual entries (entry.convenioId or starting with REPASSE CONVÊNIO)
+    const filteredFluxo = nextFluxo.filter((f) => {
+      if (f.convenioId) {
+        fluxoChanged = true;
+        deleteFromCloud(MODULES.fluxoCaixa, f.id);
+        return false;
+      }
+      const upper = (f.nome || '').toUpperCase();
+      if (upper.startsWith('REPASSE CONVÊNIO') || upper.startsWith('REPASSE CONVENIO')) {
+        fluxoChanged = true;
+        deleteFromCloud(MODULES.fluxoCaixa, f.id);
+        return false;
+      }
+      return true;
+    });
+    nextFluxo = filteredFluxo;
+
+    // 2. Identify active consolidated entries to process
+    const activeConsolidatedKeys = new Set(groups.keys());
+
+    // 3. For each group, create or update the consolidated entry
+    groups.forEach((grp) => {
+      const syncId = `conv_cons_${grp.convenioKey.toLowerCase()}_${grp.periodStart.replace(/-/g, '')}`;
+
+      const existingIdx = nextFluxo.findIndex((f) => {
+        if (f.id === syncId) return true;
+        if (
+          f.isConvenioConsolidado &&
+          f.convenioConsolidado === grp.convenioKey &&
+          (f.periodoStart === grp.periodStart || f.periodStart === grp.periodStart)
+        ) {
+          return true;
+        }
+        const fUpper = (f.nome || '').trim().toUpperCase();
+        if (
+          (fUpper === grp.convenioKey || fUpper === grp.displayNome.toUpperCase()) &&
+          isDateInPeriod(f.data, { start: grp.periodStart, end: grp.periodEnd })
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      const roundedValor = Math.round(grp.totalValor * 100) / 100;
+      const targetDate = grp.latestDate || grp.periodStart;
+
+      const consolidatedRecord = {
+        id: syncId,
+        nome: grp.displayNome, // Strictly "Unimed" or "Coopend"
+        tipo: 'entrada',
+        categoria: 'Convênios / Repasses',
+        valor: roundedValor,
+        data: targetDate,
+        isConvenioConsolidado: true,
+        convenioConsolidado: grp.convenioKey,
+        periodoStart: grp.periodStart,
+        periodoEnd: grp.periodEnd,
+        periodoLabel: grp.periodLabel,
+        qtdExames: grp.examIds.length,
+        examesIds: grp.examIds,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (existingIdx !== -1) {
+        const existing = nextFluxo[existingIdx];
+        if (
+          existing.valor !== roundedValor ||
+          existing.nome !== grp.displayNome ||
+          existing.data !== targetDate ||
+          existing.qtdExames !== grp.examIds.length
+        ) {
+          const merged = { ...existing, ...consolidatedRecord };
+          nextFluxo[existingIdx] = merged;
+          saveToCloud(MODULES.fluxoCaixa, merged);
+          fluxoChanged = true;
+        }
+      } else {
+        const newItem = {
+          ...consolidatedRecord,
+          createdAt: new Date().toISOString(),
+        };
+        nextFluxo.push(newItem);
+        saveToCloud(MODULES.fluxoCaixa, newItem);
+        fluxoChanged = true;
+      }
+    });
+
+    // 4. Remove any existing consolidated entry that no longer has active exams
+    // or any non-standard consolidated entry (e.g. from prior runs before Coopend unification)
+    const finalFluxo = nextFluxo.filter((f) => {
+      if (f.isConvenioConsolidado || (f.id && String(f.id).startsWith('conv_cons_'))) {
+        const upperNome = (f.nome || '').trim().toUpperCase();
+        if (upperNome !== 'UNIMED' && upperNome !== 'COOPEND') {
+          fluxoChanged = true;
+          deleteFromCloud(MODULES.fluxoCaixa, f.id);
+          return false;
+        }
+        const convK = f.convenioConsolidado || (upperNome === 'UNIMED' ? 'UNIMED' : 'COOPEND');
+        const pK = f.periodoStart || f.periodStart;
+        const fKey = `${convK}_${pK}`;
+        if (!activeConsolidatedKeys.has(fKey)) {
+          fluxoChanged = true;
+          deleteFromCloud(MODULES.fluxoCaixa, f.id);
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (fluxoChanged) {
+      setData(MODULES.fluxoCaixa, finalFluxo);
+      notifyDataChanged(MODULES.fluxoCaixa);
+    }
+
+    return finalFluxo;
+  } catch (err) {
+    console.error('Error syncing convenios fluxo consolidado:', err);
+    return null;
   }
 }
 
 // Initial sync on startup
 try {
   syncAllConveniosToDetalhes();
+  syncConveniosFluxoConsolidado();
 } catch {
   // ignore during initial bundle load
 }

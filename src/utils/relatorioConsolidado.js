@@ -140,9 +140,15 @@ export function getConsolidatedFinancialReport(data = {}, period) {
   const entradasGerais = fluxoNoPeriodo.filter((f) => {
     if (f.tipo !== 'entrada') return false;
     // Exclude linked entries from exam split or convenios to prevent double counting
-    if (f.detalheId || f.convenioId) return false;
-    const nomeUpper = (f.nome || '').toUpperCase();
-    if (nomeUpper.startsWith('TAXA DE CLÍNICA') || nomeUpper.startsWith('REPASSE CONVÊNIO') || nomeUpper.startsWith('BIÓPSIA')) {
+    if (f.detalheId || f.convenioId || f.isConvenioConsolidado || f.convenioConsolidado) return false;
+    const nomeUpper = (f.nome || '').trim().toUpperCase();
+    if (
+      nomeUpper.startsWith('TAXA DE CLÍNICA') ||
+      nomeUpper.startsWith('REPASSE CONVÊNIO') ||
+      nomeUpper.startsWith('BIÓPSIA') ||
+      nomeUpper === 'UNIMED' ||
+      nomeUpper === 'COOPEND'
+    ) {
       return false;
     }
     return true;
