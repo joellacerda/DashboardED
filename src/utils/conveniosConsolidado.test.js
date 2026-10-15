@@ -8,7 +8,8 @@ import {
   MODULES,
 } from './storage';
 import { getConsolidatedFinancialReport } from './relatorioConsolidado';
-import { getAcquisitionPeriod } from './helpers';
+import { getAcquisitionPeriod, getDoctorCompensacaoInPeriod } from './helpers';
+import { getDoctorPeriodMetrics } from './medicoAnalytics';
 
 // Simple in-memory localStorage shim if needed
 const storageMock = (() => {
@@ -508,5 +509,49 @@ describe('partilha de endoscopia com polipectomia e acessório/alça', () => {
     expect(fluxo.length).toBe(1);
     expect(fluxo[0].nome).toBe('Coopend'); // IPM roteia para Coopend
     expect(fluxo[0].valor).toBe(550);
+
+    // 3. Verifica apuração de compensações devidas pelo médico no período aquisitivo
+    const period = getAcquisitionPeriod(new Date(2026, 9, 9)); // Outubro/2026
+    const compInfo = getDoctorCompensacaoInPeriod('DR. JOEL', period, [exame]);
+    expect(compInfo.total).toBe(400);
+    expect(compInfo.count).toBe(1);
+    expect(compInfo.items[0].valorCompensacao).toBe(400);
+    expect(compInfo.items[0].valorAcessorio).toBe(250);
+
+    // 4. Verifica dedução automática no relatório financeiro consolidado
+    // Se o médico tem R$ 1.000 de honorários particulares e R$ 400 de compensação a devolver,
+    // o repasse líquido dele deve ser deduzido em R$ 400 (R$ 1.000 - R$ 400 = R$ 600)
+    const exameParticular = {
+      id: 'ex_part_1',
+      data: '2026-10-09',
+      paciente: 'MARIA SILVA',
+      medico: 'DR. JOEL',
+      honorariosMedicos: 1000,
+      valorTotal: 1500,
+      taxaClinica: 500,
+      formaPagamento: 'PIX',
+      pagamentos: [{ forma: 'PIX', valor: 1500, parcelas: 1 }],
+      isConvenio: false,
+    };
+
+    const reportData = {
+      examesConvenio: [exame],
+      detalhesExames: [detalhe, exameParticular],
+      fluxoCaixa: fluxo,
+      medicos: [{ nome: 'DR. JOEL', socio: true, ativo: true }],
+      repassesAjustes: [],
+    };
+
+    const relatorio = getConsolidatedFinancialReport(reportData, period);
+    const repasseDoc = relatorio.repassesPorMedico.find((m) => m.nome === 'DR. JOEL');
+    expect(repasseDoc).toBeDefined();
+    expect(repasseDoc.honParticular).toBe(1000);
+    expect(repasseDoc.compensacaoConvenio).toBe(400);
+    expect(repasseDoc.repasseLiquido).toBe(600); // 1000 - 400 = 600
+
+    // 5. Verifica dedução nas métricas analíticas individuais do médico
+    const medicoMetrics = getDoctorPeriodMetrics('DR. JOEL', period, reportData);
+    expect(medicoMetrics.compensacaoConvenios).toBe(400);
+    expect(medicoMetrics.repasseLiquido).toBe(600);
   });
 });

@@ -122,6 +122,7 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
     ticketMedioHonorario,
     creditos,
     debitos,
+    compensacaoConvenios,
     bnb,
     cotaClinica,
     totalAjustesLiquidos,
@@ -574,6 +575,18 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                     <td style={{ paddingLeft: '20px' }}>(-) Débitos Operacionais / Adiantamentos</td>
                     <td style={{ textAlign: 'right', color: 'var(--color-red)', fontWeight: 600 }}>
                       -{formatCurrency(debitos)}
+                    </td>
+                  </tr>
+                )}
+
+                {/* Compensação de Convênios / Materiais */}
+                {compensacaoConvenios > 0 && (
+                  <tr className="dre-row-item">
+                    <td style={{ paddingLeft: '20px' }}>
+                      (-) Compensação de Materiais & Convênios (Alças / 50% Polipectomias)
+                    </td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-red)', fontWeight: 600 }}>
+                      -{formatCurrency(compensacaoConvenios)}
                     </td>
                   </tr>
                 )}

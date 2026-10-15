@@ -3,6 +3,7 @@ import {
   roundCurrency,
   isDateInPeriod,
   getHonorarioMedicoInPeriod,
+  getDoctorCompensacaoInPeriod,
   navigateAcquisitionPeriod,
   downloadBlob,
 } from './helpers';
@@ -201,6 +202,10 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   const bnb = Number(ajuste.bnb) || 0;
   const obs = ajuste.obs || '';
 
+  // Compensação de convênios/materiais devida à clínica
+  const compensacaoInfo = getDoctorCompensacaoInPeriod(targetName, period, examesConvenio);
+  const compensacaoConvenios = compensacaoInfo.total;
+
   // Cálculo de déficit da clínica para apuração da cota de sócio
   const fluxoNoPeriodo = fluxoCaixa.filter((f) => isDateInPeriod(f.data, period));
   const totalEntradasFluxo = fluxoNoPeriodo
@@ -216,7 +221,7 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     countSociosAtivos > 0 && deficitClinica > 0 ? deficitClinica / countSociosAtivos : 0;
 
   const cotaClinica = doctor.socio && doctor.ativo ? cotaPorSocio : 0;
-  const totalAjustesLiquidos = creditos - debitos - bnb - cotaClinica;
+  const totalAjustesLiquidos = creditos - debitos - compensacaoConvenios - bnb - cotaClinica;
   const repasseLiquido = Math.max(0, totalHonorariosBrutos + totalAjustesLiquidos);
 
   // --- 6. Participação do médico no volume total da clínica ---
@@ -249,6 +254,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     // Ajustes
     creditos: roundCurrency(creditos),
     debitos: roundCurrency(debitos),
+    compensacaoConvenios: roundCurrency(compensacaoConvenios),
+    compensacaoItems: compensacaoInfo.items,
     bnb: roundCurrency(bnb),
     cotaClinica: roundCurrency(cotaClinica),
     totalAjustesLiquidos: roundCurrency(totalAjustesLiquidos),
@@ -349,6 +356,9 @@ export function exportDoctorStatementCSV(metrics, period) {
   }
   if (metrics.debitos > 0) {
     addLine(['(-) Débitos Operacionais', `-${formatCurrency(metrics.debitos)}`]);
+  }
+  if (metrics.compensacaoConvenios > 0) {
+    addLine(['(-) Compensação Materiais/Convênios (Alças/Polipectomias)', `-${formatCurrency(metrics.compensacaoConvenios)}`]);
   }
   if (metrics.bnb > 0) {
     addLine(['(-) Retenção BNB', `-${formatCurrency(metrics.bnb)}`]);

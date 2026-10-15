@@ -534,6 +534,58 @@ export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
 }
 
 /**
+ * Calcula as compensações devidas pelo médico à clínica decorrentes de convênios
+ * no período aquisitivo (ex: 50% de polipectomias e 100% de acessórios/alças descartáveis
+ * que foram pagos pelo convênio na cooperativa/conta do médico).
+ * @param {string} doctorName - Nome do médico
+ * @param {object} targetPeriod - Período financeiro { start, end }
+ * @param {Array} examesConvenio - Lista de exames de convênio
+ * @returns {{ total: number, count: number, items: Array }}
+ */
+export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesConvenio = []) {
+  if (!doctorName || !targetPeriod || !Array.isArray(examesConvenio)) {
+    return { total: 0, count: 0, items: [] };
+  }
+  const target = doctorName.trim().toUpperCase();
+  const items = [];
+  let total = 0;
+
+  for (const c of examesConvenio) {
+    const doc1 = (c.medico || '').trim().toUpperCase();
+    if (doc1 !== target) continue;
+
+    const comp = Number(c.valorCompensacaoClinica) || 0;
+    if (comp <= 0) continue;
+
+    const dataRef = c.fluxoData || c.data;
+    const inPeriod =
+      (c.fluxoPeriodoStart && c.fluxoPeriodoStart === targetPeriod.start) ||
+      (dataRef && isDateInPeriod(dataRef, targetPeriod));
+
+    if (inPeriod) {
+      total += comp;
+      items.push({
+        id: c.id,
+        paciente: (c.paciente || 'PACIENTE NÃO IDENTIFICADO').trim().toUpperCase(),
+        exame: (c.exame || 'EXAME').trim().toUpperCase(),
+        convenio: (c.convenio || 'CONVÊNIO').trim().toUpperCase(),
+        data: c.data,
+        fluxoData: c.fluxoData,
+        valorCompensacao: roundCurrency(comp),
+        valorAcessorio: Number(c.valorAcessorio || 0),
+        valorPolipectomia: Number(c.valorPolipectomia || 0),
+      });
+    }
+  }
+
+  return {
+    total: roundCurrency(total),
+    count: items.length,
+    items,
+  };
+}
+
+/**
  * Generate a human-readable label for the installment span.
  * e.g. "Set/26 → Nov/26" for 3 parcelas on Credit Card starting in September
  */

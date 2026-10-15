@@ -259,6 +259,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
   let totalRepassesLiquidosGeral = 0;
   let totalAjustesCreditos = 0;
   let totalAjustesDebitos = 0;
+  let totalCompensacoesConvenioGeral = 0;
 
   const repassesPorMedico = doctorsList.map((docName) => {
     const reg = medicosRegistered.find((m) => m.nome === docName);
@@ -286,6 +287,15 @@ export function getConsolidatedFinancialReport(data = {}, period) {
 
     const honTotal = honParticular + honConvenio;
 
+    // Compensações de convênios/materiais (alça 100% clínica + 50% polipectomia recebidos pelo médico)
+    let compensacaoConvenio = 0;
+    conveniosFaturados.forEach((c) => {
+      const doc1 = (c.medico || '').trim().toUpperCase();
+      if (doc1 === docName) {
+        compensacaoConvenio += Number(c.valorCompensacaoClinica || 0);
+      }
+    });
+
     // Ajustes
     const ajusteKey = `${docName.toLowerCase()}_${period.start}`;
     const ajuste = repassesAjustes.find((a) => a.key === ajusteKey);
@@ -296,12 +306,13 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     const obs = ajuste?.obs || '';
 
     const cotaDeficit = isSocio && isAtivo && deficitClinica > 0 ? cotaDeficitPorSocio : 0;
-    const repasseLiquido = Math.max(0, honTotal + creditos - debitos - bnb - cotaDeficit);
+    const repasseLiquido = Math.max(0, honTotal + creditos - debitos - compensacaoConvenio - bnb - cotaDeficit);
 
     totalHonorariosMedicosGeral += honTotal;
     totalRepassesLiquidosGeral += repasseLiquido;
     totalAjustesCreditos += creditos;
     totalAjustesDebitos += debitos + bnb;
+    totalCompensacoesConvenioGeral += compensacaoConvenio;
 
     return {
       nome: docName,
@@ -310,6 +321,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
       honParticular: roundCurrency(honParticular),
       honConvenio: roundCurrency(honConvenio),
       honTotal: roundCurrency(honTotal),
+      compensacaoConvenio: roundCurrency(compensacaoConvenio),
       creditos: roundCurrency(creditos),
       debitos: roundCurrency(debitos + bnb),
       cotaDeficit: roundCurrency(cotaDeficit),
@@ -320,7 +332,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
 
   // Filter only doctors with movement or active doctors
   const repassesRelevantes = repassesPorMedico.filter(
-    (m) => m.honTotal > 0 || m.creditos > 0 || m.debitos > 0 || m.cotaDeficit > 0 || m.isAtivo
+    (m) => m.honTotal > 0 || m.creditos > 0 || m.debitos > 0 || m.compensacaoConvenio > 0 || m.cotaDeficit > 0 || m.isAtivo
   );
 
   // 10. Resultado Líquido Final da Clínica (DRE)
@@ -363,6 +375,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     totalRepassesLiquidos: roundCurrency(totalRepassesLiquidosGeral),
     totalAjustesCreditos: roundCurrency(totalAjustesCreditos),
     totalAjustesDebitos: roundCurrency(totalAjustesDebitos),
+    totalCompensacoesConvenio: roundCurrency(totalCompensacoesConvenioGeral),
     repassesPorMedico: repassesRelevantes,
     // Despesas Operacionais
     totalDespesasOperacionais: roundCurrency(totalDespesasOperacionais),

@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import {
+  formatDate,
   formatCurrency,
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
   isDateInPeriod,
   getHonorarioMedicoInPeriod,
+  getDoctorCompensacaoInPeriod,
   exportCSV,
   exportPDF,
 } from '../utils/helpers';
@@ -21,6 +23,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
     medicos: medicosList = [],
     repassesAjustes: ajustesList = [],
     detalhesExames = [],
+    examesConvenio = [],
     fluxoCaixa = [],
     addItem,
     updateItem,
@@ -35,8 +38,10 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
 
   const [editAjusteModal, setEditAjusteModal] = useState(false);
   const [selectedMedico, setSelectedMedico] = useState(null);
+  const [selectedRow, setSelectedRow] = useState(null);
   const [ajusteForm, setAjusteForm] = useState({ creditos: '', debitos: '', bnb: '', obs: '', isSocio: true });
   const [viewingObs, setViewingObs] = useState(null);
+  const [viewingCompensacao, setViewingCompensacao] = useState(null);
 
   const [manageMedicosModal, setManageMedicosModal] = useState(false);
   const [newMedicoNome, setNewMedicoNome] = useState('');
@@ -111,7 +116,11 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
           return sum + getHonorarioMedicoInPeriod(exam, medico.nome, period);
         }, 0);
 
-        // 2. Ajustes (Créditos, Débitos, BNB, OBS)
+        // 2. Compensações de Convênios / Materiais (dedução automática de alças e 50% polipectomias recebidas pelo médico)
+        const compensacaoInfo = getDoctorCompensacaoInPeriod(medico.nome, period, examesConvenio);
+        const compensacaoConvenios = compensacaoInfo.total;
+
+        // 3. Ajustes (Créditos, Débitos, BNB, OBS)
         const key = `${medico.nome.trim().toLowerCase()}_${period.start}`;
         const ajuste = ajustesList.find((a) => a.key === key) || {};
 
@@ -120,12 +129,12 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
         const bnb = Number(ajuste.bnb) || 0;
         const obs = ajuste.obs || '';
 
-        // 3. Cota clínica (apenas para sócios ativos)
+        // 4. Cota clínica (apenas para sócios ativos)
         const cotaClinica = isSocio && isActive ? cotaPorSocio : 0;
 
-        // 4. Total calculation
-        // Total = Honorários + Créditos - Débitos - BNB - Cota clínica
-        const total = honorarios + creditos - debitos - bnb - cotaClinica;
+        // 5. Total calculation (Repasse Líquido)
+        // Total = Honorários + Créditos - Débitos - Compensações - BNB - Cota clínica
+        const total = honorarios + creditos - debitos - compensacaoConvenios - bnb - cotaClinica;
 
         return {
           medico,
@@ -135,6 +144,9 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
           honorarios,
           creditos,
           debitos,
+          compensacaoConvenios,
+          compensacaoCount: compensacaoInfo.count,
+          compensacaoItems: compensacaoInfo.items,
           bnb,
           cotaClinica,
           total,
@@ -143,13 +155,14 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
           key,
         };
       })
-      .filter((row) => (row.isSocio && row.isActive) || row.honorarios > 0 || row.creditos > 0 || row.debitos > 0 || row.bnb > 0 || row.obs);
-  }, [allDoctors, detalhesExames, period, ajustesList, cotaPorSocio]);
+      .filter((row) => (row.isSocio && row.isActive) || row.honorarios > 0 || row.creditos > 0 || row.debitos > 0 || row.compensacaoConvenios > 0 || row.bnb > 0 || row.obs);
+  }, [allDoctors, detalhesExames, examesConvenio, period, ajustesList, cotaPorSocio]);
 
   // Summary Totals
   const totalHonorariosRepassados = repasseRows.reduce((s, r) => s + r.honorarios, 0);
   const totalCreditos = repasseRows.reduce((s, r) => s + r.creditos, 0);
   const totalDebitos = repasseRows.reduce((s, r) => s + r.debitos, 0);
+  const totalCompensacoesGeral = repasseRows.reduce((s, r) => s + r.compensacaoConvenios, 0);
   const totalBNB = repasseRows.reduce((s, r) => s + r.bnb, 0);
   const totalCotaClinica = repasseRows.reduce((s, r) => s + r.cotaClinica, 0);
   const totalLiquidoGeral = repasseRows.reduce((s, r) => s + r.total, 0);
@@ -157,6 +170,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
   // --- Handlers for Editing Doctor Adjustments ---
   const openEditAjuste = (row) => {
     setSelectedMedico(row.medico);
+    setSelectedRow(row);
     setAjusteForm({
       creditos: row.creditos || '',
       debitos: row.debitos || '',
@@ -292,6 +306,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
     { key: 'honorarios', label: 'Honorários', accessor: (r) => formatCurrency(r.honorarios) },
     { key: 'creditos', label: 'Créditos', accessor: (r) => formatCurrency(r.creditos) },
     { key: 'debitos', label: 'Débitos', accessor: (r) => (r.debitos > 0 ? `-${formatCurrency(r.debitos)}` : 'R$ 0,00') },
+    { key: 'compensacaoConvenios', label: 'Compensações', accessor: (r) => (r.compensacaoConvenios > 0 ? `-${formatCurrency(r.compensacaoConvenios)}` : 'R$ 0,00') },
     { key: 'bnb', label: 'BNB', accessor: (r) => (r.bnb > 0 ? `-${formatCurrency(r.bnb)}` : 'R$ 0,00') },
     { key: 'cotaClinica', label: 'Cota Clínica', accessor: (r) => (r.cotaClinica > 0 ? `-${formatCurrency(r.cotaClinica)}` : 'R$ 0,00') },
     { key: 'total', label: 'Total Repasse', accessor: (r) => (r.total >= 0 ? formatCurrency(r.total) : `-${formatCurrency(Math.abs(r.total))}`) },
@@ -408,6 +423,9 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
                   <th style={{ color: 'white', fontWeight: 600 }}>Honorários</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Créditos</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Débitos</th>
+                  <th style={{ color: 'white', fontWeight: 600 }} title="Compensação automática de materiais/alça e 50% de polipectomia recebidos pelo médico">
+                    Compensações
+                  </th>
                   <th style={{ color: 'white', fontWeight: 600 }}>BNB</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Cota clínica</th>
                   <th style={{ color: 'white', fontWeight: 600 }}>Total</th>
@@ -418,7 +436,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
               <tbody>
                 {repasseRows.length === 0 ? (
                   <tr>
-                    <td colSpan="9">
+                    <td colSpan="10">
                       <div className="table-empty">
                         <div className="table-empty-icon">👨‍⚕️</div>
                         <p>Nenhum médico ou repasse registrado para este período.</p>
@@ -466,6 +484,39 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
 
                         <td className={row.debitos > 0 ? 'value-negative' : ''}>
                           {row.debitos > 0 ? `-${formatCurrency(row.debitos)}` : 'R$ 0,00'}
+                        </td>
+
+                        <td className={row.compensacaoConvenios > 0 ? 'value-negative' : ''}>
+                          {row.compensacaoConvenios > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                              <span style={{ fontWeight: 600 }}>-{formatCurrency(row.compensacaoConvenios)}</span>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-icon btn-sm"
+                                style={{
+                                  padding: '2px 5px',
+                                  fontSize: '11px',
+                                  color: 'var(--color-amber)',
+                                  background: 'rgba(245, 158, 11, 0.12)',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() =>
+                                  setViewingCompensacao({
+                                    doctor: row.nome,
+                                    items: row.compensacaoItems,
+                                    total: row.compensacaoConvenios,
+                                  })
+                                }
+                                title={`Ver detalhes das compensações deste médico (${row.compensacaoCount} exame(s))`}
+                              >
+                                ℹ️
+                              </button>
+                            </div>
+                          ) : (
+                            'R$ 0,00'
+                          )}
                         </td>
 
                         <td className={row.bnb > 0 ? 'value-negative' : ''}>
@@ -533,6 +584,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
                       <td className="value-currency">{formatCurrency(totalHonorariosRepassados)}</td>
                       <td className="value-positive">{formatCurrency(totalCreditos)}</td>
                       <td className="value-negative">{totalDebitos > 0 ? `-${formatCurrency(totalDebitos)}` : 'R$ 0,00'}</td>
+                      <td className="value-negative">{totalCompensacoesGeral > 0 ? `-${formatCurrency(totalCompensacoesGeral)}` : 'R$ 0,00'}</td>
                       <td className="value-negative">{totalBNB > 0 ? `-${formatCurrency(totalBNB)}` : 'R$ 0,00'}</td>
                       <td className="value-negative">{totalCotaClinica > 0 ? `-${formatCurrency(totalCotaClinica)}` : 'R$ 0,00'}</td>
                       <td className={totalLiquidoGeral >= 0 ? 'value-positive' : 'value-negative'} style={{ fontWeight: 700 }}>
@@ -607,6 +659,71 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
         </div>
       </Modal>
 
+      {/* Modal: Detalhes de Compensações de Materiais/Convênios */}
+      <Modal
+        isOpen={Boolean(viewingCompensacao)}
+        onClose={() => setViewingCompensacao(null)}
+        title={`Compensações de Convênio — ${viewingCompensacao?.doctor || ''}`}
+        maxWidth="720px"
+        footer={
+          <button type="button" className="btn btn-primary" onClick={() => setViewingCompensacao(null)}>
+            Fechar
+          </button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          <div
+            style={{
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              fontSize: 'var(--text-xs)',
+              lineHeight: 1.5,
+              color: 'var(--color-amber)',
+            }}
+          >
+            💡 <strong>Dedução Automática de Materiais & Procedimentos:</strong>
+            <div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)' }}>
+              Estes valores foram recebidos pelo médico através do extrato do convênio/cooperativa, mas pertencem à clínica (100% da alça/material descartável e 50% da polipectomia). O total de <strong style={{ color: 'var(--color-amber)' }}>{formatCurrency(viewingCompensacao?.total || 0)}</strong> é deduzido automaticamente do repasse líquido do médico neste período.
+            </div>
+          </div>
+
+          <div className="table-scroll" style={{ maxHeight: '320px', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-md)' }}>
+            <table className="data-table" style={{ fontSize: 'var(--text-xs)' }}>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Paciente</th>
+                  <th>Exame / Convênio</th>
+                  <th style={{ textAlign: 'right' }}>Alça (100% Clínica)</th>
+                  <th style={{ textAlign: 'right' }}>Polip. (50% Clínica)</th>
+                  <th style={{ textAlign: 'right' }}>Total Compensado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {viewingCompensacao?.items?.map((item, idx) => (
+                  <tr key={item.id || idx}>
+                    <td>{formatDate(item.fluxoData || item.data)}</td>
+                    <td style={{ fontWeight: 600 }}>{item.paciente}</td>
+                    <td>{item.exame} ({item.convenio})</td>
+                    <td className="value-currency" style={{ textAlign: 'right' }}>
+                      {item.valorAcessorio > 0 ? formatCurrency(item.valorAcessorio) : '—'}
+                    </td>
+                    <td className="value-currency" style={{ textAlign: 'right' }}>
+                      {item.valorPolipectomia > 0 ? formatCurrency(item.valorPolipectomia / 2) : '—'}
+                    </td>
+                    <td className="value-negative" style={{ fontWeight: 700, textAlign: 'right' }}>
+                      -{formatCurrency(item.valorCompensacao)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
+
       {/* Modal: Editar Ajustes do Repasse (Créditos, Débitos, BNB, Sócio, OBS) */}
       <Modal
         isOpen={editAjusteModal}
@@ -625,6 +742,26 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
       >
         <form onSubmit={handleSaveAjuste} autoComplete="off">
           <div className="modal-form-grid">
+            {selectedRow?.compensacaoConvenios > 0 && (
+              <div
+                className="input-group full-width"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.65rem 0.9rem',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-amber)',
+                  lineHeight: 1.4,
+                }}
+              >
+                ✂️ <strong>Compensações Automáticas no Período: -{formatCurrency(selectedRow.compensacaoConvenios)}</strong>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                  Este valor já é descontado automaticamente do total líquido ({selectedRow.compensacaoCount} exame(s) com retenção de alça/polipectomia). Não é necessário lançar em Débitos.
+                </div>
+              </div>
+            )}
+
             <div className="input-group full-width">
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
                 <input

@@ -530,6 +530,7 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
     taxaClinica: Math.round(direitoClinica * 100) / 100,
     valorAcessorios: Math.round((Number(convenioItem.valorAcessorio) || 0) * 100) / 100,
     acessorioParaMedico: false,
+    valorCompensacaoClinica: Math.round((Number(convenioItem.valorCompensacaoClinica) || 0) * 100) / 100,
     valorPagamento: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
     numParcelas: '1',
     formaPagamento: formaStr,
