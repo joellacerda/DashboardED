@@ -613,41 +613,41 @@ export function removeConvenioFromDetalhes(convenioId) {
 
 /**
  * Normalizes convênio names, returning standard key and display name.
- * Specifically formats Unimed as "Unimed" and Coopend as "Coopend".
+ * Formats Unimed as "UNIMED" and Coopend as "COOPEND" (caixa alta para fluxo de caixa).
  */
 export function normalizeConvenioName(raw) {
   if (!raw) return { key: '', display: '' };
   const trimmed = raw.trim();
   const upper = trimmed.toUpperCase();
   if (upper === 'UNIMED' || upper.startsWith('UNIMED')) {
-    return { key: 'UNIMED', display: 'Unimed' };
+    return { key: 'UNIMED', display: 'UNIMED' };
   }
   if (upper === 'COOPEND' || upper.startsWith('COOPEND')) {
-    return { key: 'COOPEND', display: 'Coopend' };
+    return { key: 'COOPEND', display: 'COOPEND' };
   }
-  return { key: upper, display: trimmed };
+  return { key: upper, display: upper };
 }
 
 /**
  * Resolves the Fluxo de Caixa destination for any convênio exam payment.
  *
  * Business Rule:
- * - Unimed is a direct health plan accreditation and consolidates under "Unimed".
+ * - Unimed is a direct health plan accreditation and consolidates under "UNIMED".
  * - Coopend is NOT an individual health plan; it represents the medical clearing cooperative
  *   that pays the clinic for ALL health insurance plans that are NOT Unimed
  *   (e.g., IPM, Bradesco, Cassi, Amil, Cafaz, Camed, SulAmérica, etc.).
- *   Therefore, any exam that is not Unimed enters the cash flow under the single consolidated entry "Coopend".
+ *   Therefore, any exam that is not Unimed enters the cash flow under the single consolidated entry "COOPEND".
  */
 export function getConvenioFluxoDestino(raw) {
   if (!raw || !raw.trim()) {
-    return { key: 'COOPEND', display: 'Coopend', isUnimed: false, isCoopend: true };
+    return { key: 'COOPEND', display: 'COOPEND', isUnimed: false, isCoopend: true };
   }
   const trimmed = raw.trim();
   const upper = trimmed.toUpperCase();
   if (upper === 'UNIMED' || upper.startsWith('UNIMED')) {
-    return { key: 'UNIMED', display: 'Unimed', isUnimed: true, isCoopend: false, convenioOrigem: trimmed };
+    return { key: 'UNIMED', display: 'UNIMED', isUnimed: true, isCoopend: false, convenioOrigem: trimmed };
   }
-  return { key: 'COOPEND', display: 'Coopend', isUnimed: false, isCoopend: true, convenioOrigem: trimmed };
+  return { key: 'COOPEND', display: 'COOPEND', isUnimed: false, isCoopend: true, convenioOrigem: trimmed };
 }
 
 /**

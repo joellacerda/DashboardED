@@ -33,65 +33,65 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 describe('getConvenioFluxoDestino', () => {
-  it('direciona Unimed e suas variações para a entrada consolidada "Unimed"', () => {
+  it('direciona Unimed e suas variações para a entrada consolidada "UNIMED"', () => {
     expect(getConvenioFluxoDestino('UNIMED')).toEqual({
       key: 'UNIMED',
-      display: 'Unimed',
+      display: 'UNIMED',
       isUnimed: true,
       isCoopend: false,
       convenioOrigem: 'UNIMED',
     });
     expect(getConvenioFluxoDestino('Unimed')).toEqual({
       key: 'UNIMED',
-      display: 'Unimed',
+      display: 'UNIMED',
       isUnimed: true,
       isCoopend: false,
       convenioOrigem: 'Unimed',
     });
     expect(getConvenioFluxoDestino('UNIMED FORTALEZA')).toEqual({
       key: 'UNIMED',
-      display: 'Unimed',
+      display: 'UNIMED',
       isUnimed: true,
       isCoopend: false,
       convenioOrigem: 'UNIMED FORTALEZA',
     });
   });
 
-  it('direciona qualquer convênio que não seja Unimed (como IPM, Bradesco, Cassi) para "Coopend"', () => {
+  it('direciona qualquer convênio que não seja Unimed (como IPM, Bradesco, Cassi) para "COOPEND"', () => {
     // IPM
     const ipm = getConvenioFluxoDestino('IPM');
     expect(ipm.key).toBe('COOPEND');
-    expect(ipm.display).toBe('Coopend');
+    expect(ipm.display).toBe('COOPEND');
     expect(ipm.isUnimed).toBe(false);
 
     // Bradesco
     const bradesco = getConvenioFluxoDestino('Bradesco');
     expect(bradesco.key).toBe('COOPEND');
-    expect(bradesco.display).toBe('Coopend');
+    expect(bradesco.display).toBe('COOPEND');
     expect(bradesco.isUnimed).toBe(false);
 
     // Cassi
     const cassi = getConvenioFluxoDestino('CASSI');
     expect(cassi.key).toBe('COOPEND');
-    expect(cassi.display).toBe('Coopend');
+    expect(cassi.display).toBe('COOPEND');
     expect(cassi.isUnimed).toBe(false);
 
     // Coopend
     const coopend = getConvenioFluxoDestino('Coopend');
     expect(coopend.key).toBe('COOPEND');
-    expect(coopend.display).toBe('Coopend');
+    expect(coopend.display).toBe('COOPEND');
     expect(coopend.isUnimed).toBe(false);
 
     // Vazio/nulo
     expect(getConvenioFluxoDestino('')).toEqual({
       key: 'COOPEND',
-      display: 'Coopend',
+      display: 'COOPEND',
       isUnimed: false,
       isCoopend: true,
     });
     expect(getConvenioFluxoDestino(null)).toEqual({
       key: 'COOPEND',
-      display: 'Coopend',
+      display: 'COOPEND',
       isUnimed: false,
       isCoopend: true,
     });
@@ -99,22 +99,22 @@ describe('getConvenioFluxoDestino', () => {
 });
 
 describe('normalizeConvenioName', () => {
-  it('normaliza variações de UNIMED para chave UNIMED e display Unimed', () => {
-    expect(normalizeConvenioName('UNIMED')).toEqual({ key: 'UNIMED', display: 'Unimed' });
-    expect(normalizeConvenioName('Unimed')).toEqual({ key: 'UNIMED', display: 'Unimed' });
-    expect(normalizeConvenioName('unimed')).toEqual({ key: 'UNIMED', display: 'Unimed' });
-    expect(normalizeConvenioName('UNIMED FORTALEZA')).toEqual({ key: 'UNIMED', display: 'Unimed' });
+  it('normaliza variações de UNIMED para chave UNIMED e display UNIMED', () => {
+    expect(normalizeConvenioName('UNIMED')).toEqual({ key: 'UNIMED', display: 'UNIMED' });
+    expect(normalizeConvenioName('Unimed')).toEqual({ key: 'UNIMED', display: 'UNIMED' });
+    expect(normalizeConvenioName('unimed')).toEqual({ key: 'UNIMED', display: 'UNIMED' });
+    expect(normalizeConvenioName('UNIMED FORTALEZA')).toEqual({ key: 'UNIMED', display: 'UNIMED' });
   });
 
-  it('normaliza variações de COOPEND para chave COOPEND e display Coopend', () => {
-    expect(normalizeConvenioName('COOPEND')).toEqual({ key: 'COOPEND', display: 'Coopend' });
-    expect(normalizeConvenioName('Coopend')).toEqual({ key: 'COOPEND', display: 'Coopend' });
-    expect(normalizeConvenioName('coopend')).toEqual({ key: 'COOPEND', display: 'Coopend' });
+  it('normaliza variações de COOPEND para chave COOPEND e display COOPEND', () => {
+    expect(normalizeConvenioName('COOPEND')).toEqual({ key: 'COOPEND', display: 'COOPEND' });
+    expect(normalizeConvenioName('Coopend')).toEqual({ key: 'COOPEND', display: 'COOPEND' });
+    expect(normalizeConvenioName('coopend')).toEqual({ key: 'COOPEND', display: 'COOPEND' });
   });
 
   it('mantém outros convênios com formatação adequada', () => {
     expect(normalizeConvenioName('BRADESCO')).toEqual({ key: 'BRADESCO', display: 'BRADESCO' });
-    expect(normalizeConvenioName('Amil')).toEqual({ key: 'AMIL', display: 'Amil' });
+    expect(normalizeConvenioName('Amil')).toEqual({ key: 'AMIL', display: 'AMIL' });
   });
 
   it('trata valores nulos ou vazios', () => {
@@ -129,7 +129,7 @@ describe('syncConveniosFluxoConsolidado', () => {
     setData(MODULES.fluxoCaixa, []);
   });
 
-  it('cria uma única entrada de "Unimed" no fluxo para o primeiro exame lançado', () => {
+  it('cria uma única entrada de "UNIMED" no fluxo para o primeiro exame lançado', () => {
     const exame1 = {
       id: 'ex_1',
       convenio: 'UNIMED',
@@ -142,15 +142,16 @@ describe('syncConveniosFluxoConsolidado', () => {
     setData(MODULES.examesConvenio, [exame1]);
 
     const fluxo = syncConveniosFluxoConsolidado();
-    const unimedEntries = fluxo.filter((f) => f.nome === 'Unimed');
+    const unimedEntries = fluxo.filter((f) => f.nome === 'UNIMED');
 
     expect(unimedEntries.length).toBe(1);
     expect(unimedEntries[0].valor).toBe(300);
     expect(unimedEntries[0].isConvenioConsolidado).toBe(true);
     expect(unimedEntries[0].qtdExames).toBe(1);
+    expect(unimedEntries[0].examesIds).toEqual(['ex_1']);
   });
 
-  it('incrementa o valor da entrada única de "Unimed" ao adicionar novos exames', () => {
+  it('incrementa o valor da entrada única de "UNIMED" ao adicionar novos exames', () => {
     const exame1 = {
       id: 'ex_1',
       convenio: 'UNIMED',
@@ -182,7 +183,7 @@ describe('syncConveniosFluxoConsolidado', () => {
     setData(MODULES.examesConvenio, [exame1, exame2, exame3]);
 
     const fluxo = syncConveniosFluxoConsolidado();
-    const unimedEntries = fluxo.filter((f) => f.nome === 'Unimed');
+    const unimedEntries = fluxo.filter((f) => f.nome === 'UNIMED');
 
     // Continua sendo APENAS UMA entrada consolidada
     expect(unimedEntries.length).toBe(1);
@@ -190,9 +191,10 @@ describe('syncConveniosFluxoConsolidado', () => {
     expect(unimedEntries[0].valor).toBe(1000);
     expect(unimedEntries[0].qtdExames).toBe(3);
     expect(unimedEntries[0].data).toBe('2026-10-10'); // Data do recebimento mais recente
+    expect(unimedEntries[0].examesIds).toEqual(['ex_1', 'ex_2', 'ex_3']);
   });
 
-  it('mantém entradas separadas e únicas para "Unimed" e "Coopend"', () => {
+  it('mantém entradas separadas e únicas para "UNIMED" e "COOPEND"', () => {
     const exameUnimed1 = {
       id: 'u_1',
       convenio: 'UNIMED',
@@ -229,8 +231,8 @@ describe('syncConveniosFluxoConsolidado', () => {
     setData(MODULES.examesConvenio, [exameUnimed1, exameUnimed2, exameCoopend1, exameCoopend2]);
 
     const fluxo = syncConveniosFluxoConsolidado();
-    const unimedEntries = fluxo.filter((f) => f.nome === 'Unimed');
-    const coopendEntries = fluxo.filter((f) => f.nome === 'Coopend');
+    const unimedEntries = fluxo.filter((f) => f.nome === 'UNIMED');
+    const coopendEntries = fluxo.filter((f) => f.nome === 'COOPEND');
 
     expect(unimedEntries.length).toBe(1);
     expect(unimedEntries[0].valor).toBe(500); // 300 + 200
@@ -242,7 +244,7 @@ describe('syncConveniosFluxoConsolidado', () => {
     expect(fluxo.length).toBe(2);
   });
 
-  it('consolida exames de IPM, Bradesco e outros convênios não-Unimed na entrada única de "Coopend"', () => {
+  it('consolida exames de IPM, Bradesco e outros convênios não-Unimed na entrada única de "COOPEND"', () => {
     // Exame pelo IPM
     const exameIPM = {
       id: 'ex_ipm',
@@ -288,11 +290,11 @@ describe('syncConveniosFluxoConsolidado', () => {
 
     const fluxo = syncConveniosFluxoConsolidado();
 
-    // No fluxo de caixa só devem existir DUAS entradas de convênio: "Unimed" e "Coopend"
+    // No fluxo de caixa só devem existir DUAS entradas de convênio: "UNIMED" e "COOPEND"
     expect(fluxo.length).toBe(2);
 
-    const unimed = fluxo.find((f) => f.nome === 'Unimed');
-    const coopend = fluxo.find((f) => f.nome === 'Coopend');
+    const unimed = fluxo.find((f) => f.nome === 'UNIMED');
+    const coopend = fluxo.find((f) => f.nome === 'COOPEND');
 
     expect(unimed).toBeDefined();
     expect(unimed.valor).toBe(600);
@@ -332,23 +334,23 @@ describe('syncConveniosFluxoConsolidado', () => {
 
     setData(MODULES.examesConvenio, [exame1, exame2]);
     let fluxo = syncConveniosFluxoConsolidado();
-    expect(fluxo.find((f) => f.nome === 'Unimed').valor).toBe(750);
+    expect(fluxo.find((f) => f.nome === 'UNIMED').valor).toBe(750);
 
     // Atualiza exame 2 para R$ 550
     const exame2Atualizado = { ...exame2, fluxoValorLancado: 550 };
     setData(MODULES.examesConvenio, [exame1, exame2Atualizado]);
     fluxo = syncConveniosFluxoConsolidado();
-    expect(fluxo.find((f) => f.nome === 'Unimed').valor).toBe(850);
+    expect(fluxo.find((f) => f.nome === 'UNIMED').valor).toBe(850);
 
     // Remove exame 2 (deixando apenas exame 1)
     setData(MODULES.examesConvenio, [exame1]);
     fluxo = syncConveniosFluxoConsolidado();
-    expect(fluxo.find((f) => f.nome === 'Unimed').valor).toBe(300);
+    expect(fluxo.find((f) => f.nome === 'UNIMED').valor).toBe(300);
 
     // Remove todos os exames de Unimed
     setData(MODULES.examesConvenio, []);
     fluxo = syncConveniosFluxoConsolidado();
-    expect(fluxo.filter((f) => f.nome === 'Unimed').length).toBe(0);
+    expect(fluxo.filter((f) => f.nome === 'UNIMED').length).toBe(0);
   });
 
   it('limpa entradas antigas fragmentadas de "REPASSE CONVÊNIO..." e consolida', () => {
@@ -371,8 +373,8 @@ describe('syncConveniosFluxoConsolidado', () => {
     expect(fluxo.find((f) => f.id === 'f_old_2')).toBeUndefined();
     // Entrada não relacionada foi preservada
     expect(fluxo.find((f) => f.id === 'f_normal')).toBeDefined();
-    // Entrada única consolidada "Unimed" presente com a soma total
-    const unimed = fluxo.find((f) => f.nome === 'Unimed');
+    // Entrada única consolidada "UNIMED" presente com a soma total
+    const unimed = fluxo.find((f) => f.nome === 'UNIMED');
     expect(unimed).toBeDefined();
     expect(unimed.valor).toBe(700);
   });
@@ -408,7 +410,7 @@ describe('relatório consolidado com entradas Unimed e Coopend', () => {
     const fluxoCaixa = [
       {
         id: 'conv_cons_unimed_20260916',
-        nome: 'Unimed',
+        nome: 'UNIMED',
         tipo: 'entrada',
         valor: 500,
         data: '2026-10-05',
@@ -417,7 +419,7 @@ describe('relatório consolidado com entradas Unimed e Coopend', () => {
       },
       {
         id: 'conv_cons_coopend_20260916',
-        nome: 'Coopend',
+        nome: 'COOPEND',
         tipo: 'entrada',
         valor: 800,
         data: '2026-10-08',
@@ -507,7 +509,7 @@ describe('partilha de endoscopia com polipectomia e acessório/alça', () => {
     // 2. Sincroniza com Fluxo de Caixa
     const fluxo = syncConveniosFluxoConsolidado();
     expect(fluxo.length).toBe(1);
-    expect(fluxo[0].nome).toBe('Coopend'); // IPM roteia para Coopend
+    expect(fluxo[0].nome).toBe('COOPEND'); // IPM roteia para COOPEND
     expect(fluxo[0].valor).toBe(550);
 
     // 3. Verifica apuração de compensações devidas pelo médico no período aquisitivo
@@ -555,3 +557,77 @@ describe('partilha de endoscopia com polipectomia e acessório/alça', () => {
     expect(medicoMetrics.repasseLiquido).toBe(600);
   });
 });
+
+describe('detalhamento de exames por tag de pagamento consolidado', () => {
+  beforeEach(() => {
+    setData(MODULES.examesConvenio, []);
+    setData(MODULES.fluxoCaixa, []);
+  });
+
+  it('permite resgatar e listar todos os exames inseridos em um lote de pagamento consolidado no fluxo de caixa', () => {
+    const examCamed = {
+      id: 'ex_camed_1',
+      convenio: 'CAMED',
+      paciente: 'MARIA APARECIDA',
+      medico: 'DR. JOEL',
+      exame: 'COLONOSCOPIA',
+      data: '2026-10-10',
+      fluxoLancado: true,
+      fluxoValorLancado: 380,
+      valorClinica: 380,
+    };
+    const examIpm = {
+      id: 'ex_ipm_1',
+      convenio: 'IPM',
+      paciente: 'JOSE CARLOS',
+      medico: 'DRA. MARINA',
+      exame: 'ENDOSCOPIA',
+      data: '2026-10-11',
+      fluxoLancado: true,
+      fluxoValorLancado: 220,
+      valorClinica: 220,
+    };
+    const examUnimed = {
+      id: 'ex_uni_1',
+      convenio: 'UNIMED',
+      paciente: 'ANA BEATRIZ',
+      medico: 'DR. JOEL',
+      exame: 'ENDOSCOPIA',
+      data: '2026-10-12',
+      fluxoLancado: true,
+      fluxoValorLancado: 400,
+      valorClinica: 400,
+    };
+
+    const exames = [examCamed, examIpm, examUnimed];
+    setData(MODULES.examesConvenio, exames);
+
+    const fluxo = syncConveniosFluxoConsolidado();
+    const coopendEntry = fluxo.find((f) => f.nome === 'COOPEND');
+    const unimedEntry = fluxo.find((f) => f.nome === 'UNIMED');
+
+    expect(coopendEntry).toBeDefined();
+    expect(coopendEntry.qtdExames).toBe(2);
+    expect(coopendEntry.valor).toBe(600); // 380 + 220
+    expect(coopendEntry.examesIds).toEqual(['ex_camed_1', 'ex_ipm_1']);
+
+    expect(unimedEntry).toBeDefined();
+    expect(unimedEntry.qtdExames).toBe(1);
+    expect(unimedEntry.valor).toBe(400);
+    expect(unimedEntry.examesIds).toEqual(['ex_uni_1']);
+
+    // Simulação do clique na tag do lote COOPEND:
+    const examesCoopend = exames.filter((e) => coopendEntry.examesIds.includes(e.id));
+    expect(examesCoopend.length).toBe(2);
+    expect(examesCoopend.map((e) => e.convenio)).toEqual(['CAMED', 'IPM']);
+    const somaClinica = examesCoopend.reduce((s, e) => s + (e.fluxoValorLancado || e.valorClinica), 0);
+    expect(somaClinica).toBe(coopendEntry.valor);
+
+    // Simulação do clique na tag do lote UNIMED:
+    const examesUnimed = exames.filter((e) => unimedEntry.examesIds.includes(e.id));
+    expect(examesUnimed.length).toBe(1);
+    expect(examesUnimed[0].convenio).toBe('UNIMED');
+    expect(examesUnimed[0].paciente).toBe('ANA BEATRIZ');
+  });
+});
+

@@ -9,6 +9,7 @@ import {
   isDateInPeriod,
   exportCSV,
   exportPDF,
+  normalizeProcedimentosComplementares,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -16,7 +17,7 @@ import ExportMenu from '../components/ExportMenu';
 import Pagination from '../components/Pagination';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
-import { MODULES } from '../utils/storage';
+import { MODULES, getConvenioFluxoDestino } from '../utils/storage';
 
 const CATEGORIAS_ENTRADA = [
   'Exames / Procedimentos',
@@ -50,7 +51,7 @@ const columns = [
 
 export default function FluxoCaixaPage() {
   const toast = useToast();
-  const { fluxoCaixa: data = [], addItem, updateItem, deleteItem } = useData();
+  const { fluxoCaixa: data = [], examesConvenio = [], addItem, updateItem, deleteItem } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -63,6 +64,8 @@ export default function FluxoCaixaPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [viewingConsolidadoItem, setViewingConsolidadoItem] = useState(null);
+  const [consolidadoSearch, setConsolidadoSearch] = useState('');
 
   const markTouched = (field) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -192,10 +195,10 @@ function formatDescricao(nome) {
   if (!nome) return '';
   let res = nome.trim();
   if (/^unimed$/i.test(res)) {
-    return 'Unimed';
+    return 'UNIMED';
   }
   if (/^coopend$/i.test(res)) {
-    return 'Coopend';
+    return 'COOPEND';
   }
   if (/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i.test(res)) {
     res = res.replace(/^taxa\s+(de\s+)?cl[ií]nica\s*—\s*/i, 'TAXA DE CLÍNICA — ');
@@ -222,7 +225,7 @@ function formatDescricao(nome) {
     }
     const isUnimed = /^unimed$/i.test(form.nome.trim());
     const isCoopend = /^coopend$/i.test(form.nome.trim());
-    const finalNome = isUnimed ? 'Unimed' : isCoopend ? 'Coopend' : formatDescricao(form.nome.trim().toUpperCase());
+    const finalNome = isUnimed ? 'UNIMED' : isCoopend ? 'COOPEND' : formatDescricao(form.nome.trim().toUpperCase());
     const sanitizedForm = {
       ...form,
       nome: finalNome,
@@ -236,6 +239,56 @@ function formatDescricao(nome) {
     setModalOpen(false);
     toast.success(editId ? 'Lançamento atualizado no Fluxo de Caixa!' : 'Lançamento registrado no Fluxo de Caixa!');
   };
+
+  const consolidadoExamesList = useMemo(() => {
+    if (!viewingConsolidadoItem) return [];
+    const item = viewingConsolidadoItem;
+    const targetKey =
+      item.convenioConsolidado ||
+      (item.nome?.toUpperCase().includes('UNIMED') ? 'UNIMED' : 'COOPEND');
+
+    // 1. Prioritize explicit IDs if registered
+    if (Array.isArray(item.examesIds) && item.examesIds.length > 0) {
+      const idSet = new Set(item.examesIds);
+      return examesConvenio
+        .filter((e) => idSet.has(e.id))
+        .sort((a, b) => (b.fluxoData || b.data || '').localeCompare(a.fluxoData || a.data || ''));
+    }
+
+    // 2. Fallback: match by destination and period
+    const pStart = item.periodoStart || item.periodStart;
+    const pEnd = item.periodoEnd || item.periodEnd;
+    return examesConvenio
+      .filter((e) => {
+        if (!e) return false;
+        const isLancado = Boolean(
+          e.fluxoLancado ||
+          (e.fluxoValorLancado !== undefined && Number(e.fluxoValorLancado) > 0) ||
+          (e.valorClinica !== undefined && e.valorClinica !== '' && Number(e.valorClinica) > 0)
+        );
+        if (!isLancado) return false;
+        const destino = getConvenioFluxoDestino(e.convenio);
+        if (destino.key !== targetKey) return false;
+        if (pStart && pEnd) {
+          const paymentDate = e.fluxoData || e.data;
+          return isDateInPeriod(paymentDate, { start: pStart, end: pEnd });
+        }
+        return true;
+      })
+      .sort((a, b) => (b.fluxoData || b.data || '').localeCompare(a.fluxoData || a.data || ''));
+  }, [viewingConsolidadoItem, examesConvenio]);
+
+  const filteredConsolidadoExames = useMemo(() => {
+    if (!consolidadoSearch) return consolidadoExamesList;
+    const q = consolidadoSearch.toLowerCase();
+    return consolidadoExamesList.filter(
+      (e) =>
+        (e.paciente || '').toLowerCase().includes(q) ||
+        (e.medico || '').toLowerCase().includes(q) ||
+        (e.convenio || '').toLowerCase().includes(q) ||
+        (e.exame || '').toLowerCase().includes(q)
+    );
+  }, [consolidadoExamesList, consolidadoSearch]);
 
   const handleDelete = () => {
     if (deleteId) {
@@ -419,20 +472,34 @@ function formatDescricao(nome) {
                       <td style={{ fontWeight: 500 }}>
                         {formatDescricao(item.nome)}
                         {item.isConvenioConsolidado && item.qtdExames > 0 && (
-                          <span
+                          <button
+                            type="button"
                             className="badge"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingConsolidadoItem(item);
+                              setConsolidadoSearch('');
+                            }}
                             style={{
                               marginLeft: '0.45rem',
                               fontSize: '11px',
-                              fontWeight: 500,
-                              background: 'rgba(59, 130, 246, 0.1)',
+                              fontWeight: 600,
+                              background: 'rgba(59, 130, 246, 0.12)',
                               color: 'var(--color-blue)',
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              transition: 'all 0.15s ease-in-out',
                             }}
-                            title={`Consolidação de ${item.qtdExames} exame(s) de convênio`}
+                            title={`Clique para ver os ${item.qtdExames} exame(s) incluídos neste pagamento consolidado`}
                           >
-                            🏢 {item.qtdExames} exame{item.qtdExames > 1 ? 's' : ''}
-                          </span>
+                            <span>🏢 {item.qtdExames} exame{item.qtdExames > 1 ? 's' : ''}</span>
+                            <span style={{ fontSize: '10px', opacity: 0.75 }}>🔍</span>
+                          </button>
                         )}
                       </td>
                       <td>
@@ -610,6 +677,184 @@ function formatDescricao(nome) {
         onConfirm={handleDelete}
         message="Tem certeza que deseja excluir esta movimentação?"
       />
+
+      {/* Modal de Detalhes dos Exames Consolidados do Convênio */}
+      <Modal
+        isOpen={Boolean(viewingConsolidadoItem)}
+        onClose={() => setViewingConsolidadoItem(null)}
+        title={
+          viewingConsolidadoItem
+            ? `Exames Consolidados — ${formatDescricao(viewingConsolidadoItem.nome)}`
+            : 'Exames Consolidados'
+        }
+        maxWidth="950px"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Total: <strong>{consolidadoExamesList.length}</strong> exame(s) | Entrada Clínica no Caixa:{' '}
+              <strong style={{ color: 'var(--color-success)', fontSize: 'var(--text-base)' }}>
+                {formatCurrency(
+                  consolidadoExamesList.reduce(
+                    (s, e) => s + Number(e.fluxoValorLancado || e.valorClinica || 0),
+                    0
+                  )
+                )}
+              </strong>
+            </div>
+            <button className="btn btn-secondary" onClick={() => setViewingConsolidadoItem(null)}>
+              Fechar
+            </button>
+          </div>
+        }
+      >
+        {viewingConsolidadoItem && (
+          <div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '0.75rem',
+                marginBottom: '1.25rem',
+                background: 'var(--bg-surface-elevated)',
+                padding: '1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Lançamento no Caixa
+                </div>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                  {formatDescricao(viewingConsolidadoItem.nome)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Período Aquisitivo
+                </div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                  {viewingConsolidadoItem.periodoLabel ||
+                    (viewingConsolidadoItem.periodoStart && viewingConsolidadoItem.periodoEnd
+                      ? `${formatDate(viewingConsolidadoItem.periodoStart)} a ${formatDate(viewingConsolidadoItem.periodoEnd)}`
+                      : formatDate(viewingConsolidadoItem.data))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Data do Lote
+                </div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                  {formatDate(viewingConsolidadoItem.data)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Valor Consolidado no Caixa
+                </div>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-success)', marginTop: '0.2rem' }}>
+                  {formatCurrency(viewingConsolidadoItem.valor)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Relação dos Exames Inseridos ({filteredConsolidadoExames.length} de {consolidadoExamesList.length})
+              </div>
+              {consolidadoExamesList.length > 5 && (
+                <div style={{ width: '260px' }}>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Filtrar por paciente, convênio..."
+                    value={consolidadoSearch}
+                    onChange={(e) => setConsolidadoSearch(e.target.value)}
+                    style={{ fontSize: 'var(--text-xs)', padding: '0.35rem 0.65rem' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div
+              className="table-scroll"
+              style={{
+                maxHeight: '380px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <table className="data-table" style={{ fontSize: 'var(--text-sm)' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '90px' }}>Data</th>
+                    <th>Paciente</th>
+                    <th>Convênio</th>
+                    <th>Médico</th>
+                    <th>Exame</th>
+                    <th style={{ textAlign: 'right', width: '130px' }}>Entrada Clínica</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredConsolidadoExames.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        Nenhum exame encontrado com os critérios informados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredConsolidadoExames.map((ex) => {
+                      const clinicaVal = Number(ex.fluxoValorLancado || ex.valorClinica || 0);
+                      const procs = normalizeProcedimentosComplementares(ex.procedimentoComplementar);
+                      return (
+                        <tr key={ex.id}>
+                          <td>{formatDate(ex.fluxoData || ex.data)}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {ex.paciente ? ex.paciente.toUpperCase() : '—'}
+                          </td>
+                          <td>
+                            <span className="badge badge-info" style={{ fontWeight: 600 }}>
+                              {ex.convenio ? ex.convenio.toUpperCase() : '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <div>{ex.medico ? ex.medico.toUpperCase() : '—'}</div>
+                            {ex.temDivisaoMedico2 && ex.medico2 && (
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                👥 c/ {ex.medico2.toUpperCase()} ({ex.porcentagemMedico1 ?? 87.5}% / {ex.porcentagemMedico2 ?? 12.5}%)
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {ex.exame ? ex.exame.toUpperCase() : '—'}
+                            {procs.map((proc) => {
+                              const tagLabel = proc === 'POLIPECTOMIA' ? 'P' : proc === 'MUCOSECTOMIA' ? 'M' : proc;
+                              return (
+                                <span
+                                  key={proc}
+                                  className="badge badge-info"
+                                  style={{ marginLeft: '0.35rem', fontSize: '10px', padding: '1px 5px' }}
+                                  title={proc}
+                                >
+                                  {tagLabel}
+                                </span>
+                              );
+                            })}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-success)' }}>
+                            {formatCurrency(clinicaVal)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   );
 }

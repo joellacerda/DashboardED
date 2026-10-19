@@ -164,7 +164,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
 
     setFluxoForm({
       data: initialData,
-      nome: destinoFluxo.display || 'Coopend',
+      nome: destinoFluxo.display || 'COOPEND',
       categoria: 'Convênios / Repasses',
       tipo: 'entrada',
       valor: initialValor,
@@ -316,7 +316,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
     }
     if (!item) return;
     const valorLancado = Number(fluxoForm.valor);
-    const displayNome = destinoFluxo.display || 'Coopend';
+    const displayNome = destinoFluxo.display || 'COOPEND';
 
     const updatedItem = {
       ...item,
