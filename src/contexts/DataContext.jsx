@@ -27,7 +27,14 @@ import {
 } from '../utils/storage';
 import { getActiveMedicosOptions } from '../utils/helpers';
 
-const DataContext = createContext(null);
+// Contexto dedicado aos dados/estado reativo
+export const DataStateContext = createContext(null);
+
+// Contexto dedicado às ações/mutações estáveis (evita re-renders desnecessários)
+export const DataActionsContext = createContext(null);
+
+// Contexto combinado para compatibilidade total
+export const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
   const [data, setDataState] = useState(() => {
@@ -38,7 +45,7 @@ export function DataProvider({ children }) {
 
   const [storageInfo, setStorageInfo] = useState(() => getStorageUsageInfo());
 
-  // Atualiza um módulo específico no estado React a partir do localStorage
+  // Atualiza um módulo específico no estado React a partir do localStorage/cache
   const refreshModule = useCallback((module) => {
     if (!module) return;
     if (module === 'salasConfig') {
@@ -69,7 +76,6 @@ export function DataProvider({ children }) {
     };
 
     const handleStorageChange = (e) => {
-      // Quando outra aba altera o localStorage
       if (e && e.key && e.key.startsWith('endodiagnose_')) {
         reloadAll();
       }
@@ -88,14 +94,10 @@ export function DataProvider({ children }) {
   const addItem = useCallback((module, item) => {
     const newItem = storageAddItem(module, item);
     const fresh = getData(module);
-    setDataState((prev) => {
-      const next = { ...prev, [module]: fresh };
-      if (module === MODULES.examesConvenio) {
-        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
-        next.detalhesExames = getData(MODULES.detalhesExames);
-      }
-      return next;
-    });
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
     return newItem;
   }, []);
 
@@ -104,14 +106,10 @@ export function DataProvider({ children }) {
     const updated = storageUpdateItem(module, id, updates);
     if (!updated) return null;
     const fresh = getData(module);
-    setDataState((prev) => {
-      const next = { ...prev, [module]: fresh };
-      if (module === MODULES.examesConvenio) {
-        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
-        next.detalhesExames = getData(MODULES.detalhesExames);
-      }
-      return next;
-    });
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
     return updated;
   }, []);
 
@@ -119,14 +117,10 @@ export function DataProvider({ children }) {
   const deleteItem = useCallback((module, id) => {
     storageDeleteItem(module, id);
     const fresh = getData(module);
-    setDataState((prev) => {
-      const next = { ...prev, [module]: fresh };
-      if (module === MODULES.examesConvenio) {
-        next.fluxoCaixa = getData(MODULES.fluxoCaixa);
-        next.detalhesExames = getData(MODULES.detalhesExames);
-      }
-      return next;
-    });
+    setDataState((prev) => ({
+      ...prev,
+      [module]: fresh,
+    }));
   }, []);
 
   // Mutação reativa: Substituir conjunto inteiro de um módulo
@@ -143,7 +137,6 @@ export function DataProvider({ children }) {
   // Sincronização de convênio com detalhes
   const syncConvenioToDetalhes = useCallback((convenioItem) => {
     const result = storageSyncConvenioToDetalhes(convenioItem);
-    // Atualiza imediatamente detalhesExames e examesConvenio no estado
     const freshDetalhes = getData(MODULES.detalhesExames);
     const freshConvenios = getData(MODULES.examesConvenio);
     setDataState((prev) => ({
@@ -282,7 +275,8 @@ export function DataProvider({ children }) {
     refreshModule(MODULES.auditLogs);
   }, [refreshModule]);
 
-  const value = useMemo(
+  // 1. Objeto de Estado (muda quando os dados mudam)
+  const stateValue = useMemo(
     () => ({
       data,
       exames: data.exames || [],
@@ -297,6 +291,13 @@ export function DataProvider({ children }) {
       auditLogs: data.auditLogs || [],
       activeMedicosOptions,
       storageInfo,
+    }),
+    [data, activeMedicosOptions, storageInfo]
+  );
+
+  // 2. Objeto de Ações (estável, não recria a cada mutação de dados)
+  const actionsValue = useMemo(
+    () => ({
       refreshStorageInfo,
       archiveAndPurge,
       previewArchiveData,
@@ -321,9 +322,6 @@ export function DataProvider({ children }) {
       replicateWeekSchedule,
     }),
     [
-      data,
-      activeMedicosOptions,
-      storageInfo,
       refreshStorageInfo,
       archiveAndPurge,
       addItem,
@@ -346,9 +344,51 @@ export function DataProvider({ children }) {
     ]
   );
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  // 3. Objeto Combinado (para useData tradicional)
+  const combinedValue = useMemo(
+    () => ({
+      ...stateValue,
+      ...actionsValue,
+    }),
+    [stateValue, actionsValue]
+  );
+
+  return (
+    <DataStateContext.Provider value={stateValue}>
+      <DataActionsContext.Provider value={actionsValue}>
+        <DataContext.Provider value={combinedValue}>
+          {children}
+        </DataContext.Provider>
+      </DataActionsContext.Provider>
+    </DataStateContext.Provider>
+  );
 }
 
+/**
+ * Hook para acessar somente os dados/estado.
+ */
+export function useDataState() {
+  const context = useContext(DataStateContext);
+  if (!context) {
+    throw new Error('useDataState deve ser usado dentro de um DataProvider');
+  }
+  return context;
+}
+
+/**
+ * Hook para acessar somente as ações/mutações (estáveis).
+ */
+export function useDataActions() {
+  const context = useContext(DataActionsContext);
+  if (!context) {
+    throw new Error('useDataActions deve ser usado dentro de um DataProvider');
+  }
+  return context;
+}
+
+/**
+ * Hook unificado para acessar dados e ações simultaneamente.
+ */
 export function useData() {
   const context = useContext(DataContext);
   if (!context) {
