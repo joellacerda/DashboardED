@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import SyncStatusBadge from './SyncStatusBadge';
 
 const navItems = [
   {
@@ -122,7 +123,7 @@ const navItems = [
   },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, onOpenAuditModal, isCloudConnected }) {
+export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, onOpenAuditModal }) {
   const { user, logout, isConfigured } = useAuth();
   const [avatarError, setAvatarError] = useState(false);
 
@@ -195,28 +196,14 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
         </nav>
 
         <div className="sidebar-bottom-actions">
-          {/* Cloud Sync Button */}
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm sidebar-cloud-btn"
-            style={{
-              width: '100%',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              background: isCloudConnected ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface-elevated)',
-              borderColor: isCloudConnected ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)',
-              color: isCloudConnected ? 'var(--accent-emerald)' : 'var(--text-primary)',
-            }}
-            onClick={() => {
+          {/* Cloud Sync Status Indicator */}
+          <SyncStatusBadge
+            variant="sidebar"
+            onOpenModal={(tab) => {
               if (onClose) onClose();
-              if (onOpenCloudModal) onOpenCloudModal();
+              if (onOpenCloudModal) onOpenCloudModal(tab);
             }}
-          >
-            <span>{isCloudConnected ? '🟢' : '☁️'}</span>
-            <span>{isCloudConnected ? 'Nuvem Conectada' : 'Salvar na Nuvem'}</span>
-          </button>
+          />
 
           <button
             type="button"

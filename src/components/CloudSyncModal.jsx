@@ -11,7 +11,13 @@ import {
   uploadAllLocalToCloud,
   downloadAllCloudToLocal,
 } from '../services/firebase';
-import { getAllData, restoreAllData, MODULE_KEYS } from '../utils/storage';
+import {
+  getPendingQueue,
+  processPendingQueue,
+  clearPendingQueue,
+  mergeCloudDataWithLocal,
+} from '../services/syncQueue';
+import { getAllData, getData, setData, restoreAllData, MODULE_KEYS } from '../utils/storage';
 
 function formatDisplayDate(isoDateStr) {
   if (!isoDateStr) return '';
@@ -69,6 +75,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   });
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [pendingQueue, setPendingQueue] = useState(() => getPendingQueue());
 
   // Confirmação genérica ({ title, message, confirmLabel, action }) — substitui window.confirm
   const [pendingConfirm, setPendingConfirm] = useState(null);
@@ -106,8 +113,17 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       setStatusMessage(null);
       setShowArchiveConfirm(false);
       if (refreshStorageInfo) refreshStorageInfo();
+      setPendingQueue(getPendingQueue());
     }
   }, [isOpen, initialTab, refreshStorageInfo]);
+
+  useEffect(() => {
+    const handleSyncStatus = () => {
+      setPendingQueue(getPendingQueue());
+    };
+    window.addEventListener('endodiagnose:sync-status-changed', handleSyncStatus);
+    return () => window.removeEventListener('endodiagnose:sync-status-changed', handleSyncStatus);
+  }, []);
 
   const handleExecuteArchive = async () => {
     if (!archiveAndPurge || !activeCutoffDate) return;
@@ -248,10 +264,14 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     setStatusMessage(null);
     try {
       const cloudData = await downloadAllCloudToLocal(MODULE_KEYS);
-      restoreAllData(cloudData);
+      const stats = mergeCloudDataWithLocal(cloudData, getData, setData);
       setIsLoading(false);
-      setStatusMessage({ type: 'success', text: '📥 Dados baixados da nuvem e restaurados com sucesso!' });
-      toast.success('Dados restaurados da nuvem com sucesso!');
+      const details = `+${stats.added} novos, ~${stats.updated} atualizados, -${stats.deleted} excluídos`;
+      setStatusMessage({
+        type: 'success',
+        text: `📥 Sincronização da nuvem concluída! (${details}).`,
+      });
+      toast.success('Dados sincronizados com a nuvem com sucesso!');
       if (onDataUpdated) onDataUpdated();
     } catch (err) {
       setIsLoading(false);
@@ -266,10 +286,42 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       return;
     }
     askConfirm({
-      title: 'Restaurar da nuvem',
-      message: 'Isso irá substituir os dados atuais deste navegador pelos dados salvos na nuvem. Deseja continuar?',
-      confirmLabel: 'Substituir dados',
+      title: 'Sincronizar da nuvem',
+      message: 'Isso irá mesclar os dados da nuvem com os dados locais, aplicando alterações mais recentes e respeitando exclusões. Deseja continuar?',
+      confirmLabel: 'Sincronizar dados',
       action: runDownloadFromCloud,
+    });
+  };
+
+  const handleDrainQueue = async () => {
+    setIsLoading(true);
+    try {
+      await processPendingQueue();
+      const freshQueue = getPendingQueue();
+      setPendingQueue(freshQueue);
+      if (freshQueue.length === 0) {
+        toast.success('Todas as pendências foram enviadas à nuvem!');
+      } else {
+        toast.info(`${freshQueue.length} item(ns) aguardando nova tentativa de envio.`);
+      }
+    } catch (err) {
+      toast.error('Erro ao processar fila: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearPendingQueue = () => {
+    askConfirm({
+      title: 'Descartar Pendências',
+      message: 'Deseja realmente limpar a fila de alterações pendentes? Essas operações locais não serão enviadas para a nuvem.',
+      confirmLabel: 'Descartar Fila',
+      confirmVariant: 'danger',
+      action: () => {
+        clearPendingQueue();
+        setPendingQueue([]);
+        toast.info('Fila de pendências limpa.');
+      },
     });
   };
 
@@ -873,6 +925,65 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
                   {isLoading ? 'Baixando...' : '⬇️ Restaurar da Nuvem'}
                 </button>
               </div>
+            </div>
+
+            {/* Fila de Pendências Offline */}
+            <div
+              style={{
+                padding: '1rem',
+                borderRadius: '8px',
+                background: 'var(--bg-surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.8rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h4 style={{ margin: 0, fontSize: 'var(--text-base)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span>{pendingQueue.length > 0 ? '🟡' : '🟢'}</span>
+                  <span>Fila de Pendências Offline</span>
+                </h4>
+                <span
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '12px',
+                    background: pendingQueue.length > 0 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                    color: pendingQueue.length > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--accent-emerald, #10b981)',
+                  }}
+                >
+                  {pendingQueue.length === 0
+                    ? '100% Sincronizado'
+                    : `${pendingQueue.length} ${pendingQueue.length === 1 ? 'item pendente' : 'itens pendentes'}`}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                {pendingQueue.length === 0
+                  ? 'Nenhuma alteração pendente. Todas as mutações locais foram salvas no Firestore ou você está em modo offline sem pendências.'
+                  : 'Alterações registradas offline ou aguardando confirmação do servidor. O sistema tentará sincronizar automaticamente quando houver conexão.'}
+              </p>
+              {pendingQueue.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={handleDrainQueue}
+                    disabled={isLoading || !configured}
+                    title="Forçar envio imediato das pendências para o Firestore"
+                  >
+                    {isLoading ? 'Enviando...' : '⚡ Sincronizar Pendências Agora'}
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={handleClearPendingQueue}
+                    disabled={isLoading}
+                    title="Descarta a fila de pendências locais"
+                  >
+                    🗑️ Descartar Fila
+                  </button>
+                </div>
+              )}
             </div>
 
             <div

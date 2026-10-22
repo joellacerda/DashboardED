@@ -1,4 +1,4 @@
-import { saveToCloud, deleteFromCloud } from '../../services/firebase';
+import { enqueueSyncOperation } from '../../services/syncQueue';
 
 // Nomes dos módulos de dados — use MODULES.x em vez de strings soltas
 export const MODULES = Object.freeze({
@@ -199,14 +199,16 @@ function internalAudit(entry) {
  */
 export function addItem(module, item) {
   const data = getData(module);
+  const now = new Date().toISOString();
   const newItem = {
     ...item,
     id: item.id || crypto.randomUUID(),
-    createdAt: item.createdAt || new Date().toISOString(),
+    createdAt: item.createdAt || now,
+    updatedAt: item.updatedAt || now,
   };
   data.push(newItem);
   setData(module, data);
-  saveToCloud(module, newItem);
+  enqueueSyncOperation({ module, entityId: newItem.id, type: 'UPSERT', payload: newItem });
 
   if (module !== 'auditLogs') {
     const desc = newItem.paciente
@@ -233,9 +235,10 @@ export function updateItem(module, id, updates) {
   const index = data.findIndex((item) => String(item.id) === String(id));
   if (index === -1) return null;
   const oldItem = data[index];
-  data[index] = { ...data[index], ...updates, updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  data[index] = { ...oldItem, ...updates, updatedAt: now };
   setData(module, data);
-  saveToCloud(module, data[index]);
+  enqueueSyncOperation({ module, entityId: id, type: 'UPSERT', payload: data[index] });
 
   if (module !== 'auditLogs') {
     const desc = oldItem.paciente
@@ -261,8 +264,15 @@ export function deleteItem(module, id) {
   const data = getData(module);
   const oldItem = data.find((item) => String(item.id) === String(id));
   const filtered = data.filter((item) => String(item.id) !== String(id));
+  const now = new Date().toISOString();
+  const tombstone = {
+    id,
+    _deleted: true,
+    deletedAt: now,
+    updatedAt: now,
+  };
   setData(module, filtered);
-  deleteFromCloud(module, id);
+  enqueueSyncOperation({ module, entityId: id, type: 'DELETE', payload: tombstone });
 
   if (module !== 'auditLogs') {
     const desc = oldItem?.paciente

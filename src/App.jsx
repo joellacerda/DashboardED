@@ -6,9 +6,11 @@ import LoginPage from './components/LoginPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { DataProvider, useData } from './contexts/DataContext';
-import { isCloudConfigured, initFirebase } from './services/firebase';
+import { initFirebase } from './services/firebase';
 import { runDataMigrations, setAuditUser } from './utils/storage';
 import AuditLogModal from './components/AuditLogModal';
+import SyncStatusBadge from './components/SyncStatusBadge';
+import { initSyncQueueListeners } from './services/syncQueue';
 
 const ROUTES = [
   {
@@ -108,7 +110,6 @@ function AppContent() {
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [storageQuotaExceeded, setStorageQuotaExceeded] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
-  const [cloudConnected, setCloudConnected] = useState(() => isCloudConfigured());
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Define usuário atual para log de auditoria
@@ -150,7 +151,10 @@ function AppContent() {
   useEffect(() => {
     runDataMigrations();
     initFirebase();
-    setCloudConnected(isCloudConfigured());
+    const cleanupSync = initSyncQueueListeners();
+    return () => {
+      if (typeof cleanupSync === 'function') cleanupSync();
+    };
   }, []);
 
   const handleNavigateToDetalhes = (examData) => {
@@ -176,14 +180,12 @@ function AppContent() {
 
   const handleCloudModalClose = () => {
     setCloudModalOpen(false);
-    setCloudConnected(isCloudConfigured());
     refreshConfig();
   };
 
   const handleDataUpdated = () => {
     reloadAll();
     setRefreshKey((k) => k + 1);
-    setCloudConnected(isCloudConfigured());
     refreshConfig();
     setStorageQuotaExceeded(false);
   };
@@ -272,16 +274,7 @@ function AppContent() {
           <div className="sidebar-logo" style={{ width: '32px', height: '32px', fontSize: 'var(--text-sm)' }}>ED</div>
           <span className="sidebar-brand-name" style={{ fontSize: 'var(--text-base)' }}>Endodiagnose</span>
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: 'var(--text-xs)' }}
-          onClick={() => handleOpenCloudModal('sync')}
-          title="Nuvem & Backup"
-        >
-          <span>{cloudConnected ? '🟢' : '☁️'}</span>
-          <span>{cloudConnected ? 'Nuvem' : 'Backup'}</span>
-        </button>
+        <SyncStatusBadge onOpenModal={handleOpenCloudModal} variant="header" />
       </header>
 
       <Sidebar
@@ -291,7 +284,6 @@ function AppContent() {
         onClose={() => setSidebarOpen(false)}
         onOpenCloudModal={(tab = 'sync') => handleOpenCloudModal(tab)}
         onOpenAuditModal={() => setAuditModalOpen(true)}
-        isCloudConnected={cloudConnected}
       />
       <main className="main-content" key={refreshKey}>
         {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
