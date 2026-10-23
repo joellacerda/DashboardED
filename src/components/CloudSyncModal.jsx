@@ -18,6 +18,19 @@ import {
   mergeCloudDataWithLocal,
 } from '../services/syncQueue';
 import { getAllData, getData, setData, restoreAllData, MODULE_KEYS } from '../utils/storage';
+import {
+  recordBackupDone,
+  getInactivityTimeoutMinutes,
+  setInactivityTimeoutMinutes,
+  hasQuickLockPin,
+  setQuickLockPin,
+  clearQuickLockPin,
+  getAllowedEmailsList,
+  setAllowedEmailsList,
+  getLastBackupDate,
+  getDaysSinceLastBackup,
+  isPublicRegistrationAllowed,
+} from '../utils/security';
 
 function formatDisplayDate(isoDateStr) {
   if (!isoDateStr) return '';
@@ -80,6 +93,55 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   // Confirmação genérica ({ title, message, confirmLabel, action }) — substitui window.confirm
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const askConfirm = (options) => setPendingConfirm(options);
+
+  // Estados para Segurança & LGPD
+  const [inactivityMins, setInactivityMins] = useState(() => getInactivityTimeoutMinutes());
+  const [hasPin, setHasPin] = useState(() => hasQuickLockPin());
+  const [pinInput, setPinInput] = useState('');
+  const [allowedEmailsText, setAllowedEmailsText] = useState(() => getAllowedEmailsList().join(', '));
+  const publicRegAllowed = isPublicRegistrationAllowed();
+  const lastBackupIso = getLastBackupDate();
+  const daysSinceBackup = getDaysSinceLastBackup();
+
+  const handleSaveInactivity = (val) => {
+    const mins = parseInt(val, 10);
+    setInactivityMins(mins);
+    setInactivityTimeoutMinutes(mins);
+    toast.success(`Bloqueio por inatividade: ${mins === 0 ? 'Desativado' : mins + ' minutos'}.`);
+  };
+
+  const handleSavePin = async (e) => {
+    e?.preventDefault();
+    if (pinInput.length < 4 || pinInput.length > 8) {
+      toast.error('O PIN deve conter entre 4 e 8 dígitos numéricos.');
+      return;
+    }
+    try {
+      await setQuickLockPin(pinInput);
+      setHasPin(true);
+      setPinInput('');
+      toast.success('PIN de acesso rápido salvo com sucesso!');
+    } catch (err) {
+      toast.error(err.message || 'Erro ao definir PIN.');
+    }
+  };
+
+  const handleClearPin = () => {
+    clearQuickLockPin();
+    setHasPin(false);
+    setPinInput('');
+    toast.info('PIN de acesso rápido removido.');
+  };
+
+  const handleSaveAllowedEmails = (e) => {
+    e?.preventDefault();
+    const list = allowedEmailsText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setAllowedEmailsList(list);
+    toast.success('Lista de usuários/domínios autorizados atualizada com sucesso!');
+  };
 
   const activeCutoffDate = useMemo(
     () => getCutoffDateString(cutoffType, customCutoffDate),
@@ -249,6 +311,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     try {
       const allLocalData = getAllData();
       const count = await uploadAllLocalToCloud(allLocalData);
+      recordBackupDone();
       setIsLoading(false);
       setStatusMessage({ type: 'success', text: `🚀 Backup concluído com sucesso! ${count} registros enviados para o Firestore na nuvem.` });
       toast.success(`Backup concluído! ${count} registros salvos na nuvem.`);
@@ -443,6 +506,13 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
             onClick={() => setActiveTab('config')}
           >
             ⚙️ Configurar Chaves
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${activeTab === 'security' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('security')}
+          >
+            🛡️ Segurança & LGPD
           </button>
         </div>
 
@@ -1204,6 +1274,172 @@ service cloud.firestore {
               </button>
             </div>
           </form>
+        )}
+
+        {/* Tab 5: Segurança & LGPD */}
+        {activeTab === 'security' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.25rem' }}>
+            {/* Header explicativo */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.25), rgba(15, 23, 42, 0.4))',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: '0.75rem',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.75rem',
+              }}
+            >
+              <span style={{ fontSize: '1.75rem', lineHeight: 1 }}>🛡️</span>
+              <div>
+                <h4 style={{ margin: '0 0 0.25rem', fontSize: 'var(--text-base)', color: '#f8fafc' }}>
+                  Conformidade LGPD &amp; Segurança Clínica
+                </h4>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Recursos ativos para proteção de dados sensíveis de saúde de pacientes (Lei nº 13.709/2018, Art. 5º e 11),
+                  incluindo bloqueio automático por inatividade, autenticação restrita, auditoria imutável e controle de backups.
+                </p>
+              </div>
+            </div>
+
+            {/* 1. Bloqueio por Inatividade */}
+            <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+                  ⏱️ Bloqueio Automático por Inatividade
+                </div>
+                <span className="badge badge-primary" style={{ fontSize: 'var(--text-xs)' }}>
+                  {inactivityMins === 0 ? 'Desativado' : `${inactivityMins} min`}
+                </span>
+              </div>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
+                Ao se ausentar do computador, a tela é bloqueada automaticamente com um desfoque de segurança, ocultando prontuários e valores até que o usuário insira o PIN ou faça login novamente.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600 }}>Tempo limite de inatividade:</label>
+                <select
+                  value={inactivityMins}
+                  onChange={(e) => handleSaveInactivity(e.target.value)}
+                  className="input-field"
+                  style={{ width: 'auto', padding: '0.35rem 0.6rem', fontSize: 'var(--text-xs)' }}
+                >
+                  <option value={5}>5 minutos (Recomendado para consultórios)</option>
+                  <option value={15}>15 minutos (Padrão)</option>
+                  <option value={30}>30 minutos</option>
+                  <option value={0}>Desativar bloqueio automático</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 2. PIN de Acesso Rápido */}
+            <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+                  🔑 PIN Numérico de Desbloqueio Rápido
+                </div>
+                <span className={`badge ${hasPin ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: 'var(--text-xs)' }}>
+                  {hasPin ? 'PIN Configurado' : 'Sem PIN Cadastrado'}
+                </span>
+              </div>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
+                Permite que você desbloqueie a tela de forma rápida digitando apenas uma senha numérica (4 a 8 dígitos) em vez de redigitar sua senha longa do e-mail.
+              </p>
+              <form onSubmit={handleSavePin} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  placeholder="Novo PIN (ex: 1234)"
+                  className="input-field"
+                  style={{ width: '180px', fontSize: 'var(--text-xs)', padding: '0.4rem 0.6rem' }}
+                />
+                <button type="submit" className="btn btn-primary btn-sm">
+                  {hasPin ? 'Alterar PIN' : 'Salvar Novo PIN'}
+                </button>
+                {hasPin && (
+                  <button type="button" onClick={handleClearPin} className="btn btn-secondary btn-sm" style={{ color: 'var(--text-danger)' }}>
+                    Remover PIN
+                  </button>
+                )}
+              </form>
+            </div>
+
+            {/* 3. Controle de Cadastro e Allowlist */}
+            <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+                  👥 Restrição de Acesso &amp; Allowlist de E-mails
+                </div>
+                <span className="badge badge-success" style={{ fontSize: 'var(--text-xs)' }}>
+                  {publicRegAllowed ? 'Cadastro Livre' : 'Cadastro Restrito (LGPD)'}
+                </span>
+              </div>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
+                O cadastro público na tela inicial está <strong>desativado</strong> para impedir acesso de estranhos aos dados médicos. Opcionalmente, especifique e-mails ou domínios corporativos autorizados a fazer login (separados por vírgula):
+              </p>
+              <form onSubmit={handleSaveAllowedEmails} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={allowedEmailsText}
+                  onChange={(e) => setAllowedEmailsText(e.target.value)}
+                  placeholder="Ex: admin@endodiagnose.com.br, @endodiagnose.com.br (vazio = todos os cadastrados no Firebase)"
+                  className="input-field"
+                  style={{ width: '100%', fontSize: 'var(--text-xs)', padding: '0.4rem 0.6rem' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="submit" className="btn btn-secondary btn-sm">
+                    Salvar Lista de Usuários Autorizados
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* 4. Regras do Firestore e Imutabilidade */}
+            <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: '0.5rem' }}>
+                🔒 Regras de Segurança do Banco de Dados (`firestore.rules`)
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <li><strong>Autenticação Obrigatória:</strong> Nenhuma leitura ou escrita na nuvem é aceita sem usuário logado (`request.auth != null`).</li>
+                <li><strong>Auditoria Imutável (Append-Only):</strong> A coleção <code>auditLogs</code> na nuvem permite apenas criação de registros. Não é permitido editar ou apagar logs no Firestore, assegurando rastreabilidade legal.</li>
+                <li>Arquivo versionado no repositório: <code>firestore.rules</code> pronto para deploy via <code>firebase deploy --only firestore:rules</code>.</li>
+              </ul>
+            </div>
+
+            {/* 5. Lembrete e Status de Backup */}
+            <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+                  💾 Histórico de Backups de Segurança
+                </div>
+                <span className={`badge ${daysSinceBackup !== null && daysSinceBackup < 7 ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: 'var(--text-xs)' }}>
+                  {daysSinceBackup === null ? 'Sem Backup' : `${daysSinceBackup} dia(s) atrás`}
+                </span>
+              </div>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
+                {lastBackupIso
+                  ? `Último backup realizado em: ${new Date(lastBackupIso).toLocaleString('pt-BR')}.`
+                  : 'Nenhum backup registrado recentemente neste dispositivo.'}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  try {
+                    exportAllDataAsJSON();
+                    toast.success('Backup completo gerado com sucesso!');
+                  } catch (err) {
+                    toast.error('Erro ao gerar backup: ' + err.message);
+                  }
+                }}
+              >
+                📥 Gerar e Baixar Cópia de Segurança (.json) Agora
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </Modal>

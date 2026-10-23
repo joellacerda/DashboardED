@@ -8,6 +8,7 @@ import {
 } from './core';
 import { addAuditLog } from './audit';
 import { deleteFromCloud } from '../../services/firebase';
+import { recordBackupDone } from '../security';
 
 export const ESTIMATED_LOCALSTORAGE_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB
 
@@ -269,6 +270,7 @@ export async function archiveAndPurgeData(cutoffDate) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    recordBackupDone();
   } catch (downloadErr) {
     console.error('Falha ao disparar download do backup pré-expurgo:', downloadErr);
     throw new Error('Não foi possível gerar e baixar o arquivo de backup de segurança. O expurgo foi cancelado para evitar perda de dados.');
@@ -333,4 +335,5 @@ export function exportAllDataAsJSON() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  recordBackupDone();
 }

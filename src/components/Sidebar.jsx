@@ -123,7 +123,15 @@ const navItems = [
   },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpenCloudModal, onOpenAuditModal }) {
+export default function Sidebar({
+  activeTab,
+  onTabChange,
+  isOpen,
+  onClose,
+  onOpenCloudModal,
+  onOpenAuditModal,
+  onLockScreen,
+}) {
   const { user, logout, isConfigured } = useAuth();
   const [avatarError, setAvatarError] = useState(false);
 
@@ -254,6 +262,24 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
                   {user.email}
                 </span>
               </div>
+              {onLockScreen && (
+                <button
+                  type="button"
+                  className="sidebar-user-logout-btn"
+                  onClick={() => {
+                    if (onClose) onClose();
+                    onLockScreen();
+                  }}
+                  title="Bloquear Tela (Inatividade / LGPD)"
+                  aria-label="Bloquear Tela"
+                  style={{ marginRight: '0.25rem' }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 className="sidebar-user-logout-btn"
@@ -269,9 +295,28 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onOpe
               </button>
             </div>
           ) : !isConfigured ? (
-            <div className="sidebar-offline-pill">
-              <span className="sidebar-offline-dot" />
-              <span>Modo Local (Offline)</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%' }}>
+              <div className="sidebar-offline-pill" style={{ margin: 0, flex: 1 }}>
+                <span className="sidebar-offline-dot" />
+                <span>Modo Local (Offline)</span>
+              </div>
+              {onLockScreen && (
+                <button
+                  type="button"
+                  className="sidebar-user-logout-btn"
+                  onClick={() => {
+                    if (onClose) onClose();
+                    onLockScreen();
+                  }}
+                  title="Bloquear Tela (LGPD)"
+                  aria-label="Bloquear Tela"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </button>
+              )}
             </div>
           ) : null}
         </div>

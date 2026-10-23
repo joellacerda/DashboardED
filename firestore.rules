@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // Funções Auxiliares de Segurança e Conformidade LGPD
+    // =========================================================================
+
+    // Verifica se o usuário está autenticado no Firebase Authentication
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Verifica se o e-mail do usuário foi verificado (quando aplicável)
+    function isEmailVerified() {
+      return isAuthenticated() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    // =========================================================================
+    // Coleção de Auditoria (auditLogs / audit_logs)
+    // Conformidade LGPD: Append-Only imutável.
+    // Qualquer usuário autenticado pode registrar ações e ler registros de auditoria,
+    // mas NINGUÉM pode alterar ou deletar logs existentes na nuvem.
+    // =========================================================================
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Imutabilidade estrita
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Imutabilidade estrita
+    }
+
+    // =========================================================================
+    // Coleções Clínicas e Financeiras do Dashboard Endodiagnose
+    // Acesso permitido apenas a usuários devidamente autenticados
+    // =========================================================================
+
+    // Pacientes e Exames
+    match /exames/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Consultas Clínicas
+    match /consultas/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Detalhes Financeiros dos Exames e Repasses
+    match /detalhes/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Convênios e Fluxos de Recebimento
+    match /convenios/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Corpo Clínico (Médicos e Honorários)
+    match /medicos/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Fluxo de Caixa Consolidado
+    match /fluxoCaixa/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Cronograma de Exames e Escalas
+    match /cronograma/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Folha de Pagamento
+    match /folha/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Categorias Financeiras
+    match /categorias/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Metadados do Sistema e Versão do Esquema
+    match /metadata/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Regra Padrão: Bloqueia qualquer acesso a coleções não declaradas
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

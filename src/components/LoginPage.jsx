@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthErrorMessage } from '../services/firebase';
 import { useToast } from '../contexts/ToastContext';
+import { isPublicRegistrationAllowed, isEmailAllowed } from '../utils/security';
 
 export default function LoginPage({ onOpenConfigModal }) {
   const toast = useToast();
-  const { login, register, loginGoogle, sendPasswordReset } = useAuth();
+  const { login, register, loginGoogle, logout, sendPasswordReset } = useAuth();
+  const publicRegAllowed = isPublicRegistrationAllowed();
 
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
   const [email, setEmail] = useState('');
@@ -43,6 +45,14 @@ export default function LoginPage({ onOpenConfigModal }) {
     }
 
     if (mode === 'register') {
+      if (!publicRegAllowed) {
+        setErrorMsg('O cadastro público está desativado pela política de segurança da clínica (LGPD). Solicite acesso ao administrador.');
+        return;
+      }
+      if (!isEmailAllowed(email)) {
+        setErrorMsg('Este e-mail não pertence ao domínio ou à lista de usuários autorizados da clínica.');
+        return;
+      }
       if (password.length < 6) {
         setErrorMsg('A senha deve ter no mínimo 6 caracteres.');
         return;
@@ -67,7 +77,15 @@ export default function LoginPage({ onOpenConfigModal }) {
     // Default mode: login
     setLoading(true);
     try {
-      await login(email, password);
+      const cred = await login(email, password);
+      const userEmail = cred?.user?.email || email;
+      if (!isEmailAllowed(userEmail)) {
+        await logout();
+        setErrorMsg(`Acesso não autorizado: o e-mail "${userEmail}" não possui permissão de acesso à Clínica Endodiagnose.`);
+        toast.error('Acesso não autorizado para este e-mail.');
+        setLoading(false);
+        return;
+      }
     } catch (err) {
       console.error('Login error:', err);
       const msg = getAuthErrorMessage(err);
@@ -82,7 +100,15 @@ export default function LoginPage({ onOpenConfigModal }) {
     setSuccessMsg(null);
     setLoading(true);
     try {
-      await loginGoogle();
+      const cred = await loginGoogle();
+      const userEmail = cred?.user?.email;
+      if (userEmail && !isEmailAllowed(userEmail)) {
+        await logout();
+        setErrorMsg(`Acesso não autorizado: a conta Google "${userEmail}" não possui permissão de acesso à Clínica Endodiagnose.`);
+        toast.error('Acesso não autorizado para esta conta Google.');
+        setLoading(false);
+        return;
+      }
     } catch (err) {
       console.error('Google sign-in error:', err);
       const msg = getAuthErrorMessage(err);
@@ -102,8 +128,8 @@ export default function LoginPage({ onOpenConfigModal }) {
           <p className="login-subtitle">Acesso Seguro ao Dashboard Clínico</p>
         </div>
 
-        {/* Tab Switcher (Login vs Cadastro) */}
-        {mode !== 'forgot' && (
+        {/* Tab Switcher (Login vs Cadastro - Apenas se cadastro público estiver ativado) */}
+        {mode !== 'forgot' && publicRegAllowed && (
           <div className="login-tabs">
             <button
               type="button"
@@ -352,6 +378,10 @@ export default function LoginPage({ onOpenConfigModal }) {
             </button>
           </div>
         )}
+
+        <div style={{ textAlign: 'center', marginTop: '1.25rem', padding: '0.75rem 0.5rem 0', borderTop: '1px solid var(--border-color, #334155)', fontSize: '0.75rem', color: 'var(--text-muted, #94a3b8)', lineHeight: 1.4 }}>
+          🔒 <strong>Acesso Restrito &amp; Seguro:</strong> Dados clínicos e financeiros protegidos em conformidade com a LGPD (Lei nº 13.709/2018, Art. 5º e 11).
+        </div>
       </div>
     </div>
   );

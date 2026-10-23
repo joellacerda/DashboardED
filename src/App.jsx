@@ -11,6 +11,9 @@ import { runDataMigrations, setAuditUser } from './utils/storage';
 import AuditLogModal from './components/AuditLogModal';
 import SyncStatusBadge from './components/SyncStatusBadge';
 import { initSyncQueueListeners } from './services/syncQueue';
+import LockScreen from './components/LockScreen';
+import BackupReminderBanner from './components/BackupReminderBanner';
+import { useInactivityLock } from './hooks/useInactivityLock';
 
 const ROUTES = [
   {
@@ -111,6 +114,9 @@ function AppContent() {
   const [storageQuotaExceeded, setStorageQuotaExceeded] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Bloqueio de tela por inatividade (LGPD)
+  const { isLocked, lockNow, unlock } = useInactivityLock(Boolean(user || !isConfigured));
 
   // Define usuário atual para log de auditoria
   useEffect(() => {
@@ -274,7 +280,28 @@ function AppContent() {
           <div className="sidebar-logo" style={{ width: '32px', height: '32px', fontSize: 'var(--text-sm)' }}>ED</div>
           <span className="sidebar-brand-name" style={{ fontSize: 'var(--text-base)' }}>Endodiagnose</span>
         </div>
-        <SyncStatusBadge onOpenModal={handleOpenCloudModal} variant="header" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={lockNow}
+            title="Bloquear Tela Agora (Inatividade / LGPD)"
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#cbd5e1',
+              padding: '0.35rem 0.6rem',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontSize: '0.8rem',
+            }}
+          >
+            🔒
+          </button>
+          <SyncStatusBadge onOpenModal={handleOpenCloudModal} variant="header" />
+        </div>
       </header>
 
       <Sidebar
@@ -284,8 +311,12 @@ function AppContent() {
         onClose={() => setSidebarOpen(false)}
         onOpenCloudModal={(tab = 'sync') => handleOpenCloudModal(tab)}
         onOpenAuditModal={() => setAuditModalOpen(true)}
+        onLockScreen={lockNow}
       />
       <main className="main-content" key={refreshKey}>
+        {/* Lembrete de Segurança / Backup periódico LGPD */}
+        <BackupReminderBanner onOpenBackupModal={() => handleOpenCloudModal('storage')} />
+
         {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
         {!bannerDismissed && (storageQuotaExceeded || storageInfo?.status === 'critical' || (storageInfo?.status === 'warning' && storageInfo?.usedPercentage >= 75)) && (
           <div className={`storage-alert-banner ${storageQuotaExceeded || storageInfo?.status === 'critical' ? 'critical' : 'warning'}`}>
@@ -347,6 +378,9 @@ function AppContent() {
         isOpen={auditModalOpen}
         onClose={() => setAuditModalOpen(false)}
       />
+
+      {/* Tela de Bloqueio por Inatividade (LGPD) */}
+      <LockScreen isLocked={isLocked} onUnlock={unlock} />
     </div>
   );
 }
