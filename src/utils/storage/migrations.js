@@ -2,7 +2,7 @@ import { getData, setData, MODULES, getLocalStorage } from './core';
 import { saveToCloud } from '../../services/firebase';
 
 export const SCHEMA_VERSION_KEY = 'endodiagnose_schema_version';
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 let _hasRunMigrations = false;
 
@@ -167,6 +167,42 @@ export function runDataMigrations(convenioSyncFns = {}) {
       if (typeof convenioSyncFns.syncAllConveniosToDetalhes === 'function') {
         convenioSyncFns.syncAllConveniosToDetalhes();
       }
+    }
+
+    // Migração V3: Assegurar medicoId em medicos e vincular medicoId/medico2Id nos exames existentes
+    if (storedVersion < 3) {
+      const doctorMap = {};
+      migrate(MODULES.medicos, (m) => {
+        const id = m.id || crypto.randomUUID();
+        if (m.nome) {
+          doctorMap[m.nome.trim().toUpperCase()] = id;
+        }
+        return m.id ? m : { ...m, id };
+      });
+
+      const assignDoctorIds = (item) => {
+        let changed = false;
+        const updated = { ...item };
+        if (updated.medico && !updated.medicoId) {
+          const mId = doctorMap[updated.medico.trim().toUpperCase()];
+          if (mId) {
+            updated.medicoId = mId;
+            changed = true;
+          }
+        }
+        if (updated.medico2 && !updated.medico2Id) {
+          const m2Id = doctorMap[updated.medico2.trim().toUpperCase()];
+          if (m2Id) {
+            updated.medico2Id = m2Id;
+            changed = true;
+          }
+        }
+        return changed ? updated : item;
+      };
+
+      migrate(MODULES.exames, assignDoctorIds);
+      migrate(MODULES.examesConvenio, assignDoctorIds);
+      migrate(MODULES.detalhesExames, assignDoctorIds);
     }
 
     storage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION));

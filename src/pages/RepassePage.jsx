@@ -1,317 +1,58 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useData } from '../contexts/DataContext';
 import {
-  formatDate,
-  formatCurrency,
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
-  isDateInPeriod,
-  getHonorarioMedicoInPeriod,
-  getDoctorCompensacaoInPeriod,
-  exportCSV,
-  exportPDF,
 } from '../utils/helpers';
-import Modal from '../components/Modal';
-import ConfirmDialog from '../components/ConfirmDialog';
-import ExportMenu from '../components/ExportMenu';
-import { useToast } from '../contexts/ToastContext';
-import { MODULES } from '../utils/storage';
+import { useRepasseData } from './repasse/useRepasseData';
+import RepasseSummaryCards from './repasse/RepasseSummaryCards';
+import RepasseTable from './repasse/RepasseTable';
+import RepasseObsModal from './repasse/RepasseObsModal';
+import RepasseCompensacaoModal from './repasse/RepasseCompensacaoModal';
+import RepasseAjusteModal from './repasse/RepasseAjusteModal';
+import ManageMedicosModal from './repasse/ManageMedicosModal';
 
 export default function RepassePage({ onNavigateToDoctor = null }) {
-  const toast = useToast();
   const {
-    medicos: medicosList = [],
-    repassesAjustes: ajustesList = [],
-    detalhesExames = [],
-    examesConvenio = [],
-    fluxoCaixa = [],
-    addItem,
-    updateItem,
-    deleteItem,
-    setData,
-    syncAllConveniosToDetalhes,
-  } = useData();
-  const [period, setPeriod] = useState(() => getAcquisitionPeriod());
-
-  const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
-  const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
-
-  const [editAjusteModal, setEditAjusteModal] = useState(false);
-  const [selectedMedico, setSelectedMedico] = useState(null);
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [ajusteForm, setAjusteForm] = useState({ creditos: '', debitos: '', bnb: '', obs: '', isSocio: true });
-  const [viewingObs, setViewingObs] = useState(null);
-  const [viewingCompensacao, setViewingCompensacao] = useState(null);
-
-  const [manageMedicosModal, setManageMedicosModal] = useState(false);
-  const [newMedicoNome, setNewMedicoNome] = useState('');
-  const [newMedicoSocio, setNewMedicoSocio] = useState(true);
-  const [deleteMedicoId, setDeleteMedicoId] = useState(null);
-
-  const refreshAll = () => {};
-
-  useEffect(() => {
-    syncAllConveniosToDetalhes();
-  }, [syncAllConveniosToDetalhes]);
-
-  // --- Calculate Clinic Deficit for current period ---
-  const periodFluxo = useMemo(
-    () => fluxoCaixa.filter((f) => isDateInPeriod(f.data, period)),
-    [fluxoCaixa, period]
-  );
-
-  const totalEntradasFluxo = useMemo(
-    () => periodFluxo.filter((f) => f.tipo === 'entrada').reduce((s, f) => s + Number(f.valor || 0), 0),
-    [periodFluxo]
-  );
-
-  const totalSaidasFluxo = useMemo(
-    () => periodFluxo.filter((f) => f.tipo === 'saida').reduce((s, f) => s + Number(f.valor || 0), 0),
-    [periodFluxo]
-  );
-
-  const deficitClinica = Math.max(0, totalSaidasFluxo - totalEntradasFluxo);
-
-  // --- Merge registered doctors with doctors found in exam records ---
-  const allDoctors = useMemo(() => {
-    const list = medicosList.map((m) => ({
-      ...m,
-      nome: m.nome.trim().toUpperCase(),
-      ativo: m.ativo !== false,
-    }));
-    const registeredNames = new Set(list.map((m) => m.nome.trim().toUpperCase()));
-
-    // Collect from exam records
-    detalhesExames.forEach((e) => {
-      if (e.medico && !registeredNames.has(e.medico.trim().toUpperCase())) {
-        registeredNames.add(e.medico.trim().toUpperCase());
-        list.push({ id: `auto_${e.medico.trim().toUpperCase()}`, nome: e.medico.trim().toUpperCase(), socio: true, auto: true, ativo: true });
-      }
-      if (e.medico2 && !registeredNames.has(e.medico2.trim().toUpperCase())) {
-        registeredNames.add(e.medico2.trim().toUpperCase());
-        list.push({ id: `auto_${e.medico2.trim().toUpperCase()}`, nome: e.medico2.trim().toUpperCase(), socio: true, auto: true, ativo: true });
-      }
-    });
-
-    return list.sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [medicosList, detalhesExames]);
-
-  // Count active partner doctors (sócios)
-  const countSocios = useMemo(
-    () => allDoctors.filter((m) => m.socio !== false && m.ativo !== false).length,
-    [allDoctors]
-  );
-
-  const cotaPorSocio = countSocios > 0 && deficitClinica > 0 ? deficitClinica / countSocios : 0;
-
-  // --- Build Repasse Table Row Items ---
-  const repasseRows = useMemo(() => {
-    return allDoctors
-      .map((medico) => {
-        const isSocio = medico.socio !== false;
-        const isActive = medico.ativo !== false;
-
-        // 1. Honorários
-        const honorarios = detalhesExames.reduce((sum, exam) => {
-          return sum + getHonorarioMedicoInPeriod(exam, medico.nome, period);
-        }, 0);
-
-        // 2. Compensações de Convênios / Materiais (dedução automática de alças e 50% polipectomias recebidas pelo médico)
-        const compensacaoInfo = getDoctorCompensacaoInPeriod(medico.nome, period, examesConvenio);
-        const compensacaoConvenios = compensacaoInfo.total;
-
-        // 3. Ajustes (Créditos, Débitos, BNB, OBS)
-        const key = `${medico.nome.trim().toLowerCase()}_${period.start}`;
-        const ajuste = ajustesList.find((a) => a.key === key) || {};
-
-        const creditos = Number(ajuste.creditos) || 0;
-        const debitos = Number(ajuste.debitos) || 0;
-        const bnb = Number(ajuste.bnb) || 0;
-        const obs = ajuste.obs || '';
-
-        // 4. Cota clínica (apenas para sócios ativos)
-        const cotaClinica = isSocio && isActive ? cotaPorSocio : 0;
-
-        // 5. Total calculation (Repasse Líquido)
-        // Total = Honorários + Créditos - Débitos - Compensações - BNB - Cota clínica
-        const total = honorarios + creditos - debitos - compensacaoConvenios - bnb - cotaClinica;
-
-        return {
-          medico,
-          nome: medico.nome,
-          isSocio,
-          isActive,
-          honorarios,
-          creditos,
-          debitos,
-          compensacaoConvenios,
-          compensacaoCount: compensacaoInfo.count,
-          compensacaoItems: compensacaoInfo.items,
-          bnb,
-          cotaClinica,
-          total,
-          obs,
-          ajusteId: ajuste.id,
-          key,
-        };
-      })
-      .filter((row) => (row.isSocio && row.isActive) || row.honorarios > 0 || row.creditos > 0 || row.debitos > 0 || row.compensacaoConvenios > 0 || row.bnb > 0 || row.obs);
-  }, [allDoctors, detalhesExames, examesConvenio, period, ajustesList, cotaPorSocio]);
-
-  // Summary Totals
-  const totalHonorariosRepassados = repasseRows.reduce((s, r) => s + r.honorarios, 0);
-  const totalCreditos = repasseRows.reduce((s, r) => s + r.creditos, 0);
-  const totalDebitos = repasseRows.reduce((s, r) => s + r.debitos, 0);
-  const totalCompensacoesGeral = repasseRows.reduce((s, r) => s + r.compensacaoConvenios, 0);
-  const totalBNB = repasseRows.reduce((s, r) => s + r.bnb, 0);
-  const totalCotaClinica = repasseRows.reduce((s, r) => s + r.cotaClinica, 0);
-  const totalLiquidoGeral = repasseRows.reduce((s, r) => s + r.total, 0);
-
-  // --- Handlers for Editing Doctor Adjustments ---
-  const openEditAjuste = (row) => {
-    setSelectedMedico(row.medico);
-    setSelectedRow(row);
-    setAjusteForm({
-      creditos: row.creditos || '',
-      debitos: row.debitos || '',
-      bnb: row.bnb || '',
-      obs: row.obs || '',
-      isSocio: row.isSocio,
-    });
-    setEditAjusteModal(true);
-  };
-
-  const handleSaveAjuste = (e) => {
-    e.preventDefault();
-    if (!selectedMedico) return;
-
-    // Update socio status in medicosList if modified
-    const currentMedicos = [...medicosList];
-    const existingIndex = currentMedicos.findIndex(
-      (m) => m.nome.trim().toLowerCase() === selectedMedico.nome.trim().toLowerCase()
-    );
-
-    if (existingIndex !== -1) {
-      currentMedicos[existingIndex] = { ...currentMedicos[existingIndex], socio: ajusteForm.isSocio };
-      setData(MODULES.medicos, currentMedicos);
-    } else {
-      currentMedicos.push({
-        id: crypto.randomUUID(),
-        nome: selectedMedico.nome,
-        socio: ajusteForm.isSocio,
-      });
-      setData(MODULES.medicos, currentMedicos);
-    }
-
-    // Save adjustment record
-    const key = `${selectedMedico.nome.trim().toLowerCase()}_${period.start}`;
-    const currentAjustes = [...ajustesList];
-    const ajusteIndex = currentAjustes.findIndex((a) => a.key === key);
-
-    const ajusteData = {
-      key,
-      medicoNome: selectedMedico.nome,
-      periodStart: period.start,
-      periodEnd: period.end,
-      creditos: ajusteForm.creditos,
-      debitos: ajusteForm.debitos,
-      bnb: ajusteForm.bnb,
-      obs: ajusteForm.obs,
-    };
-
-    if (ajusteIndex !== -1) {
-      currentAjustes[ajusteIndex] = { ...currentAjustes[ajusteIndex], ...ajusteData };
-    } else {
-      currentAjustes.push({ id: crypto.randomUUID(), ...ajusteData });
-    }
-
-    setData(MODULES.repassesAjustes, currentAjustes);
-    refreshAll();
-    setEditAjusteModal(false);
-    toast.success('Ajustes de repasse salvos com sucesso!');
-  };
-
-  // --- Handlers for Managing Doctors ---
-  const handleAddMedico = (e) => {
-    e.preventDefault();
-    if (!newMedicoNome.trim()) return;
-
-    const currentMedicos = medicosList || [];
-    const nomeUpper = newMedicoNome.trim().toUpperCase();
-    const existing = currentMedicos.find((m) => m.nome.trim().toUpperCase() === nomeUpper);
-    if (existing) {
-      if (existing.ativo === false) {
-        updateItem(MODULES.medicos, existing.id, { ativo: true, socio: newMedicoSocio });
-        setNewMedicoNome('');
-        refreshAll();
-        toast.success('Médico reativado com sucesso!');
-        return;
-      }
-      toast.warning('Médico já cadastrado!');
-      return;
-    }
-
-    addItem(MODULES.medicos, { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
-    setNewMedicoNome('');
-    refreshAll();
-    toast.success('Médico adicionado com sucesso!');
-  };
-
-  const handleDeleteMedico = () => {
-    if (deleteMedicoId) {
-      deleteItem(MODULES.medicos, deleteMedicoId);
-      refreshAll();
-      toast.success('Médico removido com sucesso.');
-    }
-  };
-
-  const toggleMedicoSocio = (medico) => {
-    const currentMedicos = medicosList || [];
-    const index = currentMedicos.findIndex(
-      (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
-    );
-    if (index !== -1) {
-      updateItem(MODULES.medicos, currentMedicos[index].id, { socio: !currentMedicos[index].socio });
-    } else {
-      addItem(MODULES.medicos, {
-        nome: medico.nome.trim().toUpperCase(),
-        socio: !medico.socio,
-        ativo: medico.ativo !== false,
-      });
-    }
-    refreshAll();
-  };
-
-  const toggleMedicoAtivo = (medico) => {
-    const currentMedicos = medicosList || [];
-    const index = currentMedicos.findIndex(
-      (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
-    );
-    const isCurrentlyActive = medico.ativo !== false;
-    if (index !== -1) {
-      updateItem(MODULES.medicos, currentMedicos[index].id, { ativo: !isCurrentlyActive });
-    } else {
-      addItem(MODULES.medicos, {
-        nome: medico.nome.trim().toUpperCase(),
-        socio: medico.socio !== false,
-        ativo: !isCurrentlyActive,
-      });
-    }
-    refreshAll();
-  };
-
-  // --- Export Columns ---
-  const exportColumns = [
-    { key: 'nome', label: 'Médico', accessor: (r) => `${r.nome}${r.isSocio ? ' (Sócio)' : ''}` },
-    { key: 'honorarios', label: 'Honorários', accessor: (r) => formatCurrency(r.honorarios) },
-    { key: 'creditos', label: 'Créditos', accessor: (r) => formatCurrency(r.creditos) },
-    { key: 'debitos', label: 'Débitos', accessor: (r) => (r.debitos > 0 ? `-${formatCurrency(r.debitos)}` : 'R$ 0,00') },
-    { key: 'compensacaoConvenios', label: 'Compensações', accessor: (r) => (r.compensacaoConvenios > 0 ? `-${formatCurrency(r.compensacaoConvenios)}` : 'R$ 0,00') },
-    { key: 'bnb', label: 'BNB', accessor: (r) => (r.bnb > 0 ? `-${formatCurrency(r.bnb)}` : 'R$ 0,00') },
-    { key: 'cotaClinica', label: 'Cota Clínica', accessor: (r) => (r.cotaClinica > 0 ? `-${formatCurrency(r.cotaClinica)}` : 'R$ 0,00') },
-    { key: 'total', label: 'Total Repasse', accessor: (r) => (r.total >= 0 ? formatCurrency(r.total) : `-${formatCurrency(Math.abs(r.total))}`) },
-    { key: 'obs', label: 'OBS' },
-  ];
+    period,
+    setPeriod,
+    isCurrentPeriod,
+    deficitClinica,
+    countSocios,
+    cotaPorSocio,
+    allDoctors,
+    repasseRows,
+    totalHonorariosRepassados,
+    totalCreditos,
+    totalDebitos,
+    totalCompensacoesGeral,
+    totalBNB,
+    totalCotaClinica,
+    totalLiquidoGeral,
+    exportColumns,
+    editAjusteModal,
+    setEditAjusteModal,
+    selectedMedico,
+    selectedRow,
+    ajusteForm,
+    setAjusteForm,
+    openEditAjuste,
+    handleSaveAjuste,
+    viewingObs,
+    setViewingObs,
+    viewingCompensacao,
+    setViewingCompensacao,
+    manageMedicosModal,
+    setManageMedicosModal,
+    newMedicoNome,
+    setNewMedicoNome,
+    newMedicoSocio,
+    setNewMedicoSocio,
+    deleteMedicoId,
+    setDeleteMedicoId,
+    handleAddMedico,
+    handleDeleteMedico,
+    toggleMedicoSocio,
+    toggleMedicoAtivo,
+  } = useRepasseData();
 
   return (
     <>
@@ -357,614 +98,74 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
 
       <div className="page-container">
         {/* KPI Summary Cards */}
-        <div className="summary-cards">
-          <div className="summary-card card-accent-emerald">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Total Honorários</span>
-              <div className="summary-card-icon">👨‍⚕️</div>
-            </div>
-            <div className="summary-card-value">{formatCurrency(totalHonorariosRepassados)}</div>
-            <div className="summary-card-footer">Nos exames do período aquisitivo</div>
-          </div>
+        <RepasseSummaryCards
+          totalHonorariosRepassados={totalHonorariosRepassados}
+          deficitClinica={deficitClinica}
+          cotaPorSocio={cotaPorSocio}
+          countSocios={countSocios}
+          totalLiquidoGeral={totalLiquidoGeral}
+          repasseRowsCount={repasseRows.length}
+        />
 
-          <div className="summary-card card-accent-amber">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Déficit da Clínica</span>
-              <div className="summary-card-icon amber">📉</div>
-            </div>
-            <div className={`summary-card-value ${deficitClinica > 0 ? 'value-negative' : 'value-positive'}`}>
-              {deficitClinica > 0 ? formatCurrency(deficitClinica) : 'R$ 0,00'}
-            </div>
-            <div className="summary-card-footer">
-              {deficitClinica > 0
-                ? `Cota por sócio (${countSocios}): -${formatCurrency(cotaPorSocio)}`
-                : 'Clínica sem déficit no período'}
-            </div>
-          </div>
-
-          <div className="summary-card card-accent-blue">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Total Repasses Líquidos</span>
-              <div className="summary-card-icon blue">💰</div>
-            </div>
-            <div className={`summary-card-value ${totalLiquidoGeral >= 0 ? 'value-positive' : 'value-negative'}`}>
-              {totalLiquidoGeral >= 0 ? formatCurrency(totalLiquidoGeral) : `-${formatCurrency(Math.abs(totalLiquidoGeral))}`}
-            </div>
-            <div className="summary-card-footer">Total final dos repasses médicos</div>
-          </div>
-
-          <div className="summary-card card-accent-purple">
-            <div className="summary-card-header">
-              <span className="summary-card-label">Médicos Ativos</span>
-              <div className="summary-card-icon purple">👥</div>
-            </div>
-            <div className="summary-card-value">{repasseRows.length}</div>
-            <div className="summary-card-footer">{countSocios} médico(s) sócio(s)</div>
-          </div>
-        </div>
-
-        {/* Repasses Data Table (Matching the User's Screenshot Layout) */}
-        <div className="table-container">
-          <div className="table-header">
-            <h3 className="table-title">Demostrativo de Repasse por Médico</h3>
-            <div className="table-actions">
-              <ExportMenu
-                onExportCSV={() => exportCSV(repasseRows, exportColumns, `repasses_medicos_${period.start}`)}
-                onExportPDF={() => exportPDF(repasseRows, exportColumns, `Repasses Médicos — ${period.label}`)}
-              />
-            </div>
-          </div>
-
-          <div className="table-scroll">
-            <table className="data-table repasse-table" style={{ fontSize: 'var(--text-sm)' }}>
-              <thead>
-                <tr style={{ background: 'oklch(22% 0.04 160)' }}>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Médico</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Honorários</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Créditos</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Débitos</th>
-                  <th style={{ color: 'white', fontWeight: 600 }} title="Compensação automática de materiais/alça e 50% de polipectomia recebidos pelo médico">
-                    Compensações
-                  </th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>BNB</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Cota clínica</th>
-                  <th style={{ color: 'white', fontWeight: 600 }}>Total</th>
-                  <th style={{ color: 'white', fontWeight: 600, width: '60px', textAlign: 'center' }}>OBS</th>
-                  <th style={{ color: 'white', fontWeight: 600, width: '70px', textAlign: 'center' }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repasseRows.length === 0 ? (
-                  <tr>
-                    <td colSpan="10">
-                      <div className="table-empty">
-                        <div className="table-empty-icon">👨‍⚕️</div>
-                        <p>Nenhum médico ou repasse registrado para este período.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  <>
-                    {repasseRows.map((row) => (
-                      <tr key={row.nome}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 500 }}>
-                            <span
-                              style={{
-                                cursor: onNavigateToDoctor ? 'pointer' : 'default',
-                                color: onNavigateToDoctor ? 'var(--color-emerald)' : 'inherit',
-                                textDecoration: onNavigateToDoctor ? 'underline' : 'none',
-                                textUnderlineOffset: '2px',
-                              }}
-                              onClick={() => onNavigateToDoctor && onNavigateToDoctor(row.nome)}
-                              title="Abrir Dashboard Individual deste Médico"
-                            >
-                              {row.nome}
-                            </span>
-                            {row.isSocio && (
-                              <span className="badge badge-success" title="Médico Sócio da Clínica">
-                                Sócio
-                              </span>
-                            )}
-                            {!row.isActive && (
-                              <span className="badge badge-danger" style={{ opacity: 0.8 }} title="Médico Desativado (histórico preservado)">
-                                Inativo
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="value-currency">
-                          {formatCurrency(row.honorarios)}
-                        </td>
-
-                        <td className={row.creditos > 0 ? 'value-positive' : ''}>
-                          {formatCurrency(row.creditos)}
-                        </td>
-
-                        <td className={row.debitos > 0 ? 'value-negative' : ''}>
-                          {row.debitos > 0 ? `-${formatCurrency(row.debitos)}` : 'R$ 0,00'}
-                        </td>
-
-                        <td className={row.compensacaoConvenios > 0 ? 'value-negative' : ''}>
-                          {row.compensacaoConvenios > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                              <span style={{ fontWeight: 600 }}>-{formatCurrency(row.compensacaoConvenios)}</span>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-icon btn-sm"
-                                style={{
-                                  padding: '2px 5px',
-                                  fontSize: '11px',
-                                  color: 'var(--color-amber)',
-                                  background: 'rgba(245, 158, 11, 0.12)',
-                                  borderRadius: '4px',
-                                  border: '1px solid rgba(245, 158, 11, 0.25)',
-                                  cursor: 'pointer',
-                                }}
-                                onClick={() =>
-                                  setViewingCompensacao({
-                                    doctor: row.nome,
-                                    items: row.compensacaoItems,
-                                    total: row.compensacaoConvenios,
-                                  })
-                                }
-                                title={`Ver detalhes das compensações deste médico (${row.compensacaoCount} exame(s))`}
-                              >
-                                ℹ️
-                              </button>
-                            </div>
-                          ) : (
-                            'R$ 0,00'
-                          )}
-                        </td>
-
-                        <td className={row.bnb > 0 ? 'value-negative' : ''}>
-                          {row.bnb > 0 ? `-${formatCurrency(row.bnb)}` : 'R$ 0,00'}
-                        </td>
-
-                        <td className={row.cotaClinica > 0 ? 'value-negative' : ''}>
-                          {row.cotaClinica > 0 ? `-${formatCurrency(row.cotaClinica)}` : 'R$ 0,00'}
-                        </td>
-
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span className={row.total >= 0 ? 'value-positive' : 'value-negative'} style={{ fontWeight: 700 }}>
-                              {row.total >= 0 ? formatCurrency(row.total) : `-${formatCurrency(Math.abs(row.total))}`}
-                            </span>
-                            <span style={{ fontSize: '10px', color: row.total >= 0 ? 'var(--color-emerald)' : 'var(--color-red)' }}>
-                              {row.total >= 0 ? '▲ A receber da clínica' : '▼ A pagar à clínica'}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td style={{ textAlign: 'center', width: '60px' }}>
-                          {row.obs ? (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-icon btn-sm"
-                              style={{
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                border: '1px solid rgba(16, 185, 129, 0.3)',
-                                color: 'var(--color-emerald)',
-                                borderRadius: '6px',
-                                padding: '3px 8px',
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s ease',
-                              }}
-                              onClick={() => setViewingObs({ doctor: row.nome, obs: row.obs, row })}
-                              title={`Clique para ver a observação:\n"${row.obs}"`}
-                            >
-                              📝
-                            </button>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
-                        </td>
-
-                        <td style={{ textAlign: 'center', width: '70px' }}>
-                          <button
-                            className="btn btn-ghost btn-icon btn-sm"
-                            onClick={() => openEditAjuste(row)}
-                            title="Editar débitos, créditos, BNB e sócio"
-                          >
-                            ✏️
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {/* Totals Row */}
-                    <tr className="totals-row">
-                      <td style={{ fontWeight: 700 }}>Totais no período:</td>
-                      <td className="value-currency">{formatCurrency(totalHonorariosRepassados)}</td>
-                      <td className="value-positive">{formatCurrency(totalCreditos)}</td>
-                      <td className="value-negative">{totalDebitos > 0 ? `-${formatCurrency(totalDebitos)}` : 'R$ 0,00'}</td>
-                      <td className="value-negative">{totalCompensacoesGeral > 0 ? `-${formatCurrency(totalCompensacoesGeral)}` : 'R$ 0,00'}</td>
-                      <td className="value-negative">{totalBNB > 0 ? `-${formatCurrency(totalBNB)}` : 'R$ 0,00'}</td>
-                      <td className="value-negative">{totalCotaClinica > 0 ? `-${formatCurrency(totalCotaClinica)}` : 'R$ 0,00'}</td>
-                      <td className={totalLiquidoGeral >= 0 ? 'value-positive' : 'value-negative'} style={{ fontWeight: 700 }}>
-                        {totalLiquidoGeral >= 0 ? formatCurrency(totalLiquidoGeral) : `-${formatCurrency(Math.abs(totalLiquidoGeral))}`}
-                      </td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>—</td>
-                      <td />
-                    </tr>
-                  </>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {repasseRows.length > 0 && (
-            <div className="table-footer">
-              <span>{repasseRows.length} médico(s) no demonstrativo</span>
-              <span>
-                Cota Clínica Rateada por Sócio: {formatCurrency(cotaPorSocio)}
-              </span>
-            </div>
-          )}
-        </div>
+        {/* Repasses Data Table */}
+        <RepasseTable
+          repasseRows={repasseRows}
+          onNavigateToDoctor={onNavigateToDoctor}
+          setViewingCompensacao={setViewingCompensacao}
+          setViewingObs={setViewingObs}
+          openEditAjuste={openEditAjuste}
+          totalHonorariosRepassados={totalHonorariosRepassados}
+          totalCreditos={totalCreditos}
+          totalDebitos={totalDebitos}
+          totalCompensacoesGeral={totalCompensacoesGeral}
+          totalBNB={totalBNB}
+          totalCotaClinica={totalCotaClinica}
+          totalLiquidoGeral={totalLiquidoGeral}
+          cotaPorSocio={cotaPorSocio}
+          exportColumns={exportColumns}
+          period={period}
+        />
       </div>
 
       {/* Modal: Visualizar Observações */}
-      <Modal
-        isOpen={Boolean(viewingObs)}
+      <RepasseObsModal
+        viewingObs={viewingObs}
         onClose={() => setViewingObs(null)}
-        title={`📝 Observações — ${viewingObs?.doctor || ''}`}
-        footer={
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '0.75rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                const targetRow = viewingObs?.row;
-                setViewingObs(null);
-                if (targetRow) openEditAjuste(targetRow);
-              }}
-            >
-              ✏️ Editar Ajustes / OBS
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setViewingObs(null)}
-            >
-              Fechar
-            </button>
-          </div>
-        }
-      >
-        <div style={{ padding: '0.5rem 0' }}>
-          <div
-            style={{
-              background: 'var(--bg-secondary, #1a2234)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              padding: '1.25rem',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.6,
-              color: 'var(--text-primary)',
-              fontSize: 'var(--text-sm)',
-              minHeight: '80px',
-              maxHeight: '320px',
-              overflowY: 'auto',
-            }}
-          >
-            {viewingObs?.obs}
-          </div>
-        </div>
-      </Modal>
+        openEditAjuste={openEditAjuste}
+      />
 
       {/* Modal: Detalhes de Compensações de Materiais/Convênios */}
-      <Modal
-        isOpen={Boolean(viewingCompensacao)}
+      <RepasseCompensacaoModal
+        viewingCompensacao={viewingCompensacao}
         onClose={() => setViewingCompensacao(null)}
-        title={`Compensações de Convênio — ${viewingCompensacao?.doctor || ''}`}
-        maxWidth="720px"
-        footer={
-          <button type="button" className="btn btn-primary" onClick={() => setViewingCompensacao(null)}>
-            Fechar
-          </button>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-          <div
-            style={{
-              background: 'rgba(245, 158, 11, 0.1)',
-              border: '1px solid rgba(245, 158, 11, 0.3)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.75rem 1rem',
-              fontSize: 'var(--text-xs)',
-              lineHeight: 1.5,
-              color: 'var(--color-amber)',
-            }}
-          >
-            💡 <strong>Dedução Automática de Materiais & Procedimentos:</strong>
-            <div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)' }}>
-              Estes valores foram recebidos pelo médico através do extrato do convênio/cooperativa, mas pertencem à clínica (100% da alça/material descartável e 50% da polipectomia). O total de <strong style={{ color: 'var(--color-amber)' }}>{formatCurrency(viewingCompensacao?.total || 0)}</strong> é deduzido automaticamente do repasse líquido do médico neste período.
-            </div>
-          </div>
-
-          <div className="table-scroll" style={{ maxHeight: '320px', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-md)' }}>
-            <table className="data-table" style={{ fontSize: 'var(--text-xs)' }}>
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Paciente</th>
-                  <th>Exame / Convênio</th>
-                  <th style={{ textAlign: 'right' }}>Alça (100% Clínica)</th>
-                  <th style={{ textAlign: 'right' }}>Polip. (50% Clínica)</th>
-                  <th style={{ textAlign: 'right' }}>Total Compensado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {viewingCompensacao?.items?.map((item, idx) => (
-                  <tr key={item.id || idx}>
-                    <td>{formatDate(item.fluxoData || item.data)}</td>
-                    <td style={{ fontWeight: 600 }}>{item.paciente}</td>
-                    <td>{item.exame} ({item.convenio})</td>
-                    <td className="value-currency" style={{ textAlign: 'right' }}>
-                      {item.valorAcessorio > 0 ? formatCurrency(item.valorAcessorio) : '—'}
-                    </td>
-                    <td className="value-currency" style={{ textAlign: 'right' }}>
-                      {item.valorPolipectomia > 0 ? formatCurrency(item.valorPolipectomia / 2) : '—'}
-                    </td>
-                    <td className="value-negative" style={{ fontWeight: 700, textAlign: 'right' }}>
-                      -{formatCurrency(item.valorCompensacao)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Modal>
+      />
 
       {/* Modal: Editar Ajustes do Repasse (Créditos, Débitos, BNB, Sócio, OBS) */}
-      <Modal
+      <RepasseAjusteModal
         isOpen={editAjusteModal}
         onClose={() => setEditAjusteModal(false)}
-        title={`Ajustes de Repasse — ${selectedMedico?.nome || ''}`}
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setEditAjusteModal(false)}>
-              Cancelar
-            </button>
-            <button className="btn btn-primary" onClick={handleSaveAjuste}>
-              Salvar Ajustes
-            </button>
-          </>
-        }
-      >
-        <form onSubmit={handleSaveAjuste} autoComplete="off">
-          <div className="modal-form-grid">
-            {selectedRow?.compensacaoConvenios > 0 && (
-              <div
-                className="input-group full-width"
-                style={{
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '0.65rem 0.9rem',
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--color-amber)',
-                  lineHeight: 1.4,
-                }}
-              >
-                ✂️ <strong>Compensações Automáticas no Período: -{formatCurrency(selectedRow.compensacaoConvenios)}</strong>
-                <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                  Este valor já é descontado automaticamente do total líquido ({selectedRow.compensacaoCount} exame(s) com retenção de alça/polipectomia). Não é necessário lançar em Débitos.
-                </div>
-              </div>
-            )}
-
-            <div className="input-group full-width">
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
-                <input
-                  type="checkbox"
-                  checked={ajusteForm.isSocio}
-                  onChange={(e) => setAjusteForm({ ...ajusteForm, isSocio: e.target.checked })}
-                />
-                <span>👑 <strong>Médico Sócio da Clínica</strong> (Participa do rateio da cota clínica em caso de déficit)</span>
-              </label>
-            </div>
-
-            <div className="input-group">
-              <label className="input-label">Créditos Adicionais (R$)</label>
-              <input
-                type="number"
-                className="input-field"
-                min="0"
-                step="0.01"
-                placeholder="0,00"
-                value={ajusteForm.creditos}
-                onChange={(e) => setAjusteForm({ ...ajusteForm, creditos: e.target.value })}
-              />
-            </div>
-
-            <div className="input-group">
-              <label className="input-label">Débitos / Descontos (R$)</label>
-              <input
-                type="number"
-                className="input-field"
-                min="0"
-                step="0.01"
-                placeholder="0,00"
-                value={ajusteForm.debitos}
-                onChange={(e) => setAjusteForm({ ...ajusteForm, debitos: e.target.value })}
-              />
-            </div>
-
-            <div className="input-group full-width">
-              <label className="input-label">Financiamento / BNB (R$)</label>
-              <input
-                type="number"
-                className="input-field"
-                min="0"
-                step="0.01"
-                placeholder="0,00"
-                value={ajusteForm.bnb}
-                onChange={(e) => setAjusteForm({ ...ajusteForm, bnb: e.target.value })}
-              />
-            </div>
-
-            <div className="input-group full-width">
-              <label className="input-label">Observações (OBS)</label>
-              <textarea
-                className="input-field"
-                rows="3"
-                placeholder="Anotações ou observações para o repasse deste médico"
-                value={ajusteForm.obs}
-                onChange={(e) => setAjusteForm({ ...ajusteForm, obs: e.target.value })}
-              />
-            </div>
-          </div>
-        </form>
-      </Modal>
+        selectedMedico={selectedMedico}
+        selectedRow={selectedRow}
+        ajusteForm={ajusteForm}
+        setAjusteForm={setAjusteForm}
+        handleSaveAjuste={handleSaveAjuste}
+      />
 
       {/* Modal: Gerenciar Médicos e Sócios */}
-      <Modal
+      <ManageMedicosModal
         isOpen={manageMedicosModal}
         onClose={() => setManageMedicosModal(false)}
-        title="Gerenciar Médicos da Clínica"
-        footer={
-          <button className="btn btn-secondary" onClick={() => setManageMedicosModal(false)}>
-            Fechar
-          </button>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <form onSubmit={handleAddMedico} autoComplete="off" style={{ background: 'var(--bg-surface-elevated)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
-            <h4 style={{ marginBottom: '0.75rem', fontSize: 'var(--text-sm)' }}>+ Cadastrar Novo Médico</h4>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                className="input-field"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Nome do médico (ex: DR. OLIVEIRA)"
-                style={{ flex: 1, minWidth: '200px' }}
-                value={newMedicoNome}
-                onChange={(e) => setNewMedicoNome(e.target.value.toUpperCase())}
-              />
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: 'var(--text-xs)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={newMedicoSocio}
-                  onChange={(e) => setNewMedicoSocio(e.target.checked)}
-                />
-                É Sócio?
-              </label>
-              <button type="submit" className="btn btn-primary btn-sm">
-                Adicionar
-              </button>
-            </div>
-          </form>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h4 style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>Médicos Cadastrados:</h4>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                {allDoctors.filter((m) => m.ativo !== false).length} ativo(s) • {allDoctors.filter((m) => m.ativo === false).length} desativado(s)
-              </span>
-            </div>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.35rem 0' }}>
-              Médicos desativados não aparecem nos seletores ao cadastrar novos exames, mas todo seu histórico permanece preservado.
-            </p>
-            {allDoctors.length === 0 ? (
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Nenhum médico cadastrado ainda.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '2px' }}>
-                {allDoctors.map((m) => (
-                  <div
-                    key={m.id || m.nome}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.6rem 0.85rem',
-                      background: 'var(--bg-input)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 'var(--text-sm)',
-                      opacity: m.ativo === false ? 0.75 : 1,
-                      borderLeft: m.ativo === false ? '3px solid var(--color-red)' : '3px solid var(--color-emerald)',
-                      gap: '0.75rem',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: '200px' }}>
-                      <strong style={{ color: m.ativo === false ? 'var(--text-muted)' : 'inherit', textDecoration: m.ativo === false ? 'line-through' : 'none' }}>
-                        {m.nome}
-                      </strong>
-                      <button
-                        type="button"
-                        className={`badge ${m.socio !== false ? 'badge-success' : 'badge-info'}`}
-                        style={{ border: 'none', cursor: 'pointer' }}
-                        onClick={() => toggleMedicoSocio(m)}
-                        title="Clique para alterar status de sócio"
-                      >
-                        {m.socio !== false ? '👑 Sócio' : '👤 Não-sócio'}
-                      </button>
-                      <button
-                        type="button"
-                        className={`badge ${m.ativo !== false ? 'badge-success' : 'badge-danger'}`}
-                        style={{ border: 'none', cursor: 'pointer' }}
-                        onClick={() => toggleMedicoAtivo(m)}
-                        title={m.ativo !== false ? 'Clique para desativar médico' : 'Clique para reativar médico'}
-                      >
-                        {m.ativo !== false ? '🟢 Ativo' : '🔴 Desativado'}
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${m.ativo !== false ? 'btn-ghost' : 'btn-secondary'}`}
-                        style={{
-                          fontSize: 'var(--text-xs)',
-                          padding: '0.25rem 0.65rem',
-                          color: m.ativo !== false ? 'var(--color-red)' : 'var(--color-emerald)',
-                          borderColor: m.ativo !== false ? 'var(--border-medium)' : 'var(--color-emerald)',
-                        }}
-                        onClick={() => toggleMedicoAtivo(m)}
-                        title={
-                          m.ativo !== false
-                            ? 'Desativar médico: não aparecerá mais nos seletores ao adicionar novos exames, mantendo todo o histórico'
-                            : 'Reativar médico: voltará a aparecer nos seletores de exames'
-                        }
-                      >
-                        {m.ativo !== false ? '⏸️ Desativar' : '▶️ Reativar'}
-                      </button>
-
-                      {!m.auto && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-icon btn-sm"
-                          onClick={() => setDeleteMedicoId(m.id)}
-                          title="Remover médico do cadastro"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </Modal>
-
-      <ConfirmDialog
-        isOpen={!!deleteMedicoId}
-        onClose={() => setDeleteMedicoId(null)}
-        onConfirm={handleDeleteMedico}
-        message="Tem certeza que deseja remover este médico do cadastro? Se deseja apenas ocultá-lo dos novos exames mantendo todo o histórico, utilize a opção 'Desativar'."
+        allDoctors={allDoctors}
+        newMedicoNome={newMedicoNome}
+        setNewMedicoNome={setNewMedicoNome}
+        newMedicoSocio={newMedicoSocio}
+        setNewMedicoSocio={setNewMedicoSocio}
+        handleAddMedico={handleAddMedico}
+        toggleMedicoSocio={toggleMedicoSocio}
+        toggleMedicoAtivo={toggleMedicoAtivo}
+        deleteMedicoId={deleteMedicoId}
+        setDeleteMedicoId={setDeleteMedicoId}
+        handleDeleteMedico={handleDeleteMedico}
       />
     </>
   );

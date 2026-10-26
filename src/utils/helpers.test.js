@@ -9,6 +9,7 @@ import {
   getExamAllocationInPeriod,
   getHonorarioSchedule,
   getActiveMedicosOptions,
+  isDoctorMatch,
 } from './helpers';
 
 const d = (y, m, day) => new Date(y, m - 1, day);
@@ -166,6 +167,39 @@ describe('getHonorarioMedicoInPeriod', () => {
     const e = { ...base, divisaoTipo: 'valor', valorMedico1: 250, valorMedico2: 750 };
     expect(getHonorarioMedicoInPeriod(e, 'Ana', periodo)).toBe(250);
     expect(getHonorarioMedicoInPeriod(e, 'Bruno', periodo)).toBe(750);
+  });
+
+  it('suporte a medicoId com fallback para nome', () => {
+    const e = {
+      ...base,
+      medico: 'Ana',
+      medicoId: 'med-ana-123',
+      medico2: 'Bruno',
+      medico2Id: 'med-bruno-456',
+      porcentagemMedico1: 60,
+      porcentagemMedico2: 40,
+    };
+    expect(getHonorarioMedicoInPeriod(e, { id: 'med-ana-123', nome: 'Dra Ana' }, periodo)).toBe(600);
+    expect(getHonorarioMedicoInPeriod(e, { id: 'med-bruno-456', nome: 'Dr Bruno' }, periodo)).toBe(400);
+    expect(getHonorarioMedicoInPeriod(e, 'Ana', periodo)).toBe(600);
+    expect(getHonorarioMedicoInPeriod(e, 'Bruno', periodo)).toBe(400);
+  });
+});
+
+describe('isDoctorMatch', () => {
+  it('identifica por ID exato quando ambos possuem ID', () => {
+    expect(isDoctorMatch({ id: 'doc-1', nome: 'Outro Nome' }, 'Dr. Fulano', 'doc-1')).toBe(true);
+    expect(isDoctorMatch({ id: 'doc-1', nome: 'Outro Nome' }, 'Dr. Fulano', 'doc-2')).toBe(false);
+  });
+
+  it('identifica por nome normalizado case-insensitive e trim', () => {
+    expect(isDoctorMatch('dr. fulano ', 'DR. FULANO')).toBe(true);
+    expect(isDoctorMatch({ nome: ' Dra. Ciclana ' }, 'DRA. CICLANA')).toBe(true);
+  });
+
+  it('retorna false para valores nulos ou vazios', () => {
+    expect(isDoctorMatch(null, 'DR. FULANO')).toBe(false);
+    expect(isDoctorMatch('', 'DR. FULANO')).toBe(false);
   });
 });
 

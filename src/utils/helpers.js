@@ -474,10 +474,45 @@ export function parsePercentOrDefault(value, fallback) {
 }
 
 /**
- * Calculate how much of an exam's honorário belongs to a specific doctor in a target period,
- * considering split honorários (divisão de honorários) and installment distribution.
- * @param {object} exam - The exam detail record
- * @param {string} doctorName - The name of the doctor
+ * Compara se uma referência a médico (objeto, ID ou nome) corresponde ao médico do registro.
+ * Permite match tanto por medicoId quanto por nome normalizado para máxima compatibilidade.
+ * @param {string|object} doctorRef - Nome, ID ou objeto médico { id, nome }
+ * @param {string} [recordDocName] - Nome registrado no exame/item
+ * @param {string} [recordDocId] - ID registrado no exame/item
+ * @returns {boolean}
+ */
+export function isDoctorMatch(doctorRef, recordDocName, recordDocId) {
+  if (!doctorRef) return false;
+  const targetId =
+    typeof doctorRef === 'object' && doctorRef !== null
+      ? doctorRef.id
+      : typeof doctorRef === 'string' &&
+          (doctorRef.startsWith('auto_') || /^[0-9a-f-]{36}$/i.test(doctorRef))
+        ? doctorRef
+        : null;
+
+  const targetName =
+    typeof doctorRef === 'object' && doctorRef !== null
+      ? (doctorRef.nome || '').trim().toLowerCase()
+      : typeof doctorRef === 'string'
+        ? doctorRef.trim().toLowerCase()
+        : '';
+
+  if (targetId && recordDocId && String(targetId) === String(recordDocId)) {
+    return true;
+  }
+
+  if (targetName && recordDocName && targetName === String(recordDocName).trim().toLowerCase()) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Calculates the medical fee (honorário) earned by a specific doctor in a specific acquisition period.
+ * @param {object} exam - The exam object from detalhesExames
+ * @param {string|object} doctorName - The name or object of the doctor
  * @param {object} targetPeriod - The acquisition period
  * @returns {number}
  */
@@ -486,32 +521,37 @@ export function getHonorarioMedicoInPeriod(exam, doctorName, targetPeriod) {
   const periodHonorario = getHonorarioInPeriod(exam, targetPeriod);
   if (periodHonorario <= 0) return 0;
 
-  const doc1 = (exam.medico || '').trim().toLowerCase();
-  const doc2 = (exam.medico2 || '').trim().toLowerCase();
-  const target = doctorName.trim().toLowerCase();
-
   const totalHonorarios = Number(exam.honorariosMedicos) || 0;
+  const isSplit = !!(exam.temDivisao || exam.medico2 || exam.medico2Id);
 
-  // Check if exam has split honorários
-  const isSplit = !!(exam.temDivisao || exam.medico2);
+  const isDoc1 = isDoctorMatch(doctorName, exam.medico, exam.medicoId);
+  const isDoc2 = isDoctorMatch(doctorName, exam.medico2, exam.medico2Id);
 
   if (!isSplit) {
-    return doc1 === target ? roundCurrency(periodHonorario) : 0;
+    return isDoc1 ? roundCurrency(periodHonorario) : 0;
   }
 
-  if (doc1 === target) {
+  if (isDoc1) {
     if (exam.divisaoTipo === 'valor') {
       const val1 = Number(exam.valorMedico1) || 0;
-      return roundCurrency(totalHonorarios > 0 ? (periodHonorario * val1) / totalHonorarios : periodHonorario * 0.5);
+      return roundCurrency(
+        totalHonorarios > 0
+          ? (periodHonorario * val1) / totalHonorarios
+          : periodHonorario * 0.5
+      );
     }
     const pct1 = parsePercentOrDefault(exam.porcentagemMedico1, 50);
     return roundCurrency((periodHonorario * pct1) / 100);
   }
 
-  if (doc2 === target) {
+  if (isDoc2) {
     if (exam.divisaoTipo === 'valor') {
       const val2 = Number(exam.valorMedico2) || 0;
-      return roundCurrency(totalHonorarios > 0 ? (periodHonorario * val2) / totalHonorarios : periodHonorario * 0.5);
+      return roundCurrency(
+        totalHonorarios > 0
+          ? (periodHonorario * val2) / totalHonorarios
+          : periodHonorario * 0.5
+      );
     }
     const pct2 = parsePercentOrDefault(exam.porcentagemMedico2, 50);
     return roundCurrency((periodHonorario * pct2) / 100);
@@ -525,11 +565,10 @@ export function getHonorarioMedicoInPeriod(exam, doctorName, targetPeriod) {
  */
 export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
   if (!doctorName) return false;
-  const doc1 = (exam.medico || '').trim().toLowerCase();
-  const doc2 = (exam.medico2 || '').trim().toLowerCase();
-  const target = doctorName.trim().toLowerCase();
+  const isDoc1 = isDoctorMatch(doctorName, exam.medico, exam.medicoId);
+  const isDoc2 = isDoctorMatch(doctorName, exam.medico2, exam.medico2Id);
 
-  if (doc1 !== target && doc2 !== target) return false;
+  if (!isDoc1 && !isDoc2) return false;
   return examHasInstallmentInPeriod(exam, targetPeriod);
 }
 
@@ -537,7 +576,7 @@ export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
  * Calcula as compensações devidas pelo médico à clínica decorrentes de convênios
  * no período aquisitivo (ex: 50% de polipectomias e 100% de acessórios/alças descartáveis
  * que foram pagos pelo convênio na cooperativa/conta do médico).
- * @param {string} doctorName - Nome do médico
+ * @param {string|object} doctorName - Nome do médico
  * @param {object} targetPeriod - Período financeiro { start, end }
  * @param {Array} examesConvenio - Lista de exames de convênio
  * @returns {{ total: number, count: number, items: Array }}
@@ -546,13 +585,11 @@ export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesCon
   if (!doctorName || !targetPeriod || !Array.isArray(examesConvenio)) {
     return { total: 0, count: 0, items: [] };
   }
-  const target = doctorName.trim().toUpperCase();
   const items = [];
   let total = 0;
 
   for (const c of examesConvenio) {
-    const doc1 = (c.medico || '').trim().toUpperCase();
-    if (doc1 !== target) continue;
+    if (!isDoctorMatch(doctorName, c.medico, c.medicoId)) continue;
 
     const comp = Number(c.valorCompensacaoClinica) || 0;
     if (comp <= 0) continue;
@@ -585,10 +622,6 @@ export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesCon
   };
 }
 
-/**
- * Generate a human-readable label for the installment span.
- * e.g. "Set/26 → Nov/26" for 3 parcelas on Credit Card starting in September
- */
 /**
  * Generate a human-readable label for installment periods.
  * Supports both legacy single-payment and new multi-payment exams.
