@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../contexts/ToastContext';
@@ -17,7 +17,7 @@ import {
   clearPendingQueue,
   mergeCloudDataWithLocal,
 } from '../services/syncQueue';
-import { getAllData, getData, setData, restoreAllData, MODULE_KEYS } from '../utils/storage';
+import { getAllData, getData, setData, restoreAllData, MODULE_KEYS, exportAllDataAsJSON } from '../utils/storage';
 import {
   recordBackupDone,
   getInactivityTimeoutMinutes,
@@ -105,8 +105,13 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   const [pinInput, setPinInput] = useState('');
   const [allowedEmailsText, setAllowedEmailsText] = useState(() => getAllowedEmailsList().join(', '));
   const publicRegAllowed = isPublicRegistrationAllowed();
-  const lastBackupIso = getLastBackupDate();
-  const daysSinceBackup = getDaysSinceLastBackup();
+  const [lastBackupIso, setLastBackupIso] = useState(() => getLastBackupDate());
+  const [daysSinceBackup, setDaysSinceBackup] = useState(() => getDaysSinceLastBackup());
+
+  const refreshBackupStatus = useCallback(() => {
+    setLastBackupIso(getLastBackupDate());
+    setDaysSinceBackup(getDaysSinceLastBackup());
+  }, []);
 
   const handleSaveInactivity = (val) => {
     const mins = parseInt(val, 10);
@@ -181,12 +186,34 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       setShowArchiveConfirm(false);
       if (refreshStorageInfo) refreshStorageInfo();
       setPendingQueue(getPendingQueue());
+      refreshBackupStatus();
     }
-  }, [isOpen, initialTab, refreshStorageInfo]);
+  }, [isOpen, initialTab, refreshStorageInfo, refreshBackupStatus]);
 
   useEffect(() => {
-    const handleSyncStatus = () => {
-      setPendingQueue(getPendingQueue());
+    refreshBackupStatus();
+    const handleBackupChanged = () => {
+      refreshBackupStatus();
+    };
+    window.addEventListener('endodiagnose_backup_status_changed', handleBackupChanged);
+    return () => window.removeEventListener('endodiagnose_backup_status_changed', handleBackupChanged);
+  }, [refreshBackupStatus]);
+
+  useEffect(() => {
+    const handleSyncStatus = (event) => {
+      const queue = event?.detail?.pendingItems || getPendingQueue();
+      setPendingQueue(queue);
+      if (queue.length === 0) {
+        setStatusMessage((prev) => {
+          if (prev && prev.text && prev.text.includes('Sincronização:')) {
+            return {
+              type: 'success',
+              text: '✅ Fila de pendências 100% sincronizada com o Firebase!',
+            };
+          }
+          return prev;
+        });
+      }
     };
     window.addEventListener('endodiagnose:sync-status-changed', handleSyncStatus);
     return () => window.removeEventListener('endodiagnose:sync-status-changed', handleSyncStatus);
@@ -317,8 +344,11 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       const allLocalData = getAllData();
       const count = await uploadAllLocalToCloud(allLocalData);
       recordBackupDone();
+      // Como todos os dados locais foram consolidados no Firestore, a fila pode ser zerada
+      clearPendingQueue();
+      setPendingQueue([]);
       setIsLoading(false);
-      setStatusMessage({ type: 'success', text: `🚀 Backup concluído com sucesso! ${count} registros enviados para o Firestore na nuvem.` });
+      setStatusMessage({ type: 'success', text: `🚀 Backup concluído com sucesso! ${count} registros enviados para o Firestore e fila de pendências sincronizada.` });
       toast.success(`Backup concluído! ${count} registros salvos na nuvem.`);
     } catch (err) {
       setIsLoading(false);
@@ -363,17 +393,25 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
 
   const handleDrainQueue = async () => {
     setIsLoading(true);
+    setStatusMessage(null);
     try {
-      await processPendingQueue();
+      const res = await processPendingQueue({ force: true });
       const freshQueue = getPendingQueue();
       setPendingQueue(freshQueue);
       if (freshQueue.length === 0) {
         toast.success('Todas as pendências foram enviadas à nuvem!');
+        setStatusMessage({ type: 'success', text: '✅ Fila de pendências 100% sincronizada com o Firebase!' });
       } else {
-        toast.info(`${freshQueue.length} item(ns) aguardando nova tentativa de envio.`);
+        const errorDetail = res?.lastError ? ` Motivo: ${res.lastError}` : '';
+        toast.info(`${freshQueue.length} item(ns) aguardando envio.${errorDetail}`);
+        setStatusMessage({
+          type: res?.lastError ? 'error' : 'info',
+          text: `Sincronização: ${res?.processed || 0} processados, ${freshQueue.length} restantes.${errorDetail}`,
+        });
       }
     } catch (err) {
       toast.error('Erro ao processar fila: ' + err.message);
+      setStatusMessage({ type: 'error', text: 'Erro ao processar fila: ' + err.message });
     } finally {
       setIsLoading(false);
     }
@@ -403,6 +441,8 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     a.download = `backup_endodiagnose_${today}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    recordBackupDone();
+    refreshBackupStatus();
   };
 
   const handleImportJSON = (e) => {
@@ -618,6 +658,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
             lastBackupIso={lastBackupIso}
             daysSinceBackup={daysSinceBackup}
             exportAllDataAsJSON={exportAllDataAsJSON}
+            onBackupDone={refreshBackupStatus}
             toast={toast}
           />
         )}

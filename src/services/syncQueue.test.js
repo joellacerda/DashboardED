@@ -5,6 +5,7 @@ import {
   clearPendingQueue,
   resolveConflict,
   mergeCloudDataWithLocal,
+  getSyncStatus,
 } from './syncQueue';
 
 // Mock de localStorage em memória
@@ -96,6 +97,17 @@ describe('SyncQueue — Fase 5: Sincronização em Nuvem Confiável', () => {
       expect(getPendingQueue().length).toBe(2);
       clearPendingQueue();
       expect(getPendingQueue().length).toBe(0);
+    });
+
+    it('getSyncStatus reporta erro do item quando houver falhas na fila', () => {
+      enqueueSyncOperation({ module: 'exames', entityId: 'ex-1', type: 'UPSERT', payload: { paciente: 'Teste' } });
+      const queue = getPendingQueue();
+      queue[0].error = 'Permissão insuficiente no Firestore';
+      mockStorage.setItem('endodiagnose_pending_sync', JSON.stringify(queue));
+
+      const status = getSyncStatus();
+      expect(status.pendingCount).toBe(1);
+      expect(status.lastError).toBe('Permissão insuficiente no Firestore');
     });
   });
 

@@ -83,6 +83,23 @@ export default function SyncTab({
             ? 'Nenhuma alteração pendente. Todas as mutações locais foram salvas no Firestore ou você está em modo offline sem pendências.'
             : 'Alterações registradas offline ou aguardando confirmação do servidor. O sistema tentará sincronizar automaticamente quando houver conexão.'}
         </p>
+
+        {pendingQueue.length > 0 && pendingQueue.find((i) => i.error) && (
+          <div
+            style={{
+              fontSize: 'var(--text-xs)',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '6px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: 'var(--accent-red, #ef4444)',
+              lineHeight: 1.4,
+            }}
+          >
+            <strong>⚠️ Falha no envio recente:</strong> {pendingQueue.find((i) => i.error)?.error}
+          </div>
+        )}
+
         {pendingQueue.length > 0 && (
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
             <button
@@ -91,7 +108,7 @@ export default function SyncTab({
               disabled={isLoading || !configured}
               title="Forçar envio imediato das pendências para o Firestore"
             >
-              {isLoading ? 'Enviando...' : '⚡ Sincronizar Pendências Agora'}
+              {isLoading ? '⏳ Enviando Pendências...' : '⚡ Sincronizar Pendências Agora'}
             </button>
             <button
               className="btn btn-sm btn-secondary"

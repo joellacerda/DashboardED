@@ -13,6 +13,7 @@ export default function SecurityTab({
   lastBackupIso,
   daysSinceBackup,
   exportAllDataAsJSON,
+  onBackupDone,
   toast,
 }) {
   return (
@@ -154,7 +155,7 @@ export default function SecurityTab({
             💾 Histórico de Backups de Segurança
           </div>
           <span className={`badge ${daysSinceBackup !== null && daysSinceBackup < 7 ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: 'var(--text-xs)' }}>
-            {daysSinceBackup === null ? 'Sem Backup' : `${daysSinceBackup} dia(s) atrás`}
+            {daysSinceBackup === null ? 'Sem Backup' : daysSinceBackup === 0 ? 'Realizado hoje' : `${daysSinceBackup} dia(s) atrás`}
           </span>
         </div>
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
@@ -168,6 +169,9 @@ export default function SecurityTab({
           onClick={() => {
             try {
               exportAllDataAsJSON();
+              if (typeof onBackupDone === 'function') {
+                onBackupDone();
+              }
               toast.success('Backup completo gerado com sucesso!');
             } catch (err) {
               toast.error('Erro ao gerar backup: ' + err.message);

@@ -281,7 +281,7 @@ export async function testConnection(config) {
 }
 
 // Clean objects so Firestore doesn't reject undefined values
-function sanitizeForFirestore(obj) {
+export function sanitizeForFirestore(obj) {
   if (obj === null || obj === undefined) return null;
   if (typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) {

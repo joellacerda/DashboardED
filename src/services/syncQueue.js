@@ -1,10 +1,11 @@
 import { getLocalStorage } from '../utils/storage/core';
-import { isCloudConfigured, initFirebase } from './firebase';
+import { isCloudConfigured, initFirebase, sanitizeForFirestore } from './firebase';
 
 export const PENDING_SYNC_KEY = 'endodiagnose_pending_sync';
 export const LAST_SYNC_KEY = 'endodiagnose_last_sync_timestamp';
 
 let isProcessing = false;
+let currentSyncPromise = null;
 let heartbeatInterval = null;
 
 /**
@@ -63,6 +64,7 @@ export function getSyncStatus() {
   const queue = getPendingQueue();
   const storage = getLocalStorage();
   const lastSyncTime = storage ? storage.getItem(LAST_SYNC_KEY) : null;
+  const lastError = queue.find((op) => op?.error)?.error || null;
 
   return {
     isOnline,
@@ -71,6 +73,7 @@ export function getSyncStatus() {
     pendingCount: queue.length,
     pendingItems: queue,
     lastSyncTime,
+    lastError,
   };
 }
 
@@ -172,91 +175,139 @@ export function resolveConflict(localItem, cloudItem) {
 
 /**
  * Processa as pendências da fila com retry e backoff exponencial.
+ * @param {object} [options]
+ * @param {boolean} [options.force=false] Se true, ignora o delay de backoff e tenta enviar imediatamente
+ * @returns {Promise<{ total: number, processed: number, remaining: number, lastError: string|null }>}
  */
-export async function processPendingQueue() {
-  if (isProcessing) return;
-  if (!isCloudConfigured()) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+export async function processPendingQueue(options = {}) {
+  const { force = false } = options;
+  if (!isCloudConfigured()) return { total: 0, processed: 0, remaining: getPendingQueue().length, lastError: null };
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { total: 0, processed: 0, remaining: getPendingQueue().length, lastError: 'Dispositivo offline' };
+  }
 
-  isProcessing = true;
-  notifySyncStatusChanged();
+  // Se já houver sincronização em andamento, aguarda a sua conclusão
+  if (currentSyncPromise) {
+    return currentSyncPromise;
+  }
 
-  try {
-    const instance = await initFirebase();
-    if (!instance || !instance.db) {
-      isProcessing = false;
-      notifySyncStatusChanged();
-      return;
-    }
+  currentSyncPromise = (async () => {
+    isProcessing = true;
+    notifySyncStatusChanged();
 
-    const { db, sdk } = instance;
-    const { doc, setDoc, getDoc } = sdk.firestoreMod;
-
-    const queue = getPendingQueue();
-    if (queue.length === 0) {
-      isProcessing = false;
-      notifySyncStatusChanged();
-      return;
-    }
-
-    const remainingQueue = [];
-    const now = Date.now();
-
-    for (const op of queue) {
-      // Backoff exponencial: delay = min(60s, 2^attempts * 1000)
-      if (op.lastAttempt && op.attempts > 0) {
-        const delay = Math.min(60000, Math.pow(2, op.attempts) * 1000);
-        const elapsed = now - new Date(op.lastAttempt).getTime();
-        if (elapsed < delay) {
-          remainingQueue.push(op);
-          continue;
-        }
+    try {
+      const instance = await initFirebase();
+      if (!instance || !instance.db) {
+        return { total: 0, processed: 0, remaining: getPendingQueue().length, lastError: 'Banco Firestore não inicializado' };
       }
 
-      try {
-        const docRef = doc(db, op.module, op.entityId);
+      const { db, sdk } = instance;
+      const { doc, setDoc, getDoc } = sdk.firestoreMod;
 
-        // Verifica versão na nuvem para resolução de conflito
-        const cloudSnap = await getDoc(docRef);
-        const cloudData = cloudSnap.exists() ? cloudSnap.data() : null;
+      const queue = getPendingQueue();
+      if (queue.length === 0) {
+        return { total: 0, processed: 0, remaining: 0, lastError: null };
+      }
 
-        if (cloudData) {
-          const conflict = resolveConflict(op.payload, cloudData);
-          if (conflict.winner === 'cloud') {
-            // A nuvem tem uma versão mais recente; aceitamos a nuvem e removemos da fila local
-            console.warn(
-              `[SyncQueue] Conflito resolvido em favor da nuvem para ${op.module}/${op.entityId}`
-            );
+      const remainingQueue = [];
+      const now = Date.now();
+      let processedCount = 0;
+
+      for (let i = 0; i < queue.length; i++) {
+        const op = queue[i];
+
+        // Se não for forçado, respeita o backoff exponencial
+        if (!force && op.lastAttempt && op.attempts > 0) {
+          const delay = Math.min(60000, Math.pow(2, op.attempts) * 1000);
+          const elapsed = now - new Date(op.lastAttempt).getTime();
+          if (elapsed < delay) {
+            remainingQueue.push(op);
             continue;
           }
         }
 
-        // Executa a operação no Firestore
-        await setDoc(docRef, op.payload, { merge: true });
+        if (!op.entityId || !op.module) {
+          // Entrada corrompida ou sem ID/módulo: descarta para não bloquear a fila indefinidamente
+          continue;
+        }
 
-        // Operação bem-sucedida! Não vai para remainingQueue.
-      } catch (err) {
-        console.warn(`[SyncQueue] Falha ao sincronizar ${op.module}/${op.entityId}:`, err);
-        op.attempts = (op.attempts || 0) + 1;
-        op.lastAttempt = new Date().toISOString();
-        op.error = err?.message || String(err);
-        remainingQueue.push(op);
+        try {
+          const docRef = doc(db, op.module, String(op.entityId));
+
+          if (op.type === 'DELETE') {
+            const tombstone = sanitizeForFirestore(
+              op.payload || { id: String(op.entityId), _deleted: true, deletedAt: new Date().toISOString() }
+            );
+            await setDoc(docRef, tombstone, { merge: true });
+          } else {
+            // Verifica versão na nuvem para resolução de conflito
+            const cloudSnap = await getDoc(docRef);
+            const cloudData = cloudSnap.exists() ? cloudSnap.data() : null;
+
+            if (cloudData) {
+              const conflict = resolveConflict(op.payload, cloudData);
+              if (conflict.winner === 'cloud') {
+                console.warn(
+                  `[SyncQueue] Conflito resolvido em favor da nuvem para ${op.module}/${op.entityId}`
+                );
+                processedCount++;
+                continue;
+              }
+            }
+
+            // Sanitiza para garantir que campos com valor `undefined` não causem erro no Firestore
+            const cleanPayload = sanitizeForFirestore(op.payload) || {};
+            await setDoc(docRef, cleanPayload, { merge: true });
+          }
+
+          processedCount++;
+          // Operação bem-sucedida! Não vai para remainingQueue.
+
+          // Notifica progresso a cada 20 itens para a UI atualizar o contador em tempo real
+          if (processedCount % 20 === 0) {
+            const currentRemaining = [...remainingQueue, ...queue.slice(i + 1)];
+            savePendingQueue(currentRemaining);
+          }
+        } catch (err) {
+          console.warn(`[SyncQueue] Falha ao sincronizar ${op.module}/${op.entityId}:`, err);
+          op.attempts = (op.attempts || 0) + 1;
+          op.lastAttempt = new Date().toISOString();
+          op.error = err?.message || String(err);
+          remainingQueue.push(op);
+        }
       }
-    }
 
-    savePendingQueue(remainingQueue);
+      savePendingQueue(remainingQueue);
 
-    // Se a fila esvaziou ou teve progresso, atualiza o timestamp de última sincronização
-    const storage = getLocalStorage();
-    if (storage) {
-      storage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      // Se a fila esvaziou ou teve progresso, atualiza o timestamp de última sincronização
+      const storage = getLocalStorage();
+      if (storage) {
+        storage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      }
+
+      const lastError = remainingQueue.find((item) => item.error)?.error || null;
+      return {
+        total: queue.length,
+        processed: processedCount,
+        remaining: remainingQueue.length,
+        lastError,
+      };
+    } catch (globalErr) {
+      console.error('[SyncQueue] Erro global durante processamento da fila:', globalErr);
+      return {
+        total: 0,
+        processed: 0,
+        remaining: getPendingQueue().length,
+        lastError: globalErr?.message || String(globalErr),
+      };
+    } finally {
+      isProcessing = false;
+      currentSyncPromise = null;
+      notifySyncStatusChanged();
     }
-  } catch (globalErr) {
-    console.error('[SyncQueue] Erro global durante processamento da fila:', globalErr);
-  } finally {
-    isProcessing = false;
-    notifySyncStatusChanged();
-  }
+  })();
+
+  return currentSyncPromise;
 }
 
 /**
