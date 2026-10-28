@@ -190,6 +190,7 @@ export default function Sidebar({
               key={item.id}
               href={`#/${item.id}`}
               className={`nav-item${activeTab === item.id ? ' active' : ''}`}
+              aria-current={activeTab === item.id ? 'page' : undefined}
               onClick={(e) => {
                 if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
                   e.preventDefault();
