@@ -1,14 +1,20 @@
 {
-  "name": "dashboarded",
+  "name": "dashboard-endodiagnose",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Dashboard clínico e financeiro da Clínica Endodiagnose em React 19 e Vite 8",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ci": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "firebase": "^12.18.0",
