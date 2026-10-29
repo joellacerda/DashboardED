@@ -1,37 +1,37 @@
 # Clínica Endodiagnose — Dashboard
 
-Dashboard de gestão interna da **Clínica Endodiagnose**, desenvolvido em **React 19 + Vite 8**.  
-O sistema permite controlar exames, fluxo de caixa, convênios, repasses médicos e folha de pagamento, com armazenamento local resiliente (`localStorage`), sincronização via **Firebase Cloud Firestore**, regras de auditoria e conformidade com diretrizes da **LGPD**.
+Internal management dashboard for **Clínica Endodiagnose**, built with **React 19 + Vite 8**.  
+The system manages exams, cash flow, health insurance providers, medical payouts (physician fee splitting), and payroll, featuring resilient local storage (`localStorage`), cloud synchronization via **Firebase Cloud Firestore**, immutable audit trails, and compliance with data protection standards (**LGPD**).
 
 ---
 
-## Índice
+## Table of Contents
 
-- [Pré-requisitos](#pré-requisitos)
-- [Instalação](#instalação)
-- [Executando o projeto](#executando-o-projeto)
-- [Build de produção](#build-de-produção)
-- [Testes e Validação Contínua](#testes-e-validação-contínua)
-- [Configuração do Firebase](#configuração-do-firebase)
-  - [Variáveis de ambiente (.env)](#variáveis-de-ambiente-env)
-  - [Regras de Segurança do Firestore](#regras-de-segurança-do-firestore)
-- [Segurança e Conformidade (LGPD)](#segurança-e-conformidade-lgpd)
-- [Scripts disponíveis](#scripts-disponíveis)
-- [Estrutura de pastas](#estrutura-de-pastas)
-- [Funcionalidades](#funcionalidades)
-- [Tecnologias](#tecnologias)
-- [Licença](#licença)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running the Project](#running-the-project)
+- [Production Build](#production-build)
+- [Testing and Continuous Validation](#testing-and-continuous-validation)
+- [Firebase Configuration](#firebase-configuration)
+  - [Environment Variables (.env)](#environment-variables-env)
+  - [Firestore Security Rules](#firestore-security-rules)
+- [Security and Compliance (LGPD)](#security-and-compliance-lgpd)
+- [Available Scripts](#available-scripts)
+- [Project Structure](#project-structure)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [License](#license)
 
 ---
 
-## Pré-requisitos
+## Prerequisites
 
-| Ferramenta | Versão mínima recomendada |
-|------------|--------------------------|
-| [Node.js](https://nodejs.org/) | **20+** (ES Modules e suporte React 19) |
-| npm | **10+** (incluso no Node) |
+| Tool | Minimum Recommended Version |
+|------|-----------------------------|
+| [Node.js](https://nodejs.org/) | **20+** (ES Modules & React 19 support) |
+| npm | **10+** (bundled with Node) |
 
-> **Dica:** Verifique as versões instaladas com:
+> **Tip:** Check your installed versions with:
 > ```bash
 > node -v
 > npm -v
@@ -39,43 +39,43 @@ O sistema permite controlar exames, fluxo de caixa, convênios, repasses médico
 
 ---
 
-## Instalação
+## Installation
 
-1. **Clone o repositório:**
+1. **Clone the repository:**
    ```bash
-   git clone <url-do-repositorio>
+   git clone <repository-url>
    cd DashboardED
    ```
 
-2. **Instale as dependências:**
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
 ---
 
-## Executando o projeto
+## Running the Project
 
-Inicie o servidor local de desenvolvimento:
+Start the local development server:
 
 ```bash
 npm run dev
 ```
 
-O Vite disponibilizará o endereço — tipicamente **http://localhost:5173**.  
-Qualquer alteração de código é atualizada instantaneamente via HMR (Hot Module Replacement).
+Vite will serve the app locally — typically at **http://localhost:5173**.  
+Any code modifications will reflect instantly via Hot Module Replacement (HMR).
 
 ---
 
-## Build de produção
+## Production Build
 
-Para compilar os pacotes minificados e otimizados para deploy:
+To compile minified and optimized assets for production deployment:
 
 ```bash
 npm run build
 ```
 
-Os artefatos são gerados no diretório `dist/`. Para pré-visualizar o build localmente:
+The output artifacts are generated in the `dist/` directory. To preview the production build locally:
 
 ```bash
 npm run preview
@@ -83,168 +83,167 @@ npm run preview
 
 ---
 
-## Testes e Validação Contínua
+## Testing and Continuous Validation
 
-O projeto conta com uma suíte de testes automatizados com **Vitest**, cobrindo regras de negócio, persistência, migrações de schema (v1, v2, v3), utilitários e integração:
+The project includes an automated test suite powered by **Vitest**, covering business rules, persistence logic, schema migrations (v1, v2, v3), helper utilities, and integration:
 
-- **Executar todos os testes uma vez:**
+- **Run all tests once:**
   ```bash
   npm test
   ```
-- **Modo interativo (watch):**
+- **Interactive watch mode:**
   ```bash
   npm run test:watch
   ```
-- **Pipeline de Validação Completa (Lint + Testes + Build):**
+- **Full CI Validation Pipeline (Lint + Test + Build):**
   ```bash
   npm run ci
   ```
 
-> O repositório inclui automação via **GitHub Actions** (`.github/workflows/ci.yml`), garantindo que todo pull request ou push na branch principal execute `npm run ci`.
+> The repository includes continuous integration automation via **GitHub Actions** (`.github/workflows/ci.yml`), ensuring every push or pull request to the main branch passes `npm run ci`.
 
 ---
 
-## Configuração do Firebase
+## Firebase Configuration
 
-O dashboard funciona em modo **offline-first** com `localStorage`. Para sincronização em nuvem e compartilhamento seguro entre dispositivos autorizados, conecte um projeto Firebase (Firestore e Auth).
+The dashboard operates in an **offline-first** mode using `localStorage`. For cloud synchronization and secure multi-device data sharing across authorized staff, connect a Firebase project (Firestore and Authentication).
 
-### Variáveis de ambiente (.env)
+### Environment Variables (.env)
 
-1. Crie o arquivo `.env` a partir do modelo:
+1. Create a `.env` file based on the template:
    ```bash
    cp .env.example .env
    ```
 
-2. Preencha com as credenciais do seu projeto Firebase Console:
+2. Fill in your credentials from the Firebase Console:
    ```env
    VITE_FIREBASE_API_KEY=AIzaSy...
-   VITE_FIREBASE_AUTH_DOMAIN=meu-projeto.firebaseapp.com
-   VITE_FIREBASE_PROJECT_ID=meu-projeto
-   VITE_FIREBASE_STORAGE_BUCKET=meu-projeto.appspot.com
+   VITE_FIREBASE_AUTH_DOMAIN=my-project.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=my-project
+   VITE_FIREBASE_STORAGE_BUCKET=my-project.appspot.com
    VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
    VITE_FIREBASE_APP_ID=1:123456789:web:abc123
    ```
 
-### Regras de Segurança do Firestore
+### Firestore Security Rules
 
-As regras estão declaradas em `firestore.rules`:
-- Apenas usuários autenticados pertencentes à lista permitida possuem acesso de leitura e escrita.
-- Trilha de auditoria (`audit_logs`) imutável (*append-only*): nenhuma entrada de auditoria pode ser modificada ou apagada.
-- Validação estrutural de campos essenciais.
+Security rules are defined in `firestore.rules`:
+- Only authenticated users listed in the authorized allowlist have read and write permissions.
+- Audit trail (`audit_logs`) is append-only: entries cannot be updated or deleted.
+- Strict schema and field validation on write operations.
 
-Para publicar as regras no Firebase:
+To deploy the rules to Firebase:
 ```bash
 npx firebase-tools deploy --only firestore:rules
 ```
 
 ---
 
-## Segurança e Conformidade (LGPD)
+## Security and Compliance (LGPD)
 
-- **Bloqueio por Inatividade:** Proteção de tela automática após período sem interação, exigindo PIN numérico de 4 dígitos para desbloqueio da sessão.
-- **Controle de Acesso:** Autenticação restrita via Google Auth com allowlist de e-mails corporativos.
-- **Auditoria de Operações:** Registro de alterações sensíveis, exclusões e restaurações.
-- **Tratamento de Dados de Saúde:** Estrutura pronta para minimização e isolamento de identificadores médicos e de pacientes.
-- **Acessibilidade:** Componentes modais equipados com focus trap acessível, suporte a teclado (`Escape`, `Tab`) e atributos ARIA (`aria-live`, `aria-current`).
-
----
-
-## Scripts disponíveis
-
-| Comando | Descrição |
-|---------|-----------|
-| `npm run dev` | Inicia servidor de desenvolvimento Vite com HMR |
-| `npm run build` | Compila o bundle otimizado de produção em `dist/` |
-| `npm run preview` | Executa o servidor de pré-visualização do build |
-| `npm run lint` | Analisa o código com o linter [OxLint](https://oxc.rs/) |
-| `npm test` | Roda a suíte completa de testes unitários com Vitest |
-| `npm run test:watch` | Roda os testes em modo contínuo (reexecuta ao salvar) |
-| `npm run ci` | Executa a validação canônica de CI (`lint` + `test` + `build`) |
+- **Inactivity Screen Lock:** Automatic screen protection after an idle period, requiring a 4-digit numeric PIN to resume the session.
+- **Access Control:** Restricted access through Google Authentication with an allowlist of authorized corporate email accounts.
+- **Audit Logging:** Immutably records sensitive operations, data deletions, and restorations.
+- **Healthcare Data Minimization:** Architectural isolation of sensitive medical and patient identifiers.
+- **Accessibility (a11y):** Modal dialogues include accessible focus trapping, keyboard navigation (`Escape`, `Tab`), and semantic ARIA attributes (`aria-live`, `aria-current`).
 
 ---
 
-## Estrutura de pastas
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Starts the Vite development server with HMR |
+| `npm run build` | Compiles the production bundle into `dist/` |
+| `npm run preview` | Serves the local production build preview |
+| `npm run lint` | Runs code analysis using [OxLint](https://oxc.rs/) |
+| `npm test` | Runs the full unit test suite with Vitest |
+| `npm run test:watch` | Runs tests in interactive watch mode |
+| `npm run ci` | Runs the full CI pipeline (`lint` + `test` + `build`) |
+
+---
+
+## Project Structure
 
 ```
 DashboardED/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # Pipeline de Integração Contínua (GitHub Actions)
-├── public/                    # Favicon e ícones estáticos
+│       └── ci.yml             # Continuous Integration pipeline (GitHub Actions)
+├── public/                    # Favicon and static assets
 ├── src/
-│   ├── assets/                # Imagens e marcas
-│   ├── components/            # Componentes reutilizáveis
+│   ├── assets/                # Logos and graphics
+│   ├── components/            # Reusable UI components
 │   │   ├── AutoCompleteInput.jsx
-│   │   ├── CloudSyncModal.jsx     # Sincronização e status do Firebase
+│   │   ├── CloudSyncModal.jsx     # Firebase sync modal and status indicators
 │   │   ├── ConfirmDialog.jsx
-│   │   ├── ConvenioFluxoModal.jsx # Modais de criação rápida
-│   │   ├── DetalhesFormModal.jsx  # Formulário de edição de detalhes
+│   │   ├── ConvenioFluxoModal.jsx # Quick transaction modals
+│   │   ├── DetalhesFormModal.jsx  # Exam details editing modal
 │   │   ├── ErrorBoundary.jsx
 │   │   ├── ExportMenu.jsx
-│   │   ├── FolhaTable.jsx         # Tabela isolada de folha de pagamento
-│   │   ├── FolhaTotalsBar.jsx     # Barra de totais e indicadores da folha
-│   │   ├── Modal.jsx              # Modal com focus trap e suporte ARIA
-│   │   ├── Sidebar.jsx            # Navegação lateral com aria-current
-│   │   └── ToastContainer.jsx     # Notificações com aria-live
-│   ├── pages/                 # Telas principais do sistema
-│   │   ├── OverviewPage.jsx       # Painel de indicadores gerais
-│   │   ├── ExamesPage.jsx         # Cadastro e lista de exames
-│   │   ├── ConveniosPage.jsx      # Controle por convênio médico
-│   │   ├── FluxoCaixaPage.jsx     # Gestão financeira de entradas/saídas
-│   │   ├── DetalhesPage.jsx       # Detalhamento clínico e financeiro
-│   │   ├── RepassePage.jsx        # Cálculo e repasse médico
-│   │   └── FolhaPage.jsx          # Gestão da folha de colaboradores
+│   │   ├── FolhaTable.jsx         # Isolated payroll table component
+│   │   ├── FolhaTotalsBar.jsx     # Payroll summary metrics and totals bar
+│   │   ├── Modal.jsx              # Accessible modal with focus trap & ARIA support
+│   │   ├── Sidebar.jsx            # Main navigation sidebar with aria-current
+│   │   └── ToastContainer.jsx     # Toast notifications with aria-live regions
+│   ├── pages/                 # Main application views/pages
+│   │   ├── OverviewPage.jsx       # Key performance indicators and metrics dashboard
+│   │   ├── ExamesPage.jsx         # Procedures registration and listing
+│   │   ├── ConveniosPage.jsx      # Health insurance billing & claim tracking
+│   │   ├── FluxoCaixaPage.jsx     # Financial management (inflow/outflow)
+│   │   ├── DetalhesPage.jsx       # Clinical and financial procedure breakdown
+│   │   ├── RepassePage.jsx        # Physician fee splitting and payout calculations
+│   │   └── FolhaPage.jsx          # Staff payroll and compensation management
 │   ├── services/
-│   │   └── firebase.js            # Inicialização e comunicação com Firestore/Auth
-│   ├── styles/                # CSS Modularizado
-│   │   ├── variables.css          # Cores, fontes, sombras e tokens de design
-│   │   ├── layout.css             # Grid, flex, sidebar, tabelas e responsividade
-│   │   ├── components.css         # Botões, cards, inputs, modais e badges
-│   │   └── pages/                 # Estilos específicos de cada módulo/página
+│   │   └── firebase.js            # Firebase SDK setup, Firestore and Auth integration
+│   ├── styles/                # Modular CSS architecture
+│   │   ├── variables.css          # Design tokens (colors, typography, spacing, shadows)
+│   │   ├── layout.css             # Grid, flexbox, sidebar, tables, and responsive layout
+│   │   ├── components.css         # Buttons, cards, inputs, modals, and badges
+│   │   └── pages/                 # Page-specific styling modules
 │   ├── utils/
-│   │   ├── helpers.js             # Funções de formatação e cálculos
-│   │   ├── storage.js             # Gerenciamento local, versionamento e schemas
-│   │   └── __tests__/             # Testes automatizados (Vitest)
-│   ├── App.jsx                # Componente orquestrador da aplicação
-│   ├── main.jsx               # Ponto de entrada React
-│   └── index.css              # Ponto de importação dos módulos CSS
-├── firestore.rules            # Regras de segurança e autorização do Firestore
-├── vite.config.js             # Configuração do Vite e Vitest
+│   │   ├── helpers.js             # Currency formatting, date calculations, and math helpers
+│   │   ├── storage.js             # LocalStorage manager, schema migrations, and backup
+│   │   └── __tests__/             # Automated unit and integration tests (Vitest)
+│   ├── App.jsx                # Root orchestrator component
+│   ├── main.jsx               # React entry point
+│   └── index.css              # Global styles entry point importing CSS modules
+├── firestore.rules            # Firestore security rules and validation logic
+├── vite.config.js             # Vite and Vitest configuration
 ├── package.json
 └── README.md
 ```
 
 ---
 
-## Funcionalidades
+## Features
 
-- 📊 **Visão Geral** — Painel consolidado com faturamento, exames realizados, ticket médio e gráficos.
-- 🩺 **Exames** — Lançamento ágil de procedimentos e valores.
-- 🏥 **Convênios** — Acompanhamento de glosas, valores por operadora e status.
-- 💰 **Fluxo de Caixa** — Entradas, saídas e conciliação diária/mensal.
-- 📋 **Detalhes** — Ficha completa por paciente e procedimento.
-- 🔄 **Repasses Médicos** — Cálculo automatizado de comissões por médico e procedimento (Schema v3).
-- 👥 **Folha de Pagamento** — Gestão de salários, adicionais e encargos da equipe.
-- 🔒 **PIN de Inatividade & LGPD** — Proteção de tela com bloqueio por tempo ocioso.
-- ☁️ **Sincronização Cloud & Backup** — Backup com timestamp e histórico local, sincronizável com Firestore.
-- 📤 **Exportação de Relatórios** — Download estruturado em formato CSV/JSON.
-
----
-
-## Tecnologias
-
-| Tecnologia | Finalidade |
-|------------|------------|
-| [React 19](https://react.dev/) | Interface de usuário declarativa e reativa |
-| [Vite 8](https://vite.dev/) | Ferramenta de build moderna e ultrarrápida |
-| [Vitest](https://vitest.dev/) | Test runner nativo ESM com cobertura de testes |
-| [Firebase / Firestore](https://firebase.google.com/) | Autenticação Google e banco NoSQL na nuvem |
-| [OxLint](https://oxc.rs/) | Linter de alto desempenho em Rust |
-| [Design System Modular](src/styles/) | CSS puro com CSS Custom Properties e layout responsivo |
+- 📊 **Overview Dashboard** — Consolidated revenue tracking, exam volume, average ticket, and trend charts.
+- 🩺 **Exams** — Rapid recording and status management of medical procedures and charges.
+- 🏥 **Health Insurance** — Tracking of insurance providers, claim rejections/disallowances (*glosas*), and billing status.
+- 💰 **Cash Flow** — Inflow/outflow recording, transaction categories, and daily/monthly reconciliations.
+- 📋 **Procedure Details** — Granular patient and clinical procedure records.
+- 🔄 **Medical Fee Splitting** — Automated commission and fee-split calculations per physician and procedure (Schema v3).
+- 👥 **Payroll** — Team salary management, overtime/additions, deductions, and labor costs.
+- 🔒 **Inactivity PIN & LGPD** — Idle timeout with 4-digit PIN lock to prevent unauthorized physical access.
+- ☁️ **Cloud Sync & Backup** — Timestamped JSON backups with local version history and optional Firestore synchronization.
+- 📤 **Report Exporting** — Clean data export in structured CSV and JSON formats.
 
 ---
 
-## Licença
+## Tech Stack
 
-Projeto proprietário de uso interno da **Clínica Endodiagnose**. Todos os direitos reservados.
+| Technology | Purpose |
+|------------|---------|
+| [React 19](https://react.dev/) | Modern, declarative, reactive user interface |
+| [Vite 8](https://vite.dev/) | Next-generation frontend build tooling and fast dev server |
+| [Vitest](https://vitest.dev/) | Native ESM test framework with unit and regression test coverage |
+| [Firebase / Firestore](https://firebase.google.com/) | Cloud NoSQL database and secure Google Authentication |
+| [OxLint](https://oxc.rs/) | High-performance Rust-based linter |
+| [Modular Design System](src/styles/) | Pure CSS using CSS Custom Properties and responsive design |
 
+---
+
+## License
+
+Proprietary software for the internal use of **Clínica Endodiagnose**. All rights reserved.
