@@ -49,7 +49,7 @@ export default function SlotModal({
         const m1 = parts[0] || '';
         const m2 = parts[1] || (slot.medico2 || '').trim().toUpperCase();
 
-        if (m1 && !doctors.includes(m1)) {
+        if (m1 && !activeMedicos.includes(m1)) {
           setIsCustomMedico(true);
           setNovoMedico(m1);
           setMedico('');
@@ -61,7 +61,7 @@ export default function SlotModal({
 
         if (m2) {
           setShowSecondDoctor(true);
-          if (!doctors.includes(m2)) {
+          if (!activeMedicos.includes(m2)) {
             setIsCustomMedico2(true);
             setNovoMedico2(m2);
             setMedico2('');
@@ -90,7 +90,7 @@ export default function SlotModal({
         setIsCustomMedico2(false);
       }
     }
-  }, [isOpen, slot, sala, turnoInfo]);
+  }, [isOpen, slot, sala, turnoInfo, activeMedicos]);
 
   // Selected doctors effective names
   const effectiveMedico1 = useMemo(() => {

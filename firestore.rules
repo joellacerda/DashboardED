@@ -35,32 +35,12 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // Coleções Clínicas e Financeiras do Dashboard Endodiagnose
-    // Acesso permitido apenas a usuários devidamente autenticados
+    // Coleções Principais do Sistema (MODULES - src/utils/storage/core.js)
+    // Acesso permitido a usuários devidamente autenticados
     // =========================================================================
 
     // Pacientes e Exames
     match /exames/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Consultas Clínicas
-    match /consultas/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Detalhes Financeiros dos Exames e Repasses
-    match /detalhes/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Convênios e Fluxos de Recebimento
-    match /convenios/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Corpo Clínico (Médicos e Honorários)
-    match /medicos/{docId} {
       allow read, write: if isAuthenticated();
     }
 
@@ -69,27 +49,84 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Cronograma de Exames e Escalas
-    match /cronograma/{docId} {
+    // Detalhes dos Exames e Repasses
+    match /detalhesExames/{docId} {
       allow read, write: if isAuthenticated();
     }
 
     // Folha de Pagamento
+    match /folhaPagamento/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Corpo Clínico (Médicos e Honorários)
+    match /medicos/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Ajustes e Histórico de Repasses
+    match /repassesAjustes/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Exames por Convênio e Tabelas de Procedimentos
+    match /examesConvenio/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Cronograma e Escalas de Salas
+    match /cronogramaSalas/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Configuração de Salas e Recursos Físicos
+    match /salasConfig/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // =========================================================================
+    // Coleções Legadas (Compatibilidade Regressiva)
+    // Mantidas para suporte a versões anteriores do esquema
+    // =========================================================================
+
+    // Detalhes Financeiros dos Exames (legado)
+    match /detalhes/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Convênios e Fluxos de Recebimento (legado)
+    match /convenios/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Folha de Pagamento (legado)
     match /folha/{docId} {
       allow read, write: if isAuthenticated();
     }
 
-    // Categorias Financeiras
+    // Cronograma de Exames e Escalas (legado)
+    match /cronograma/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Consultas Clínicas (legado)
+    match /consultas/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Categorias Financeiras (legado)
     match /categorias/{docId} {
       allow read, write: if isAuthenticated();
     }
 
-    // Metadados do Sistema e Versão do Esquema
+    // Metadados do Sistema e Versão do Esquema (legado)
     match /metadata/{docId} {
       allow read, write: if isAuthenticated();
     }
 
+    // =========================================================================
     // Regra Padrão: Bloqueia qualquer acesso a coleções não declaradas
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }

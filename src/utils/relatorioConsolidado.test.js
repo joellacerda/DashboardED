@@ -66,4 +66,38 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
     expect(rs[0].honorariosParticulares).toBe(0);
     expect(rs[1].honorariosParticulares).toBeGreaterThan(0);
   });
+
+  it('padroniza campos de repassesPorMedico para tabela e exportação CSV', () => {
+    const data = {
+      medicos: [{ id: 'm1', nome: 'Dr. Roberto', socio: true, ativo: true }],
+      detalhesExames: [
+        {
+          id: 'det1',
+          data: '2026-03-20',
+          medico: 'Dr. Roberto',
+          pagamentos: [{ forma: 'Pix', valor: 500, parcelas: 1 }],
+          honorariosMedicos: 350,
+        },
+      ],
+      repassesAjustes: [
+        {
+          key: 'dr. roberto_2026-03-16',
+          creditos: 100,
+          debitos: 30,
+          bnb: 20,
+        },
+      ],
+    };
+    const report = getConsolidatedFinancialReport(data, period('2026-03-16'));
+    const repasseDoc = report.repassesPorMedico.find((r) => r.nome === 'DR. ROBERTO');
+
+    expect(repasseDoc).toBeDefined();
+    expect(repasseDoc.honorariosParticulares).toBe(350);
+    expect(repasseDoc.honParticular).toBe(350);
+    expect(repasseDoc.honorariosConvenio).toBe(0);
+    expect(repasseDoc.totalHonorariosBruto).toBe(350);
+    // ajustesLiquidos = creditos (100) - debitos (30) - bnb (20) - compensacao (0) = 50
+    expect(repasseDoc.ajustesLiquidos).toBe(50);
+    expect(repasseDoc.repasseLiquido).toBe(400); // 350 + 50
+  });
 });

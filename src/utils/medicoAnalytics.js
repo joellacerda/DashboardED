@@ -113,14 +113,14 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
         exame: exam.tipoExame || exam.exame || 'Exame Particular',
         tipo: 'Particular',
         convenioNome: null,
-        valorTotal: Number(exam.valorTotal) || 0,
+        valorTotal: Number(exam.valorPagamento ?? exam.valorTotal) || 0,
         honorarioMedico: honNoPeriodo,
         isSplit,
         outroMedico: isSplit ? outroMedico : null,
       });
 
       totalHonorariosParticulares += honNoPeriodo;
-      totalFaturamentoParticulares += Number(exam.valorTotal) || 0;
+      totalFaturamentoParticulares += Number(exam.valorPagamento ?? exam.valorTotal) || 0;
     }
   });
 

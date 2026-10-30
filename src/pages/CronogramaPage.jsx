@@ -172,7 +172,6 @@ export default function CronogramaPage() {
   // Save rooms config
   const handleSaveSalas = (newSalas) => {
     saveSalasConfig(newSalas);
-    setSalas(newSalas);
   };
 
   return (

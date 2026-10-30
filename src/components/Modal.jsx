@@ -111,7 +111,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
       className="modal-overlay"
       ref={overlayRef}
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (e.target === overlayRef.current) onCloseRef.current?.();
       }}
     >
       <div
@@ -125,7 +125,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
       >
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar">
+          <button className="modal-close" onClick={() => onCloseRef.current?.()} aria-label="Fechar">
             ✕
           </button>
         </div>

@@ -111,7 +111,11 @@ export default function AutoCompleteInput({
         handleSelect(filteredOptions[highlightedIndex]);
       }
     } else if (e.key === 'Escape') {
-      setIsOpen(false);
+      if (isOpen) {
+        e.stopPropagation();
+        e.nativeEvent?.stopPropagation();
+        setIsOpen(false);
+      }
     }
   };
 
