@@ -253,6 +253,8 @@
   overflow-x: auto;
   min-width: 0;
   width: 100%;
+  max-inline-size: 100%;
+  container-type: inline-size;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -263,6 +265,9 @@
 
 .data-table thead {
   background: var(--bg-surface-elevated);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
 }
 
 .data-table th {
@@ -294,6 +299,34 @@
 
 .data-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.exames-compact-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.exames-compact-table th,
+.exames-compact-table td {
+  padding: 0.65rem 0.5rem;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.exames-compact-table th:first-child,
+.exames-compact-table td:first-child {
+  padding-inline-start: 1.25rem;
+}
+
+.exames-compact-table th:last-child,
+.exames-compact-table td:last-child {
+  padding-inline-end: 1.25rem;
+  overflow: visible;
 }
 
 .table-empty {

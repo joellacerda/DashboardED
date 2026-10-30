@@ -29,13 +29,9 @@ const ROUTES = [
   },
   {
     id: 'exames',
-    title: 'Exames Particulares',
+    title: 'Exames Realizados',
+    aliases: ['convenios', 'exames-particulares', 'exames-convenio'],
     component: lazy(() => import('./pages/ExamesPage')),
-  },
-  {
-    id: 'convenios',
-    title: 'Exames de Convênio',
-    component: lazy(() => import('./pages/ConveniosPage')),
   },
   {
     id: 'fluxo-caixa',
