@@ -5,6 +5,7 @@ import {
   formatCurrency,
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
+  isDateInPeriod,
   getTodayISO,
 } from '../../utils/helpers';
 import { useToast } from '../../contexts/ToastContext';
@@ -40,7 +41,6 @@ export function useFolhaData() {
     addItem,
     updateItem,
     deleteItem,
-    setData: setModuleData,
   } = useData();
 
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
@@ -292,25 +292,24 @@ export function useFolhaData() {
   const handleCopyFromPrevious = () => {
     const prevPeriod = navigateAcquisitionPeriod(period, -1);
     let copiedCount = 0;
+    const now = new Date().toISOString();
 
-    const updatedData = data.map((emp) => {
-      if (emp.ativo === false) return emp;
+    data.forEach((emp) => {
+      if (emp.ativo === false) return;
       const prevEntry = emp.periodos?.[prevPeriod.start];
       if (prevEntry) {
         copiedCount++;
-        return {
-          ...emp,
+        updateItem(MODULES.folhaPagamento, emp.id, {
           periodos: {
             ...(emp.periodos || {}),
             [period.start]: {
               ...prevEntry,
               copiedFrom: prevPeriod.start,
-              updatedAt: new Date().toISOString(),
+              updatedAt: now,
             },
           },
-        };
+        });
       }
-      return emp;
     });
 
     if (copiedCount === 0) {
@@ -320,8 +319,6 @@ export function useFolhaData() {
       return;
     }
 
-    setModuleData('folhaPagamento', updatedData);
-    updatedData.forEach((emp) => updateItem(MODULES.folhaPagamento, emp.id, emp));
     toast.success(`Lançamentos de ${copiedCount} colaborador(es) copiados do período anterior!`);
   };
 
@@ -332,18 +329,25 @@ export function useFolhaData() {
     }
 
     const descricao = `FOLHA DE PAGAMENTO — ${period.label}`;
+    const today = getTodayISO();
+    const defaultDate = isDateInPeriod(today, period) ? today : period.end;
 
     if (folhaLancamentoNoCaixa) {
+      const existingDate =
+        folhaLancamentoNoCaixa.data && isDateInPeriod(folhaLancamentoNoCaixa.data, period)
+          ? folhaLancamentoNoCaixa.data
+          : defaultDate;
       updateItem(MODULES.fluxoCaixa, folhaLancamentoNoCaixa.id, {
         valor: totalFolha,
         nome: descricao,
-        data: folhaLancamentoNoCaixa.data || getTodayISO(),
+        data: existingDate,
+        folhaPeriodoStart: period.start,
         updatedAt: new Date().toISOString(),
       });
       toast.success(`Lançamento no Fluxo de Caixa atualizado para ${formatCurrency(totalFolha)}!`);
     } else {
       addItem(MODULES.fluxoCaixa, {
-        data: getTodayISO(),
+        data: defaultDate,
         nome: descricao,
         categoria: 'Folha de Pagamento / Pessoal',
         tipo: 'saida',

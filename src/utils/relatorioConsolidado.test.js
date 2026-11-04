@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { getConsolidatedFinancialReport } from './relatorioConsolidado';
 import { getAcquisitionPeriod, getHonorarioInPeriod } from './helpers';
+import { calculateDoctorRepasseInPeriod } from './repasseCalculation';
+import { getDoctorPeriodMetrics } from './medicoAnalytics';
+import { syncConvenioToDetalhes, getData, setData, MODULES } from './storage';
 
 const period = (start) => getAcquisitionPeriod(new Date(start + 'T00:00:00'));
 const PERIODOS = ['2026-02-16', '2026-03-16', '2026-04-16', '2026-05-16'].map(period);
@@ -99,5 +102,137 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
     // ajustesLiquidos = creditos (100) - debitos (30) - bnb (20) - compensacao (0) = 50
     expect(repasseDoc.ajustesLiquidos).toBe(50);
     expect(repasseDoc.repasseLiquido).toBe(400); // 350 + 50
+  });
+
+  it('mantém consistência exata entre calculateDoctorRepasseInPeriod, getDoctorPeriodMetrics e getConsolidatedFinancialReport (incluindo manualOverride de convênio)', () => {
+    const p = period('2026-03-16');
+    const data = {
+      medicos: [{ id: 'm1', nome: 'DRA. CAMILA', socio: true, ativo: true }],
+      examesConvenio: [
+        {
+          id: 'c1',
+          data: '2026-03-01',
+          medico: 'DRA. CAMILA',
+          convenio: 'UNIMED',
+          fluxoLancado: true,
+          fluxoData: '2026-03-22',
+          fluxoValorLancado: 400,
+          valorHonorarioCalculado: 320,
+        },
+      ],
+      detalhesExames: [
+        {
+          id: 'conv_c1',
+          origemConvenioId: 'c1',
+          isConvenio: true,
+          manualOverride: true,
+          data: '2026-03-01',
+          fluxoLancado: true,
+          fluxoData: '2026-03-22',
+          medico: 'DRA. CAMILA',
+          convenio: 'UNIMED',
+          valorPago: 400,
+          honorariosMedicos: 360, // manualOverride editado de 320 para 360
+        },
+        {
+          id: 'part1',
+          data: '2026-03-25',
+          medico: 'DRA. CAMILA',
+          pagamentos: [{ forma: 'Pix', valor: 500, parcelas: 1 }],
+          honorariosMedicos: 400,
+        },
+      ],
+      repassesAjustes: [
+        {
+          key: 'dra. camila_2026-03-16',
+          creditos: 50,
+          debitos: 10,
+          bnb: 5,
+        },
+      ],
+      fluxoCaixa: [],
+    };
+
+    const directRepasse = calculateDoctorRepasseInPeriod('DRA. CAMILA', p, data);
+    const analyticsMetrics = getDoctorPeriodMetrics('DRA. CAMILA', p, data);
+    const consolidatedReport = getConsolidatedFinancialReport(data, p);
+    const reportRow = consolidatedReport.repassesPorMedico.find((r) => r.nome === 'DRA. CAMILA');
+
+    expect(directRepasse.honConvenio).toBe(360);
+    expect(directRepasse.honParticular).toBe(400);
+    expect(directRepasse.honTotal).toBe(760);
+    expect(directRepasse.repasseLiquido).toBe(795); // 760 + 50 - 10 - 5
+
+    expect(analyticsMetrics.totalHonorariosConvenios).toBe(directRepasse.honConvenio);
+    expect(analyticsMetrics.totalHonorariosParticulares).toBe(directRepasse.honParticular);
+    expect(analyticsMetrics.repasseLiquido).toBe(directRepasse.repasseLiquido);
+
+    expect(reportRow.honorariosConvenio).toBe(directRepasse.honConvenio);
+    expect(reportRow.honorariosParticulares).toBe(directRepasse.honParticular);
+    expect(reportRow.repasseLiquido).toBe(directRepasse.repasseLiquido);
+  });
+
+  it('sinaliza folhaNaoLancadaNoCaixa quando há folha líquida calculada mas sem despesa no Fluxo de Caixa', () => {
+    const p = period('2026-03-16');
+    const dataSemLancamento = {
+      folhaPagamento: [
+        {
+          id: 'f1',
+          nome: 'MARIA',
+          salarioBase: 2500,
+          entries: [{ periodStart: p.start, faltas: 0, horasExtras: 0, bonus: 0 }],
+        },
+      ],
+      fluxoCaixa: [],
+    };
+
+    const reportPendente = getConsolidatedFinancialReport(dataSemLancamento, p);
+    expect(reportPendente.folhaResumo.totalFolhaLiquida).toBeGreaterThan(0);
+    expect(reportPendente.folhaNaoLancadaNoCaixa).toBe(true);
+    expect(reportPendente.folhaResumo.folhaNaoLancadaNoCaixa).toBe(true);
+
+    const dataComLancamento = {
+      ...dataSemLancamento,
+      fluxoCaixa: [
+        {
+          id: 'fc_folha',
+          tipo: 'saida',
+          categoria: 'Folha de Pagamento / Pessoal',
+          valor: reportPendente.folhaResumo.totalFolhaLiquida,
+          data: p.end,
+        },
+      ],
+    };
+
+    const reportLancado = getConsolidatedFinancialReport(dataComLancamento, p);
+    expect(reportLancado.folhaNaoLancadaNoCaixa).toBe(false);
+    expect(reportLancado.folhaResumo.folhaNaoLancadaNoCaixa).toBe(false);
+  });
+
+  it('syncConvenioToDetalhes não gera escrita redundante em auditLogs quando nenhum campo mudou', () => {
+    setData(MODULES.detalhesExames, []);
+    setData(MODULES.auditLogs, []);
+
+    const conv = {
+      id: 'c_idem_1',
+      data: '2026-03-18',
+      paciente: 'PACIENTE TESTE',
+      medico: 'DR. JOAO',
+      convenio: 'UNIMED',
+      exames: [{ nome: 'ENDOSCOPIA' }],
+      fluxoLancado: true,
+      fluxoValorLancado: 300,
+      fluxoData: '2026-03-18',
+      valorHonorarioCalculado: 240,
+    };
+
+    syncConvenioToDetalhes(conv);
+    const logsAfterCreate = getData(MODULES.auditLogs).length;
+    expect(logsAfterCreate).toBe(1);
+
+    // Chamar novamente com os mesmos dados não deve gerar novo auditLog
+    syncConvenioToDetalhes(conv);
+    const logsAfterRepeat = getData(MODULES.auditLogs).length;
+    expect(logsAfterRepeat).toBe(1);
   });
 });

@@ -2,64 +2,17 @@ import {
   formatCurrency,
   roundCurrency,
   isDateInPeriod,
+  isDoctorMatch,
   getHonorarioMedicoInPeriod,
-  getDoctorCompensacaoInPeriod,
   navigateAcquisitionPeriod,
   downloadBlob,
 } from './helpers';
+import {
+  getAllDoctors as getAllDoctorsUnified,
+  calculateDoctorRepasseInPeriod,
+} from './repasseCalculation';
 
-/**
- * Retorna a lista unificada de todos os médicos cadastrados ou presentes nos registros.
- *
- * @param {object} data - Objeto contendo coleções { medicos, detalhesExames, examesConvenio, exames }
- * @returns {Array} Lista de médicos normalizada [{ id, nome, socio, ativo, auto }]
- */
-export function getAllDoctors(data = {}) {
-  const medicosList = data.medicos || [];
-  const detalhesExames = data.detalhesExames || [];
-  const examesConvenio = data.examesConvenio || [];
-  const exames = data.exames || [];
-
-  const list = medicosList.map((m) => ({
-    ...m,
-    id: m.id || m.nome,
-    nome: (m.nome || '').trim().toUpperCase(),
-    ativo: m.ativo !== false,
-    socio: m.socio !== false,
-  }));
-
-  const registeredNames = new Set(list.map((m) => m.nome));
-
-  const addIfMissing = (name) => {
-    if (!name) return;
-    const clean = name.trim().toUpperCase();
-    if (!clean || registeredNames.has(clean)) return;
-    registeredNames.add(clean);
-    list.push({
-      id: `auto_${clean}`,
-      nome: clean,
-      socio: true,
-      ativo: true,
-      auto: true,
-    });
-  };
-
-  detalhesExames.forEach((e) => {
-    addIfMissing(e.medico);
-    addIfMissing(e.medico2);
-  });
-
-  examesConvenio.forEach((c) => {
-    addIfMissing(c.medico);
-    addIfMissing(c.medico2);
-  });
-
-  exames.forEach((e) => {
-    addIfMissing(e.medico);
-  });
-
-  return list.sort((a, b) => a.nome.localeCompare(b.nome));
-}
+export const getAllDoctors = getAllDoctorsUnified;
 
 /**
  * Calcula métricas detalhadas, atendimentos e fechamento de repasse para um médico específico em um período.
@@ -72,39 +25,35 @@ export function getAllDoctors(data = {}) {
 export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   if (!doctorName || !period) return null;
 
-  const targetName = doctorName.trim().toUpperCase();
-  const allDoctors = getAllDoctors(data);
-  const doctor = allDoctors.find((d) => d.nome === targetName) || {
-    id: targetName,
-    nome: targetName,
-    socio: true,
-    ativo: true,
-  };
+  const repasseInfo = calculateDoctorRepasseInPeriod(doctorName, period, data);
+  if (!repasseInfo) return null;
 
+  const { doctor, nome: targetName } = repasseInfo;
   const detalhesExames = data.detalhesExames || [];
   const examesConvenio = data.examesConvenio || [];
-  const fluxoCaixa = data.fluxoCaixa || [];
-  const repassesAjustes = data.repassesAjustes || [];
 
   // --- 1. Procedimentos Particulares ---
   const procedimentosParticulares = [];
-  let totalHonorariosParticulares = 0;
   let totalFaturamentoParticulares = 0;
 
   detalhesExames.forEach((exam) => {
-    // Pula convênios espelhados em detalhes (serão computados na seção de convênios)
-    if (exam.isConvenio) return;
+    if (exam.isConvenio || exam.origemConvenioId || String(exam.id || '').startsWith('conv_')) {
+      return;
+    }
 
-    const honNoPeriodo = getHonorarioMedicoInPeriod(exam, targetName, period);
+    const honNoPeriodo = getHonorarioMedicoInPeriod(exam, doctor, period);
     const doc1 = (exam.medico || '').trim().toUpperCase();
     const doc2 = (exam.medico2 || '').trim().toUpperCase();
+    const isDoc1 = isDoctorMatch(exam.medico, exam.medicoId, doctor);
+    const isDoc2 = isDoctorMatch(exam.medico2, exam.medico2Id, doctor);
 
-    const isMedicoNesteExame = doc1 === targetName || doc2 === targetName;
+    const isMedicoNesteExame = isDoc1 || isDoc2;
     const isNoPeriodo = isDateInPeriod(exam.data, period) || honNoPeriodo > 0;
 
     if (isMedicoNesteExame && isNoPeriodo) {
       const isSplit = !!(exam.temDivisao || exam.medico2);
-      const outroMedico = doc1 === targetName ? doc2 : doc1;
+      const outroMedico = isDoc1 ? doc2 : doc1;
+      const valExam = Number(exam.valorPagamento ?? exam.valorTotal) || 0;
 
       procedimentosParticulares.push({
         id: exam.id || `${exam.data}_${exam.paciente}`,
@@ -113,36 +62,39 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
         exame: exam.tipoExame || exam.exame || 'Exame Particular',
         tipo: 'Particular',
         convenioNome: null,
-        valorTotal: Number(exam.valorPagamento ?? exam.valorTotal) || 0,
+        valorTotal: valExam,
         honorarioMedico: honNoPeriodo,
         isSplit,
         outroMedico: isSplit ? outroMedico : null,
       });
 
-      totalHonorariosParticulares += honNoPeriodo;
-      totalFaturamentoParticulares += Number(exam.valorPagamento ?? exam.valorTotal) || 0;
+      totalFaturamentoParticulares += valExam;
     }
   });
 
   // --- 2. Procedimentos de Convênio ---
   const procedimentosConvenios = [];
-  let totalHonorariosConvenios = 0;
   let totalFaturamentoConvenios = 0;
 
   examesConvenio.forEach((c) => {
     const doc1 = (c.medico || '').trim().toUpperCase();
     const doc2 = (c.medico2 || '').trim().toUpperCase();
-    const isDoc1 = doc1 === targetName;
-    const isDoc2 = doc2 === targetName;
+    const isDoc1 = isDoctorMatch(c.medico, c.medicoId, doctor);
+    const isDoc2 = isDoctorMatch(c.medico2, c.medico2Id, doctor);
 
     if (!isDoc1 && !isDoc2) return;
 
-    // Considera o exame se realizado ou faturado na competência
-    const dataRef = c.fluxoData || c.data;
+    const syncedDet = detalhesExames.find(
+      (d) => d.origemConvenioId === c.id || d.id === `conv_${c.id}`
+    );
+
+    const dataRef = syncedDet?.data || c.fluxoData || c.data;
     if (!isDateInPeriod(dataRef, period)) return;
 
     let honMedico = 0;
-    if (isDoc1) {
+    if (syncedDet) {
+      honMedico = getHonorarioMedicoInPeriod(syncedDet, doctor, period);
+    } else if (isDoc1) {
       honMedico = Number(c.valorRepasseMedico1 || (c.temDivisaoMedico2 ? 0 : c.valorRepasse || 0));
     } else if (isDoc2) {
       honMedico = Number(c.valorRepasseMedico2 || 0);
@@ -164,7 +116,6 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
       outroMedico: isDoc1 ? doc2 : doc1,
     });
 
-    totalHonorariosConvenios += honMedico;
     totalFaturamentoConvenios += valFaturado;
   });
 
@@ -174,7 +125,9 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   );
 
   const totalProcedimentos = todosProcedimentos.length;
-  const totalHonorariosBrutos = totalHonorariosParticulares + totalHonorariosConvenios;
+  const totalHonorariosParticulares = repasseInfo.honParticular;
+  const totalHonorariosConvenios = repasseInfo.honConvenio;
+  const totalHonorariosBrutos = repasseInfo.honTotal;
   const ticketMedioHonorario =
     totalProcedimentos > 0 ? totalHonorariosBrutos / totalProcedimentos : 0;
 
@@ -193,37 +146,6 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     (a, b) => b.quantidade - a.quantidade || b.honorarios - a.honorarios
   );
 
-  // --- 5. Ajustes, Cota de Déficit e Repasse Líquido ---
-  const ajusteKey = `${targetName.toLowerCase()}_${period.start}`;
-  const ajuste = repassesAjustes.find((a) => a.key === ajusteKey) || {};
-
-  const creditos = Number(ajuste.creditos) || 0;
-  const debitos = Number(ajuste.debitos) || 0;
-  const bnb = Number(ajuste.bnb) || 0;
-  const obs = ajuste.obs || '';
-
-  // Compensação de convênios/materiais devida à clínica
-  const compensacaoInfo = getDoctorCompensacaoInPeriod(targetName, period, examesConvenio);
-  const compensacaoConvenios = compensacaoInfo.total;
-
-  // Cálculo de déficit da clínica para apuração da cota de sócio
-  const fluxoNoPeriodo = fluxoCaixa.filter((f) => isDateInPeriod(f.data, period));
-  const totalEntradasFluxo = fluxoNoPeriodo
-    .filter((f) => f.tipo === 'entrada')
-    .reduce((s, f) => s + Number(f.valor || 0), 0);
-  const totalSaidasFluxo = fluxoNoPeriodo
-    .filter((f) => f.tipo === 'saida')
-    .reduce((s, f) => s + Number(f.valor || 0), 0);
-  const deficitClinica = Math.max(0, totalSaidasFluxo - totalEntradasFluxo);
-
-  const countSociosAtivos = allDoctors.filter((d) => d.socio && d.ativo).length;
-  const cotaPorSocio =
-    countSociosAtivos > 0 && deficitClinica > 0 ? deficitClinica / countSociosAtivos : 0;
-
-  const cotaClinica = doctor.socio && doctor.ativo ? cotaPorSocio : 0;
-  const totalAjustesLiquidos = creditos - debitos - compensacaoConvenios - bnb - cotaClinica;
-  const repasseLiquido = Math.max(0, totalHonorariosBrutos + totalAjustesLiquidos);
-
   // --- 6. Participação do médico no volume total da clínica ---
   const totalExamesClinica =
     (data.exames || []).filter((e) => isDateInPeriod(e.data, period)).length +
@@ -235,8 +157,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   return {
     doctor,
     nome: targetName,
-    isSocio: doctor.socio,
-    isAtivo: doctor.ativo,
+    isSocio: repasseInfo.isSocio,
+    isAtivo: repasseInfo.isAtivo,
     period,
     totalProcedimentos,
     participacaoVolume: Math.round(participacaoVolume * 10) / 10,
@@ -252,16 +174,16 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     totalHonorariosBrutos: roundCurrency(totalHonorariosBrutos),
     ticketMedioHonorario: roundCurrency(ticketMedioHonorario),
     // Ajustes
-    creditos: roundCurrency(creditos),
-    debitos: roundCurrency(debitos),
-    compensacaoConvenios: roundCurrency(compensacaoConvenios),
-    compensacaoItems: compensacaoInfo.items,
-    bnb: roundCurrency(bnb),
-    cotaClinica: roundCurrency(cotaClinica),
-    totalAjustesLiquidos: roundCurrency(totalAjustesLiquidos),
-    obs,
+    creditos: repasseInfo.creditos,
+    debitos: repasseInfo.debitos,
+    compensacaoConvenios: repasseInfo.compensacaoConvenios,
+    compensacaoItems: repasseInfo.compensacaoItems,
+    bnb: repasseInfo.bnb,
+    cotaClinica: repasseInfo.cotaClinica,
+    totalAjustesLiquidos: repasseInfo.totalAjustesLiquidosComCota,
+    obs: repasseInfo.obs,
     // Repasse Líquido
-    repasseLiquido: roundCurrency(repasseLiquido),
+    repasseLiquido: repasseInfo.repasseLiquido,
     // Listas e Rankings
     procedimentos: todosProcedimentos,
     rankingProcedimentos,

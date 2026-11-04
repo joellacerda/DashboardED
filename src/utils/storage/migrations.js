@@ -1,5 +1,5 @@
 import { getData, setData, MODULES, getLocalStorage } from './core';
-import { saveToCloud } from '../../services/firebase';
+import { enqueueSyncOperation } from '../../services/syncQueue';
 
 export const SCHEMA_VERSION_KEY = 'endodiagnose_schema_version';
 export const CURRENT_SCHEMA_VERSION = 3;
@@ -31,13 +31,21 @@ export function migrate(module, transformFn) {
 
     let changed = false;
     let updatedCount = 0;
+    const now = new Date().toISOString();
     const updatedList = list.map((item) => {
       if (!item) return item;
       const transformed = transformFn({ ...item });
       if (JSON.stringify(transformed) !== JSON.stringify(item)) {
         changed = true;
         updatedCount++;
-        saveToCloud(module, transformed);
+        if (transformed.id) {
+          enqueueSyncOperation({
+            module,
+            entityId: transformed.id,
+            type: 'UPSERT',
+            payload: { ...transformed, updatedAt: transformed.updatedAt || now },
+          });
+        }
         return transformed;
       }
       return item;

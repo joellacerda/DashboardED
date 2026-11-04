@@ -7,7 +7,7 @@ import {
   notifyDataChanged,
 } from './core';
 import { addAuditLog } from './audit';
-import { deleteFromCloud } from '../../services/firebase';
+import { enqueueSyncOperation } from '../../services/syncQueue';
 import { recordBackupDone } from '../security';
 
 export const ESTIMATED_LOCALSTORAGE_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -281,12 +281,19 @@ export async function archiveAndPurgeData(cutoffDate) {
     setData(mod, remainingRecords[mod]);
   });
 
-  // 3. Excluir da nuvem se conectado
+  // 3. Enfileirar deleções (tombstones) na fila de sincronização
   try {
+    const now = new Date().toISOString();
     for (const mod of targetModules) {
       const ids = idsToDeleteFromCloud[mod];
       for (const id of ids) {
-        deleteFromCloud(mod, id);
+        if (!id) continue;
+        enqueueSyncOperation({
+          module: mod,
+          entityId: id,
+          type: 'DELETE',
+          payload: { id, _deleted: true, deletedAt: now, updatedAt: now },
+        });
       }
     }
   } catch (cloudErr) {

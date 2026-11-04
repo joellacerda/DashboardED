@@ -1,5 +1,5 @@
 import { getData, setData, addItem, updateItem, deleteItem, MODULES } from './core';
-import { saveToCloud } from '../../services/firebase';
+import { enqueueSyncOperation } from '../../services/syncQueue';
 
 export const DEFAULT_SALAS = Object.freeze([
   { id: 'sala_c1', nome: 'Consultório 1', tipo: 'consultorio', cor: '#3b82f6', ativo: true, ordem: 1 },
@@ -20,10 +20,36 @@ export function getSalasConfig() {
 }
 
 export function saveSalasConfig(salas) {
-  setData(MODULES.salasConfig, salas);
-  if (Array.isArray(salas)) {
-    salas.forEach((s) => saveToCloud(MODULES.salasConfig, s));
-  }
+  const prevSalas = getData(MODULES.salasConfig) || [];
+  const now = new Date().toISOString();
+  const normalizedSalas = Array.isArray(salas)
+    ? salas.map((s) => ({ ...s, updatedAt: s.updatedAt || now }))
+    : [];
+
+  setData(MODULES.salasConfig, normalizedSalas);
+
+  const nextIds = new Set(normalizedSalas.map((s) => s.id).filter(Boolean));
+  prevSalas.forEach((oldSala) => {
+    if (oldSala?.id && !nextIds.has(oldSala.id)) {
+      enqueueSyncOperation({
+        module: MODULES.salasConfig,
+        entityId: oldSala.id,
+        type: 'DELETE',
+        payload: { id: oldSala.id, _deleted: true, deletedAt: now, updatedAt: now },
+      });
+    }
+  });
+
+  normalizedSalas.forEach((s) => {
+    if (s && s.id) {
+      enqueueSyncOperation({
+        module: MODULES.salasConfig,
+        entityId: s.id,
+        type: 'UPSERT',
+        payload: s,
+      });
+    }
+  });
 }
 
 export function getCronogramaList() {

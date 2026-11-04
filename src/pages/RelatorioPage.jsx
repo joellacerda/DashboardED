@@ -702,6 +702,27 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
           <h3 className="chart-card-title">
             Resumo da Folha de Pagamento da Competência ({folhaResumo.colaboradoresCount} colaboradores cadastrados)
           </h3>
+          {folhaResumo.folhaNaoLancadaNoCaixa && (
+            <div
+              role="status"
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                color: '#fbbf24',
+                fontSize: '0.85rem',
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>⚠️ Atenção:</strong> Há uma Folha Líquida de{' '}
+              <strong>{formatCurrency(folhaResumo.totalFolhaLiquida)}</strong> calculada na aba{' '}
+              <em>Folha de Pagamento</em> para este período, mas ainda não há despesa lançada na categoria{' '}
+              <strong>Folha de Pagamento / Pessoal</strong> no Fluxo de Caixa. Use o botão{' '}
+              <strong>&ldquo;Lançar no Fluxo de Caixa&rdquo;</strong> na guia de Folha para contabilizar esse custo no DRE.
+            </div>
+          )}
           <div className="folha-summary-grid">
             <div className="folha-summary-item">
               <span className="folha-summary-label">Salários-Base</span>

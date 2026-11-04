@@ -7,8 +7,25 @@ import {
   notifyDataChanged,
   MODULES,
 } from './core';
-import { saveToCloud, deleteFromCloud } from '../../services/firebase';
+import { enqueueSyncOperation } from '../../services/syncQueue';
 import { getAcquisitionPeriod, isDateInPeriod, getTodayISO } from '../helpers';
+
+function hasDetalheRecordChanged(existing, next) {
+  if (!existing || !next) return true;
+  const keysToCompare = Object.keys(next).filter(
+    (k) => k !== 'updatedAt' && k !== 'createdAt'
+  );
+  for (const key of keysToCompare) {
+    const prevVal = existing[key];
+    const nextVal = next[key];
+    if (typeof nextVal === 'object' && nextVal !== null) {
+      if (JSON.stringify(prevVal) !== JSON.stringify(nextVal)) return true;
+    } else if (prevVal !== nextVal) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Normalizes convênio names, returning standard key and display name.
@@ -134,6 +151,9 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
         manualOverride: true,
         updatedAt: new Date().toISOString(),
       };
+      if (!hasDetalheRecordChanged(existing, preservedRecord)) {
+        return existing;
+      }
       updateItem(MODULES.detalhesExames, existing.id, preservedRecord);
       return preservedRecord;
     }
@@ -177,7 +197,11 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
   };
 
   if (existingIdx !== -1) {
-    updateItem(MODULES.detalhesExames, detalhesList[existingIdx].id, detalheRecord);
+    const existing = detalhesList[existingIdx];
+    if (!hasDetalheRecordChanged(existing, detalheRecord)) {
+      return existing;
+    }
+    updateItem(MODULES.detalhesExames, existing.id, detalheRecord);
   } else {
     addItem(MODULES.detalhesExames, detalheRecord);
   }
@@ -326,18 +350,39 @@ export function syncConveniosFluxoConsolidado() {
 
     let fluxoChanged = false;
     let nextFluxo = [...fluxoList];
+    const nowIso = new Date().toISOString();
+
+    const enqueueFluxoDelete = (id) => {
+      if (!id) return;
+      enqueueSyncOperation({
+        module: MODULES.fluxoCaixa,
+        entityId: id,
+        type: 'DELETE',
+        payload: { id, _deleted: true, deletedAt: nowIso, updatedAt: nowIso },
+      });
+    };
+
+    const enqueueFluxoUpsert = (item) => {
+      if (!item || !item.id) return;
+      enqueueSyncOperation({
+        module: MODULES.fluxoCaixa,
+        entityId: item.id,
+        type: 'UPSERT',
+        payload: item,
+      });
+    };
 
     // 1. Remove entradas individuais legadas
     const filteredFluxo = nextFluxo.filter((f) => {
       if (f.convenioId) {
         fluxoChanged = true;
-        deleteFromCloud(MODULES.fluxoCaixa, f.id);
+        enqueueFluxoDelete(f.id);
         return false;
       }
       const upper = (f.nome || '').toUpperCase();
       if (upper.startsWith('REPASSE CONVÊNIO') || upper.startsWith('REPASSE CONVENIO')) {
         fluxoChanged = true;
-        deleteFromCloud(MODULES.fluxoCaixa, f.id);
+        enqueueFluxoDelete(f.id);
         return false;
       }
       return true;
@@ -387,7 +432,7 @@ export function syncConveniosFluxoConsolidado() {
         periodoLabel: grp.periodLabel,
         qtdExames: grp.examIds.length,
         examesIds: grp.examIds,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       };
 
       if (existingIdx !== -1) {
@@ -400,16 +445,16 @@ export function syncConveniosFluxoConsolidado() {
         ) {
           const merged = { ...existing, ...consolidatedRecord };
           nextFluxo[existingIdx] = merged;
-          saveToCloud(MODULES.fluxoCaixa, merged);
+          enqueueFluxoUpsert(merged);
           fluxoChanged = true;
         }
       } else {
         const newItem = {
           ...consolidatedRecord,
-          createdAt: new Date().toISOString(),
+          createdAt: nowIso,
         };
         nextFluxo.push(newItem);
-        saveToCloud(MODULES.fluxoCaixa, newItem);
+        enqueueFluxoUpsert(newItem);
         fluxoChanged = true;
       }
     });
@@ -420,7 +465,7 @@ export function syncConveniosFluxoConsolidado() {
         const upperNome = (f.nome || '').trim().toUpperCase();
         if (upperNome !== 'UNIMED' && upperNome !== 'COOPEND') {
           fluxoChanged = true;
-          deleteFromCloud(MODULES.fluxoCaixa, f.id);
+          enqueueFluxoDelete(f.id);
           return false;
         }
         const convK = f.convenioConsolidado || (upperNome === 'UNIMED' ? 'UNIMED' : 'COOPEND');
@@ -428,7 +473,7 @@ export function syncConveniosFluxoConsolidado() {
         const fKey = `${convK}_${pK}`;
         if (!activeConsolidatedKeys.has(fKey)) {
           fluxoChanged = true;
-          deleteFromCloud(MODULES.fluxoCaixa, f.id);
+          enqueueFluxoDelete(f.id);
           return false;
         }
       }

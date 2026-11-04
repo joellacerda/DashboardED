@@ -3,12 +3,12 @@ import {
   roundCurrency,
   isDateInPeriod,
   getHonorarioInPeriod,
-  getHonorarioMedicoInPeriod,
   migrateLegacyPayment,
   getInstallmentPeriods,
   getExamAllocationInPeriod,
   downloadBlob,
 } from './helpers';
+import { calculateAllDoctorsRepasseInPeriod } from './repasseCalculation';
 
 /**
  * Consolidates full financial statements (DRE, Revenue, Deductions, Medical Repasses, Operational Expenses)
@@ -26,8 +26,6 @@ export function getConsolidatedFinancialReport(data = {}, period) {
   const fluxoCaixa = data.fluxoCaixa || [];
   const detalhesExames = data.detalhesExames || [];
   const folhaPagamento = data.folhaPagamento || [];
-  const medicos = data.medicos || [];
-  const repassesAjustes = data.repassesAjustes || [];
 
   // 1. Exames Particulares
   const examesParticularesRealizados = exames.filter((e) => isDateInPeriod(e.data, period));
@@ -217,43 +215,12 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     totalFolhaLiquida += liq;
   });
 
-  // 9. Quadro de Médicos e Repasses
-  const allDoctorNames = new Set();
-  medicos.forEach((m) => {
-    if (m.nome && m.nome.trim()) allDoctorNames.add(m.nome.trim().toUpperCase());
-  });
-  detalhesExames.forEach((d) => {
-    if (d.medico) allDoctorNames.add(d.medico.trim().toUpperCase());
-    if (d.medico2) allDoctorNames.add(d.medico2.trim().toUpperCase());
-  });
-  examesConvenio.forEach((c) => {
-    if (c.medico) allDoctorNames.add(c.medico.trim().toUpperCase());
-    if (c.medico2) allDoctorNames.add(c.medico2.trim().toUpperCase());
-  });
-
-  const doctorsList = Array.from(allDoctorNames).sort((a, b) => a.localeCompare(b));
-
-  // Determine Clinic Operating Deficit for partner contribution calculation
-  // Total entradas reais vs saídas reais do fluxo de caixa no período
-  const totalEntradasFluxo = fluxoNoPeriodo
-    .filter((f) => f.tipo === 'entrada')
-    .reduce((s, f) => s + Number(f.valor || 0), 0);
-  const totalSaidasFluxo = totalDespesasOperacionais;
-  const deficitClinica = Math.max(0, totalSaidasFluxo - totalEntradasFluxo);
-
-  const medicosRegistered = medicos.map((m) => ({
-    ...m,
-    nome: (m.nome || '').trim().toUpperCase(),
-    ativo: m.ativo !== false,
-    socio: m.socio !== false,
-  }));
-
-  const countSociosAtivos = doctorsList.filter((docName) => {
-    const reg = medicosRegistered.find((m) => m.nome === docName);
-    return reg ? reg.socio && reg.ativo : true;
-  }).length;
-
-  const cotaDeficitPorSocio = countSociosAtivos > 0 && deficitClinica > 0 ? deficitClinica / countSociosAtivos : 0;
+  // 9. Quadro de Médicos e Repasses (unificado via repasseCalculation)
+  const {
+    deficitClinica,
+    cotaPorSocio: cotaDeficitPorSocio,
+    rows: repasseRowsUnified,
+  } = calculateAllDoctorsRepasseInPeriod(period, data);
 
   let totalHonorariosMedicosGeral = 0;
   let totalRepassesLiquidosGeral = 0;
@@ -261,76 +228,30 @@ export function getConsolidatedFinancialReport(data = {}, period) {
   let totalAjustesDebitos = 0;
   let totalCompensacoesConvenioGeral = 0;
 
-  const repassesPorMedico = doctorsList.map((docName) => {
-    const reg = medicosRegistered.find((m) => m.nome === docName);
-    const isSocio = reg ? reg.socio : true;
-    const isAtivo = reg ? reg.ativo : true;
-
-    // Honorários particulares
-    const honParticular = detalhesExames.reduce((sum, exam) => {
-      if (exam.isConvenio) return sum;
-      return sum + getHonorarioMedicoInPeriod(exam, docName, period);
-    }, 0);
-
-    // Honorários convênios
-    let honConvenio = 0;
-    conveniosFaturados.forEach((c) => {
-      const doc1 = (c.medico || '').trim().toUpperCase();
-      const doc2 = (c.medico2 || '').trim().toUpperCase();
-      if (doc1 === docName) {
-        honConvenio += Number(c.valorRepasseMedico1 || (c.temDivisaoMedico2 ? 0 : c.valorRepasse || 0));
-      }
-      if (doc2 === docName) {
-        honConvenio += Number(c.valorRepasseMedico2 || 0);
-      }
-    });
-
-    const honTotal = honParticular + honConvenio;
-
-    // Compensações de convênios/materiais (alça 100% clínica + 50% polipectomia recebidos pelo médico)
-    let compensacaoConvenio = 0;
-    conveniosFaturados.forEach((c) => {
-      const doc1 = (c.medico || '').trim().toUpperCase();
-      if (doc1 === docName) {
-        compensacaoConvenio += Number(c.valorCompensacaoClinica || 0);
-      }
-    });
-
-    // Ajustes
-    const ajusteKey = `${docName.toLowerCase()}_${period.start}`;
-    const ajuste = repassesAjustes.find((a) => a.key === ajusteKey);
-
-    const creditos = Number(ajuste?.creditos || 0);
-    const debitos = Number(ajuste?.debitos || 0);
-    const bnb = Number(ajuste?.bnb || 0);
-    const obs = ajuste?.obs || '';
-
-    const cotaDeficit = isSocio && isAtivo && deficitClinica > 0 ? cotaDeficitPorSocio : 0;
-    const repasseLiquido = Math.max(0, honTotal + creditos - debitos - compensacaoConvenio - bnb - cotaDeficit);
-
-    totalHonorariosMedicosGeral += honTotal;
-    totalRepassesLiquidosGeral += repasseLiquido;
-    totalAjustesCreditos += creditos;
-    totalAjustesDebitos += debitos + bnb;
-    totalCompensacoesConvenioGeral += compensacaoConvenio;
+  const repassesPorMedico = repasseRowsUnified.map((r) => {
+    totalHonorariosMedicosGeral += r.honTotal;
+    totalRepassesLiquidosGeral += r.repasseLiquido;
+    totalAjustesCreditos += r.creditos;
+    totalAjustesDebitos += r.debitosComBnb;
+    totalCompensacoesConvenioGeral += r.compensacaoConvenio;
 
     return {
-      nome: docName,
-      isSocio,
-      isAtivo,
-      honParticular: roundCurrency(honParticular),
-      honorariosParticulares: roundCurrency(honParticular),
-      honConvenio: roundCurrency(honConvenio),
-      honorariosConvenio: roundCurrency(honConvenio),
-      honTotal: roundCurrency(honTotal),
-      totalHonorariosBruto: roundCurrency(honTotal),
-      compensacaoConvenio: roundCurrency(compensacaoConvenio),
-      creditos: roundCurrency(creditos),
-      debitos: roundCurrency(debitos + bnb),
-      ajustesLiquidos: roundCurrency(creditos - debitos - bnb - compensacaoConvenio),
-      cotaDeficit: roundCurrency(cotaDeficit),
-      repasseLiquido: roundCurrency(repasseLiquido),
-      obs,
+      nome: r.nome,
+      isSocio: r.isSocio,
+      isAtivo: r.isAtivo,
+      honParticular: r.honParticular,
+      honorariosParticulares: r.honorariosParticulares,
+      honConvenio: r.honConvenio,
+      honorariosConvenio: r.honorariosConvenio,
+      honTotal: r.honTotal,
+      totalHonorariosBruto: r.totalHonorariosBruto,
+      compensacaoConvenio: r.compensacaoConvenio,
+      creditos: r.creditos,
+      debitos: r.debitosComBnb,
+      ajustesLiquidos: r.ajustesLiquidos,
+      cotaDeficit: r.cotaDeficit,
+      repasseLiquido: r.repasseLiquido,
+      obs: r.obs,
     };
   });
 
@@ -346,6 +267,10 @@ export function getConsolidatedFinancialReport(data = {}, period) {
 
   const margemLiquidaPercent =
     faturamentoBrutoTotal > 0 ? (resultadoLiquidoClinica / faturamentoBrutoTotal) * 100 : 0;
+
+  const folhaNaoLancadaNoCaixa =
+    roundCurrency(totalFolhaLiquida) > 0 &&
+    roundCurrency(categoriasDespesas['Folha de Pagamento / Pessoal'] || 0) === 0;
 
   return {
     period,
@@ -385,6 +310,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     totalDespesasOperacionais: roundCurrency(totalDespesasOperacionais),
     categoriasDespesas,
     // Folha de Pagamento
+    folhaNaoLancadaNoCaixa,
     folhaResumo: {
       colaboradoresCount,
       totalSalariosBase: roundCurrency(totalSalariosBase),
@@ -392,6 +318,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
       totalVariaveis: roundCurrency(totalVariaveis),
       totalDescontosFolha: roundCurrency(totalDescontosFolha),
       totalFolhaLiquida: roundCurrency(totalFolhaLiquida),
+      folhaNaoLancadaNoCaixa,
     },
     // Meios de Pagamento
     meiosDePagamento,

@@ -297,16 +297,30 @@ export function deleteItem(module, id) {
 export function restoreAllData(allData) {
   if (!allData || typeof allData !== 'object') return;
   const payload = allData.backupCompletoDeTodasAsColecoes || allData.dados || allData;
+  const now = new Date().toISOString();
+
   MODULE_KEYS.forEach((m) => {
     if (Array.isArray(payload[m])) {
       setData(m, payload[m]);
+      if (m !== MODULES.auditLogs) {
+        payload[m].forEach((item) => {
+          if (item && item.id) {
+            enqueueSyncOperation({
+              module: m,
+              entityId: item.id,
+              type: 'UPSERT',
+              payload: { ...item, updatedAt: item.updatedAt || now },
+            });
+          }
+        });
+      }
     }
   });
   internalAudit({
     acao: 'RESTAURAR',
     modulo: 'sistema',
     descricao: 'Restauração de backup completo executada com sucesso',
-    detalhes: { data: new Date().toISOString() },
+    detalhes: { data: now },
     usuario: _auditUser,
   });
 }
