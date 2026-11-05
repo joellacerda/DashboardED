@@ -26,7 +26,7 @@ export default function PartilhaInputsSection({
           style={{ flex: 1, fontSize: 'var(--text-xs)', fontWeight: 600 }}
           onClick={() => setFluxoForm((prev) => ({ ...prev, modoPartilha: 'simples' }))}
         >
-          📊 Partilha Geral (por %)
+          📊 Partilha Por %
         </button>
         <button
           type="button"
@@ -42,7 +42,7 @@ export default function PartilhaInputsSection({
           }}
           onClick={() => setFluxoForm((prev) => ({ ...prev, modoPartilha: 'polipectomia' }))}
         >
-          <span>✂️ Polipectomia & Acessório (Alça)</span>
+          <span>💰 Partilha Por Valor</span>
           {item.procedimentoComplementar &&
             /polipectomia|mucosectomia/i.test(item.procedimentoComplementar) && (
               <span
@@ -90,7 +90,14 @@ export default function PartilhaInputsSection({
                 min="0"
                 placeholder="0,00"
                 value={fluxoForm.valorTaxaSala}
-                onChange={(e) => setFluxoForm({ ...fluxoForm, valorTaxaSala: e.target.value })}
+                onChange={(e) => {
+                  const newTaxa = e.target.value;
+                  setFluxoForm((prev) => ({
+                    ...prev,
+                    valorTaxaSala: newTaxa,
+                    valor: !prev.valor || prev.valor === prev.valorTaxaSala ? newTaxa : prev.valor,
+                  }));
+                }}
               />
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 100% Clínica (pago pelo convênio à clínica)

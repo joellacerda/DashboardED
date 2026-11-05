@@ -10,6 +10,12 @@ import { useToast } from '../../contexts/ToastContext';
 import { validateDate, validateRequired, validatePositiveNumber } from '../../utils/validation';
 import { MODULES, getConvenioFluxoDestino } from '../../utils/storage';
 
+function isConsultaExam(exame) {
+  if (!exame) return false;
+  const clean = String(exame).trim().toUpperCase();
+  return clean === 'CONSULTA' || clean === 'RETORNO' || clean.startsWith('CONSULTA');
+}
+
 export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
   const toast = useToast();
   const {
@@ -53,7 +59,12 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     const dateErr = validateDate(fluxoForm.data, 'Data do recebimento');
     if (dateErr) errs.data = dateErr;
 
-    const valorErr = validatePositiveNumber(fluxoForm.valor, 'Valor a lançar', false);
+    const isConsulta = isConsultaExam(item?.exame);
+    const valorCandidate =
+      isConsulta && (fluxoForm.valor === '' || fluxoForm.valor === null || fluxoForm.valor === undefined)
+        ? '0'
+        : fluxoForm.valor;
+    const valorErr = validatePositiveNumber(valorCandidate, 'Valor a lançar', true);
     if (valorErr) errs.valor = valorErr;
 
     const nomeErr = validateRequired(fluxoForm.nome, 'Descrição do lançamento');
@@ -103,14 +114,23 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     setTouched({});
     setSubmitted(false);
 
+    const isConsulta = isConsultaExam(item.exame);
     const initialValorClinica =
-      item.valorClinica !== undefined && item.valorClinica !== null ? String(item.valorClinica) : '';
+      item.valorClinica !== undefined && item.valorClinica !== null && item.valorClinica !== ''
+        ? String(item.valorClinica)
+        : isConsulta
+          ? '0'
+          : '';
     const initialValorMedico =
       item.valorMedico !== undefined && item.valorMedico !== null ? String(item.valorMedico) : '';
     const initialPct =
       item.percentualMedico !== undefined && item.percentualMedico !== null
-        ? Number(item.percentualMedico)
-        : 60;
+        ? isConsulta && Number(item.percentualMedico) === 60 && !item.valorClinica
+          ? 100
+          : Number(item.percentualMedico)
+        : isConsulta
+          ? 100
+          : 60;
 
     const initialTemDivisao2 = Boolean(item.temDivisaoMedico2 || item.medico2);
     const initialMedico2 = item.medico2 || '';

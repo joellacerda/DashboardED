@@ -198,7 +198,7 @@ export default function FluxoCaixaLancamentoSection({
             type="number"
             className={`input-field ${hasError('valor') ? 'is-invalid' : ''}`}
             required
-            min="0.01"
+            min="0"
             step="0.01"
             placeholder="0,00"
             value={fluxoForm.valor}

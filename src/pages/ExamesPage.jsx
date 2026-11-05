@@ -65,6 +65,12 @@ const emptyForm = {
   procedimentoComplementar: '',
 };
 
+function isConsultaExam(exame) {
+  if (!exame) return false;
+  const clean = String(exame).trim().toUpperCase();
+  return clean === 'CONSULTA' || clean === 'RETORNO' || clean.startsWith('CONSULTA');
+}
+
 const columns = [
   { key: 'data', label: 'Data', accessor: (item) => formatDate(item.data) },
   { key: 'paciente', label: 'Paciente' },
@@ -89,7 +95,9 @@ const columns = [
     accessor: (item) =>
       item.caixaLancado && Number(item.valorCaixa) > 0
         ? formatCurrency(Number(item.valorCaixa))
-        : 'Pendente',
+        : isConsultaExam(item.exame) || item.fluxoLancado
+          ? 'R$ 0,00'
+          : 'Pendente',
   },
 ];
 
@@ -482,6 +490,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
           const existingInDetalhes = getItem(MODULES.detalhesExames, editItem.id);
           if (existingInDetalhes) deleteItem(MODULES.detalhesExames, editItem.id);
         }
+        const isConsulta = isConsultaExam(exameUpper);
         const sanitizedForm = {
           data: form.data,
           medico: medicoUpper,
@@ -489,9 +498,9 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
           convenio: convenioUpper,
           exame: exameUpper,
           procedimentoComplementar: complUpper,
-          valorClinica: '',
+          valorClinica: isConsulta ? 0 : '',
           valorMedico: '',
-          percentualMedico: 60,
+          percentualMedico: isConsulta ? 100 : 60,
           fluxoLancado: false,
         };
         const created = addItem(MODULES.examesConvenio, sanitizedForm);
@@ -879,6 +888,13 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                               }
                             >
                               {formatCurrency(Number(item.valorCaixa))}
+                            </span>
+                          ) : isConsultaExam(item.exame) || item.fluxoLancado ? (
+                            <span
+                              style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}
+                              title="R$ 0,00 para o caixa da clínica (valor vai integralmente para o médico)"
+                            >
+                              R$ 0,00
                             </span>
                           ) : (
                             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>

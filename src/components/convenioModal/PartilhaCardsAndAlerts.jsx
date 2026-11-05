@@ -146,9 +146,9 @@ export default function PartilhaCardsAndAlerts({
                 border: '1px solid rgba(245, 158, 11, 0.3)',
               }}
             >
-              <span style={{ fontSize: '1.25rem' }}>✂️</span>
+              <span style={{ fontSize: '1.25rem' }}>💰</span>
               <div>
-                <strong>Partilha de Procedimento & Material (Polipectomia / Alça):</strong>
+                <strong>Resumo da Partilha por Valor:</strong>
                 <div style={{ marginTop: '0.25rem', fontSize: 'var(--text-xs)', lineHeight: '1.5' }}>
                   O convênio pagou ao médico: Honorários (
                   {formatCurrency(splitCalculations.honorariosBaseNum)}) + Polipectomia (
