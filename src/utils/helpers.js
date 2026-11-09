@@ -691,9 +691,23 @@ export function exportCSV(data, columns, filename) {
 }
 
 /**
+ * Escapes HTML special characters to prevent XSS / HTML injection in generated markup.
+ */
+export function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Fallback HTML print generator if jsPDF fails
  */
 function fallbackHtmlPrint(data, columns, title) {
+  const safeTitle = escapeHtml(title || 'Relatório');
   const tableRows = data
     .map(
       (item) =>
@@ -701,7 +715,7 @@ function fallbackHtmlPrint(data, columns, title) {
         columns
           .map((c) => {
             const val = c.accessor ? c.accessor(item) : item[c.key] || '';
-            return `<td style="padding:6px 10px;border:1px solid #ddd;font-size:11px">${val}</td>`;
+            return `<td style="padding:6px 10px;border:1px solid #ddd;font-size:11px">${escapeHtml(val)}</td>`;
           })
           .join('') +
         '</tr>'
@@ -712,7 +726,7 @@ function fallbackHtmlPrint(data, columns, title) {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8"/>
-  <title>${title} - Clínica Endodiagnose</title>
+  <title>${safeTitle} - Clínica Endodiagnose</title>
   <style>
     body{font-family:Arial,sans-serif;padding:30px;color:#333}
     h1{font-size:18px;margin-bottom:4px;color:#1a1a2e}
@@ -725,10 +739,10 @@ function fallbackHtmlPrint(data, columns, title) {
   </style>
 </head>
 <body>
-  <h1>${title}</h1>
-  <h2>Clínica Endodiagnose — Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</h2>
+  <h1>${safeTitle}</h1>
+  <h2>Clínica Endodiagnose — Gerado em ${escapeHtml(new Date().toLocaleDateString('pt-BR'))} às ${escapeHtml(new Date().toLocaleTimeString('pt-BR'))}</h2>
   <table>
-    <thead><tr>${columns.map((c) => `<th>${c.label}</th>`).join('')}</tr></thead>
+    <thead><tr>${columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
   <p class="footer">Documento gerado automaticamente pelo Dashboard Clínica Endodiagnose</p>

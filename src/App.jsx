@@ -309,69 +309,73 @@ function AppContent() {
         onOpenAuditModal={() => setAuditModalOpen(true)}
         onLockScreen={lockNow}
       />
-      <main className="main-content" key={refreshKey}>
-        {/* Lembrete de Segurança / Backup periódico LGPD */}
-        <BackupReminderBanner onOpenBackupModal={() => handleOpenCloudModal('storage')} />
+      <main className="main-content" key={refreshKey} aria-hidden={isLocked}>
+        {!isLocked && (
+          <>
+            {/* Lembrete de Segurança / Backup periódico LGPD */}
+            <BackupReminderBanner onOpenBackupModal={() => handleOpenCloudModal('storage')} />
 
-        {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
-        {!bannerDismissed && (storageQuotaExceeded || storageInfo?.status === 'critical' || (storageInfo?.status === 'warning' && storageInfo?.usedPercentage >= 75)) && (
-          <div className={`storage-alert-banner ${storageQuotaExceeded || storageInfo?.status === 'critical' ? 'critical' : 'warning'}`}>
-            <div className="storage-alert-content">
-              <span className="storage-alert-icon">
-                {storageQuotaExceeded || storageInfo?.status === 'critical' ? '🚨' : '⚠️'}
-              </span>
-              <div className="storage-alert-text">
-                <span className="storage-alert-title">
-                  {storageQuotaExceeded
-                    ? 'Limite de armazenamento do navegador atingido!'
-                    : storageInfo?.status === 'critical'
-                      ? `Armazenamento crítico (${storageInfo?.usedPercentage}% ocupado)`
-                      : `Armazenamento em atenção (${storageInfo?.usedPercentage}% ocupado)`}
-                </span>
-                <span className="storage-alert-desc">
-                  {storageQuotaExceeded
-                    ? 'O navegador não possui mais espaço para novos exames. É necessário arquivar registros antigos.'
-                    : 'Recomendamos arquivar atendimentos antigos para liberar espaço e garantir o carregamento instantâneo.'}
-                </span>
+            {/* Banner Global de Alerta de Armazenamento se uso for alto ou atingir cota */}
+            {!bannerDismissed && (storageQuotaExceeded || storageInfo?.status === 'critical' || (storageInfo?.status === 'warning' && storageInfo?.usedPercentage >= 75)) && (
+              <div className={`storage-alert-banner ${storageQuotaExceeded || storageInfo?.status === 'critical' ? 'critical' : 'warning'}`}>
+                <div className="storage-alert-content">
+                  <span className="storage-alert-icon">
+                    {storageQuotaExceeded || storageInfo?.status === 'critical' ? '🚨' : '⚠️'}
+                  </span>
+                  <div className="storage-alert-text">
+                    <span className="storage-alert-title">
+                      {storageQuotaExceeded
+                        ? 'Limite de armazenamento do navegador atingido!'
+                        : storageInfo?.status === 'critical'
+                          ? `Armazenamento crítico (${storageInfo?.usedPercentage}% ocupado)`
+                          : `Armazenamento em atenção (${storageInfo?.usedPercentage}% ocupado)`}
+                    </span>
+                    <span className="storage-alert-desc">
+                      {storageQuotaExceeded
+                        ? 'O navegador não possui mais espaço para novos exames. É necessário arquivar registros antigos.'
+                        : 'Recomendamos arquivar atendimentos antigos para liberar espaço e garantir o carregamento instantâneo.'}
+                    </span>
+                  </div>
+                </div>
+                <div className="storage-alert-actions">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleOpenCloudModal('storage')}
+                  >
+                    Gerenciar & Arquivar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-close-banner"
+                    onClick={() => setBannerDismissed(true)}
+                    aria-label="Dispensar aviso"
+                    title="Dispensar aviso"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="storage-alert-actions">
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => handleOpenCloudModal('storage')}
-              >
-                Gerenciar & Arquivar
-              </button>
-              <button
-                type="button"
-                className="btn-close-banner"
-                onClick={() => setBannerDismissed(true)}
-                aria-label="Dispensar aviso"
-                title="Dispensar aviso"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
+            )}
 
-        <ErrorBoundary>
-          <Suspense fallback={<PageLoadingFallback />}>
-            {renderActivePage()}
-          </Suspense>
-        </ErrorBoundary>
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoadingFallback />}>
+                {renderActivePage()}
+              </Suspense>
+            </ErrorBoundary>
+          </>
+        )}
       </main>
 
       <CloudSyncModal
-        isOpen={cloudModalOpen}
+        isOpen={!isLocked && cloudModalOpen}
         onClose={handleCloudModalClose}
         onDataUpdated={handleDataUpdated}
         initialTab={cloudModalTab}
       />
 
       <AuditLogModal
-        isOpen={auditModalOpen}
+        isOpen={!isLocked && auditModalOpen}
         onClose={() => setAuditModalOpen(false)}
       />
 

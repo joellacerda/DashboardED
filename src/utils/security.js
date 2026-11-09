@@ -3,10 +3,15 @@
 const ALLOWED_EMAILS_KEY = 'endodiagnose_allowed_emails';
 const INACTIVITY_TIMEOUT_KEY = 'endodiagnose_inactivity_timeout_mins';
 const LOCK_PIN_HASH_KEY = 'endodiagnose_lock_pin_hash';
+const LOCK_PIN_SALT_KEY = 'endodiagnose_lock_pin_salt';
+const LOCK_PIN_ATTEMPTS_KEY = 'endodiagnose_lock_pin_attempts';
+const LOCK_PIN_LOCKOUT_UNTIL_KEY = 'endodiagnose_lock_pin_lockout_until';
 const LAST_BACKUP_DATE_KEY = 'endodiagnose_last_backup_date';
 
 // Timeout padrão por inatividade: 15 minutos
 export const DEFAULT_INACTIVITY_TIMEOUT_MINS = 15;
+export const MAX_PIN_ATTEMPTS = 5;
+export const PIN_LOCKOUT_DURATION_MS = 30 * 1000;
 
 /**
  * Retorna se o cadastro público de novas contas está habilitado.
@@ -127,21 +132,103 @@ export async function hashString(value) {
   return `fallback_${hash}`;
 }
 
+function generatePinSalt() {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return `ed_salt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /**
- * Define o PIN de desbloqueio rápido (de 4 a 6 dígitos).
+ * Retorna o status atual de bloqueio temporário por excesso de tentativas de PIN.
+ */
+export function getPinLockoutStatus(now = Date.now()) {
+  if (typeof localStorage === 'undefined') {
+    return { isLockedOut: false, remainingSeconds: 0, attempts: 0, lockedUntil: 0 };
+  }
+  const attempts = parseInt(localStorage.getItem(LOCK_PIN_ATTEMPTS_KEY) || '0', 10) || 0;
+  const lockedUntil = parseInt(localStorage.getItem(LOCK_PIN_LOCKOUT_UNTIL_KEY) || '0', 10) || 0;
+
+  if (lockedUntil > now) {
+    const remainingSeconds = Math.ceil((lockedUntil - now) / 1000);
+    return { isLockedOut: true, remainingSeconds, attempts, lockedUntil };
+  }
+
+  // Se o período de bloqueio já expirou, limpa o bloqueio e zera o contador
+  if (lockedUntil > 0 && lockedUntil <= now) {
+    localStorage.removeItem(LOCK_PIN_LOCKOUT_UNTIL_KEY);
+    localStorage.removeItem(LOCK_PIN_ATTEMPTS_KEY);
+    return { isLockedOut: false, remainingSeconds: 0, attempts: 0, lockedUntil: 0 };
+  }
+
+  return { isLockedOut: false, remainingSeconds: 0, attempts, lockedUntil: 0 };
+}
+
+/**
+ * Zera o contador de tentativas incorretas de PIN.
+ */
+export function resetPinAttempts() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(LOCK_PIN_ATTEMPTS_KEY);
+  localStorage.removeItem(LOCK_PIN_LOCKOUT_UNTIL_KEY);
+}
+
+/**
+ * Registra uma tentativa falha de PIN e aplica lockout de 30s ao atingir MAX_PIN_ATTEMPTS.
+ */
+export function recordFailedPinAttempt(now = Date.now()) {
+  if (typeof localStorage === 'undefined') {
+    return { isLockedOut: false, remainingSeconds: 0, attempts: 1, lockedUntil: 0 };
+  }
+  const currentStatus = getPinLockoutStatus(now);
+  if (currentStatus.isLockedOut) return currentStatus;
+
+  const nextAttempts = currentStatus.attempts + 1;
+  localStorage.setItem(LOCK_PIN_ATTEMPTS_KEY, String(nextAttempts));
+
+  if (nextAttempts >= MAX_PIN_ATTEMPTS) {
+    const lockedUntil = now + PIN_LOCKOUT_DURATION_MS;
+    localStorage.setItem(LOCK_PIN_LOCKOUT_UNTIL_KEY, String(lockedUntil));
+    return {
+      isLockedOut: true,
+      remainingSeconds: Math.ceil(PIN_LOCKOUT_DURATION_MS / 1000),
+      attempts: nextAttempts,
+      lockedUntil,
+    };
+  }
+
+  return {
+    isLockedOut: false,
+    remainingSeconds: 0,
+    attempts: nextAttempts,
+    lockedUntil: 0,
+  };
+}
+
+/**
+ * Define o PIN de desbloqueio rápido (de 4 a 8 dígitos) com salt criptográfico.
  */
 export async function setQuickLockPin(pin) {
   if (typeof localStorage === 'undefined') return false;
   if (!pin) {
     localStorage.removeItem(LOCK_PIN_HASH_KEY);
+    localStorage.removeItem(LOCK_PIN_SALT_KEY);
+    resetPinAttempts();
     return true;
   }
   const cleanPin = String(pin).trim();
   if (cleanPin.length < 4 || cleanPin.length > 8) {
     throw new Error('O PIN deve conter entre 4 e 8 dígitos.');
   }
-  const hashed = await hashString(cleanPin);
+  const salt = generatePinSalt();
+  const hashed = await hashString(`${salt}:${cleanPin}`);
+  localStorage.setItem(LOCK_PIN_SALT_KEY, salt);
   localStorage.setItem(LOCK_PIN_HASH_KEY, hashed);
+  resetPinAttempts();
   return true;
 }
 
@@ -159,17 +246,46 @@ export function hasQuickLockPin() {
 export function clearQuickLockPin() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(LOCK_PIN_HASH_KEY);
+  localStorage.removeItem(LOCK_PIN_SALT_KEY);
+  resetPinAttempts();
 }
 
 /**
- * Valida o PIN inserido com o hash armazenado.
+ * Valida o PIN inserido com o hash armazenado, respeitando rate-limit (backoff de 30s após 5 erros).
  */
 export async function verifyQuickLockPin(enteredPin) {
   if (typeof localStorage === 'undefined') return false;
+  const lockout = getPinLockoutStatus();
+  if (lockout.isLockedOut) {
+    return false;
+  }
+
   const storedHash = localStorage.getItem(LOCK_PIN_HASH_KEY);
   if (!storedHash) return false;
-  const enteredHash = await hashString(String(enteredPin).trim());
-  return storedHash === enteredHash;
+
+  const cleanPin = String(enteredPin).trim();
+  const storedSalt = localStorage.getItem(LOCK_PIN_SALT_KEY);
+
+  let isMatch = false;
+  if (storedSalt) {
+    const enteredHash = await hashString(`${storedSalt}:${cleanPin}`);
+    isMatch = storedHash === enteredHash;
+  } else {
+    // Compatibilidade com hash legado sem salt: migra automaticamente ao acertar
+    const legacyHash = await hashString(cleanPin);
+    isMatch = storedHash === legacyHash;
+    if (isMatch) {
+      await setQuickLockPin(cleanPin);
+    }
+  }
+
+  if (isMatch) {
+    resetPinAttempts();
+    return true;
+  }
+
+  recordFailedPinAttempt();
+  return false;
 }
 
 /**

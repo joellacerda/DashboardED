@@ -9,6 +9,7 @@ import {
   isCloudConfigured,
   initFirebase,
 } from '../services/firebase';
+import { isEmailAllowed } from '../utils/security';
 
 const AuthContext = createContext(null);
 
@@ -26,6 +27,13 @@ export function AuthProvider({ children }) {
       setLoading(false);
     } else {
       initFirebase();
+      setUser((prevUser) => {
+        if (prevUser && !isEmailAllowed(prevUser.email)) {
+          logoutUser();
+          return null;
+        }
+        return prevUser;
+      });
     }
   }, []);
 
@@ -38,6 +46,12 @@ export function AuthProvider({ children }) {
 
     setLoading(true);
     const unsubscribe = subscribeAuthState((currentUser) => {
+      if (currentUser && !isEmailAllowed(currentUser.email)) {
+        logoutUser();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setUser(currentUser);
       setLoading(false);
     });

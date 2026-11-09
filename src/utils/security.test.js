@@ -11,10 +11,15 @@ import {
   hasQuickLockPin,
   clearQuickLockPin,
   verifyQuickLockPin,
+  hashString,
+  getPinLockoutStatus,
+  MAX_PIN_ATTEMPTS,
+  PIN_LOCKOUT_DURATION_MS,
   recordBackupDone,
   getLastBackupDate,
   getDaysSinceLastBackup,
 } from './security';
+import { escapeHtml } from './helpers';
 
 const mockStorage = (() => {
   let store = {};
@@ -92,6 +97,64 @@ describe('Security & LGPD — Fase 6', () => {
 
     it('rejeita PINs com tamanho menor que 4 dígitos', async () => {
       await expect(setQuickLockPin('12')).rejects.toThrow();
+    });
+
+    it('gera hashes diferentes com salt para o mesmo PIN e migra hash legado sem salt', async () => {
+      await setQuickLockPin('1234');
+      const rawHash = await hashString('1234');
+      expect(localStorage.getItem('endodiagnose_lock_pin_hash')).not.toBe(rawHash);
+      expect(localStorage.getItem('endodiagnose_lock_pin_salt')).toBeTruthy();
+
+      // Simula hash legado sem salt salvo anteriormente
+      localStorage.removeItem('endodiagnose_lock_pin_salt');
+      localStorage.setItem('endodiagnose_lock_pin_hash', rawHash);
+
+      const isLegacyValid = await verifyQuickLockPin('1234');
+      expect(isLegacyValid).toBe(true);
+      // Deve ter migrado automaticamente para hash com salt
+      expect(localStorage.getItem('endodiagnose_lock_pin_salt')).toBeTruthy();
+      expect(localStorage.getItem('endodiagnose_lock_pin_hash')).not.toBe(rawHash);
+    });
+
+    it('aplica bloqueio temporário de 30s após 5 tentativas incorretas de PIN', async () => {
+      await setQuickLockPin('4321');
+
+      for (let i = 1; i < MAX_PIN_ATTEMPTS; i++) {
+        const ok = await verifyQuickLockPin('0000');
+        expect(ok).toBe(false);
+        expect(getPinLockoutStatus().isLockedOut).toBe(false);
+        expect(getPinLockoutStatus().attempts).toBe(i);
+      }
+
+      // 5ª tentativa incorreta aciona o lockout
+      const fifthTry = await verifyQuickLockPin('0000');
+      expect(fifthTry).toBe(false);
+
+      const status = getPinLockoutStatus();
+      expect(status.isLockedOut).toBe(true);
+      expect(status.remainingSeconds).toBeGreaterThan(0);
+      expect(status.remainingSeconds).toBeLessThanOrEqual(PIN_LOCKOUT_DURATION_MS / 1000);
+
+      // Mesmo digitando o PIN correto durante o bloqueio, deve rejeitar
+      const validDuringLockout = await verifyQuickLockPin('4321');
+      expect(validDuringLockout).toBe(false);
+
+      // Após expirar o tempo de bloqueio, aceita novamente o PIN correto
+      const afterExpiry = getPinLockoutStatus(Date.now() + PIN_LOCKOUT_DURATION_MS + 1000);
+      expect(afterExpiry.isLockedOut).toBe(false);
+      expect(await verifyQuickLockPin('4321')).toBe(true);
+    });
+  });
+
+  describe('5.3 — Sanitização contra HTML Injection / XSS (escapeHtml)', () => {
+    it('escapa caracteres especiais de HTML em títulos e células de impressão', () => {
+      const malicious = `<img src=x onerror="alert('xss')"> & 'teste'`;
+      const escaped = escapeHtml(malicious);
+      expect(escaped).toBe(
+        '&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt; &amp; &#39;teste&#39;'
+      );
+      expect(escapeHtml(null)).toBe('');
+      expect(escapeHtml(undefined)).toBe('');
     });
   });
 

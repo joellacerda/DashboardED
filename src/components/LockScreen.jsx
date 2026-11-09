@@ -3,6 +3,8 @@ import {
   hasQuickLockPin,
   verifyQuickLockPin,
   setQuickLockPin,
+  getPinLockoutStatus,
+  MAX_PIN_ATTEMPTS,
 } from '../utils/security';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -17,25 +19,53 @@ export default function LockScreen({ isLocked, onUnlock }) {
   const [isSettingPin, setIsSettingPin] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (isLocked) {
+      const pinExists = hasQuickLockPin();
+      const status = getPinLockoutStatus();
       setPin('');
       setErrorMsg('');
-      setHasPin(hasQuickLockPin());
-      setIsSettingPin(false);
+      setHasPin(pinExists);
+      setIsSettingPin(!pinExists);
+      setLockoutSeconds(status.isLockedOut ? status.remainingSeconds : 0);
       setTimeout(() => {
         inputRef.current?.focus();
       }, 150);
     }
   }, [isLocked]);
 
+  useEffect(() => {
+    if (!isLocked || lockoutSeconds <= 0) return undefined;
+    const timer = setInterval(() => {
+      const status = getPinLockoutStatus();
+      if (status.isLockedOut) {
+        setLockoutSeconds(status.remainingSeconds);
+      } else {
+        setLockoutSeconds(0);
+        setErrorMsg('');
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isLocked, lockoutSeconds]);
+
   if (!isLocked) return null;
 
   const handlePinSubmit = async (e) => {
     e?.preventDefault();
     setErrorMsg('');
+
+    const currentLockout = getPinLockoutStatus();
+    if (currentLockout.isLockedOut) {
+      setLockoutSeconds(currentLockout.remainingSeconds);
+      setErrorMsg(
+        `Muitas tentativas incorretas. Aguarde ${currentLockout.remainingSeconds}s para tentar novamente.`
+      );
+      return;
+    }
 
     if (hasPin) {
       if (!pin) {
@@ -45,17 +75,27 @@ export default function LockScreen({ isLocked, onUnlock }) {
       const valid = await verifyQuickLockPin(pin);
       if (valid) {
         setPin('');
+        setLockoutSeconds(0);
         toast.success('Sessão desbloqueada!');
         onUnlock();
       } else {
-        setErrorMsg('PIN incorreto. Tente novamente.');
+        const afterStatus = getPinLockoutStatus();
         setPin('');
-        inputRef.current?.focus();
+        if (afterStatus.isLockedOut) {
+          setLockoutSeconds(afterStatus.remainingSeconds);
+          setErrorMsg(
+            `Limite de ${MAX_PIN_ATTEMPTS} tentativas excedido. Bloqueado temporariamente por ${afterStatus.remainingSeconds}s.`
+          );
+        } else {
+          const remainingTries = Math.max(0, MAX_PIN_ATTEMPTS - afterStatus.attempts);
+          setErrorMsg(
+            `PIN incorreto. Tente novamente (${remainingTries} tentativa${remainingTries === 1 ? '' : 's'} restante${remainingTries === 1 ? '' : 's'}).`
+          );
+          inputRef.current?.focus();
+        }
       }
     } else {
-      // Se não tem PIN configurado, desbloqueia diretamente
-      toast.success('Sessão desbloqueada!');
-      onUnlock();
+      setIsSettingPin(true);
     }
   };
 
@@ -225,6 +265,7 @@ export default function LockScreen({ isLocked, onUnlock }) {
                 type="password"
                 inputMode="numeric"
                 maxLength={8}
+                disabled={lockoutSeconds > 0}
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="••••"
@@ -239,6 +280,7 @@ export default function LockScreen({ isLocked, onUnlock }) {
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   color: '#ffffff',
                   outline: 'none',
+                  opacity: lockoutSeconds > 0 ? 0.5 : 1,
                 }}
               />
             </div>
@@ -246,6 +288,7 @@ export default function LockScreen({ isLocked, onUnlock }) {
             <button
               type="submit"
               className="btn btn-primary"
+              disabled={lockoutSeconds > 0}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -253,9 +296,12 @@ export default function LockScreen({ isLocked, onUnlock }) {
                 fontWeight: 600,
                 borderRadius: '0.75rem',
                 marginTop: '0.25rem',
+                opacity: lockoutSeconds > 0 ? 0.6 : 1,
               }}
             >
-              🔓 Desbloquear Painel
+              {lockoutSeconds > 0
+                ? `⏳ Aguarde ${lockoutSeconds}s...`
+                : '🔓 Desbloquear Painel'}
             </button>
           </form>
         )}
