@@ -235,4 +235,39 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
     const logsAfterRepeat = getData(MODULES.auditLogs).length;
     expect(logsAfterRepeat).toBe(1);
   });
+
+  it('retorna total e repasseLiquido negativos quando os descontos/compensações/cota superam os honorários e créditos', () => {
+    const p = period('2026-03-16');
+    const data = {
+      medicos: [{ id: 'm_neg', nome: 'DR. OLIVEIRA', socio: true, ativo: true }],
+      detalhesExames: [
+        {
+          id: 'part_neg',
+          data: '2026-03-20',
+          medico: 'DR. OLIVEIRA',
+          pagamentos: [{ forma: 'Pix', valor: 1000, parcelas: 1 }],
+          honorariosMedicos: 515.65,
+        },
+      ],
+      examesConvenio: [
+        {
+          id: 'conv_neg',
+          data: '2026-03-20',
+          medico: 'DR. OLIVEIRA',
+          convenio: 'UNIMED',
+          fluxoLancado: true,
+          fluxoData: '2026-03-20',
+          valorCompensacaoClinica: 1038.25,
+        },
+      ],
+      repassesAjustes: [],
+      fluxoCaixa: [],
+    };
+
+    const repasse = calculateDoctorRepasseInPeriod('DR. OLIVEIRA', p, data);
+    expect(repasse.honorarios).toBe(515.65);
+    expect(repasse.compensacaoConvenios).toBe(1038.25);
+    expect(repasse.total).toBe(-522.6);
+    expect(repasse.repasseLiquido).toBe(-522.6);
+  });
 });

@@ -352,14 +352,22 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
           </div>
 
           {/* Card 4: Repasse Líquido */}
-          <div className="summary-card card-accent-emerald">
+          <div className={`summary-card ${repasseLiquido >= 0 ? 'card-accent-emerald' : 'card-accent-red'}`}>
             <div className="summary-card-header">
-              <span className="summary-card-label">Repasse Líquido a Receber</span>
-              <div className="summary-card-icon emerald">💵</div>
+              <span className="summary-card-label">
+                {repasseLiquido >= 0 ? 'Repasse Líquido a Receber' : 'Saldo a Ressarcir à Clínica'}
+              </span>
+              <div className={`summary-card-icon ${repasseLiquido >= 0 ? 'emerald' : 'red'}`}>💵</div>
             </div>
-            <div className="summary-card-value value-positive">{formatCurrency(repasseLiquido)}</div>
+            <div className={`summary-card-value ${repasseLiquido >= 0 ? 'value-positive' : 'value-negative'}`}>
+              {repasseLiquido >= 0
+                ? formatCurrency(repasseLiquido)
+                : `-${formatCurrency(Math.abs(repasseLiquido))}`}
+            </div>
             <div className="summary-card-footer">
-              Valor líquido a ser transferido ao profissional
+              {repasseLiquido >= 0
+                ? 'Valor líquido a ser transferido ao profissional'
+                : 'Valor líquido que o profissional deve ressarcir à clínica'}
             </div>
           </div>
         </div>
@@ -614,19 +622,25 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                 )}
 
                 {/* Linha Final de Repasse Líquido */}
-                <tr className="dre-row-total dre-total-superavit">
+                <tr className={`dre-row-total ${repasseLiquido >= 0 ? 'dre-total-superavit' : 'dre-total-deficit'}`}>
                   <td>
-                    <strong style={{ fontSize: '1rem' }}>(=) REPASSE LÍQUIDO FINAL A RECEBER</strong>
+                    <strong style={{ fontSize: '1rem' }}>
+                      {repasseLiquido >= 0
+                        ? '(=) REPASSE LÍQUIDO FINAL A RECEBER'
+                        : '(=) SALDO FINAL A RESSARCIR À CLÍNICA'}
+                    </strong>
                   </td>
                   <td
                     style={{
                       textAlign: 'right',
                       fontSize: '1.15rem',
                       fontWeight: 800,
-                      color: 'var(--color-emerald)',
+                      color: repasseLiquido >= 0 ? 'var(--color-emerald)' : 'var(--color-red)',
                     }}
                   >
-                    {formatCurrency(repasseLiquido)}
+                    {repasseLiquido >= 0
+                      ? formatCurrency(repasseLiquido)
+                      : `-${formatCurrency(Math.abs(repasseLiquido))}`}
                   </td>
                 </tr>
 

@@ -172,7 +172,7 @@ export default function RepasseTable({
                             color: row.total >= 0 ? 'var(--color-emerald)' : 'var(--color-red)',
                           }}
                         >
-                          {row.total >= 0 ? '▲ A receber da clínica' : '▼ A pagar à clínica'}
+                          {row.total >= 0 ? '▲ A receber da clínica' : '▼ A ressarcir à clínica'}
                         </span>
                       </div>
                     </td>

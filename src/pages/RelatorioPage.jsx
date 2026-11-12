@@ -597,10 +597,12 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                         style={{
                           textAlign: 'right',
                           fontWeight: '700',
-                          color: 'var(--text-primary)',
+                          color: r.repasseLiquido >= 0 ? 'var(--text-primary)' : 'var(--color-red)',
                         }}
                       >
-                        {formatCurrency(r.repasseLiquido)}
+                        {r.repasseLiquido >= 0
+                          ? formatCurrency(r.repasseLiquido)
+                          : `-${formatCurrency(Math.abs(r.repasseLiquido))}`}
                       </td>
                     </tr>
                   ))

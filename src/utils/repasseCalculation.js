@@ -187,7 +187,7 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
   const cotaClinica = isSocio && isAtivo ? cotaPorSocio : 0;
   const ajustesLiquidos = creditos - debitos - bnb - compensacaoConvenios;
   const saldoBrutoFinal = honTotal + ajustesLiquidos - cotaClinica;
-  const repasseLiquido = Math.max(0, saldoBrutoFinal);
+  const repasseLiquido = saldoBrutoFinal;
 
   return {
     doctor,
