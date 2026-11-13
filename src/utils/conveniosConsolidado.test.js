@@ -512,50 +512,61 @@ describe('partilha de endoscopia com polipectomia e acessório/alça', () => {
     expect(fluxo[0].nome).toBe('COOPEND'); // IPM roteia para COOPEND
     expect(fluxo[0].valor).toBe(550);
 
-    // 3. Verifica apuração de compensações devidas pelo médico no período aquisitivo
+    // 3. Verifica apuração de compensações no período aquisitivo:
+    // Mesmo que o exame tenha sido realizado pelo DR. JOEL, a compensação entra apenas para o DR. OLIVEIRA
     const period = getAcquisitionPeriod(new Date(2026, 9, 9)); // Outubro/2026
-    const compInfo = getDoctorCompensacaoInPeriod('DR. JOEL', period, [exame]);
-    expect(compInfo.total).toBe(400);
-    expect(compInfo.count).toBe(1);
-    expect(compInfo.items[0].valorCompensacao).toBe(400);
-    expect(compInfo.items[0].valorAcessorio).toBe(250);
+    const compInfoJoel = getDoctorCompensacaoInPeriod('DR. JOEL', period, [exame]);
+    expect(compInfoJoel.total).toBe(0);
+    expect(compInfoJoel.count).toBe(0);
+
+    const compInfoOliveira = getDoctorCompensacaoInPeriod('DR. OLIVEIRA', period, [exame]);
+    expect(compInfoOliveira.total).toBe(400);
+    expect(compInfoOliveira.count).toBe(1);
+    expect(compInfoOliveira.items[0].valorCompensacao).toBe(400);
+    expect(compInfoOliveira.items[0].valorAcessorio).toBe(250);
+    expect(compInfoOliveira.items[0].medico).toBe('DR. JOEL');
 
     // 4. Verifica dedução automática no relatório financeiro consolidado
-    // Se o médico tem R$ 1.000 de honorários particulares e R$ 400 de compensação a devolver,
-    // o repasse líquido dele deve ser deduzido em R$ 400 (R$ 1.000 - R$ 400 = R$ 600)
-    const exameParticular = {
-      id: 'ex_part_1',
-      data: '2026-10-09',
-      paciente: 'MARIA SILVA',
-      medico: 'DR. JOEL',
-      honorariosMedicos: 1000,
-      valorTotal: 1500,
-      taxaClinica: 500,
-      formaPagamento: 'PIX',
-      pagamentos: [{ forma: 'PIX', valor: 1500, parcelas: 1 }],
-      isConvenio: false,
-    };
+      const exameParticularOliveira = {
+        id: 'ex_part_1',
+        data: '2026-10-09',
+        paciente: 'MARIA SILVA',
+        medico: 'DR. OLIVEIRA',
+        honorariosMedicos: 1000,
+        valorTotal: 1500,
+        taxaClinica: 500,
+        formaPagamento: 'PIX',
+        pagamentos: [{ forma: 'PIX', valor: 1500, parcelas: 1 }],
+        isConvenio: false,
+      };
 
-    const reportData = {
-      examesConvenio: [exame],
-      detalhesExames: [detalhe, exameParticular],
-      fluxoCaixa: fluxo,
-      medicos: [{ nome: 'DR. JOEL', socio: true, ativo: true }],
-      repassesAjustes: [],
-    };
+      const reportData = {
+        examesConvenio: [exame],
+        detalhesExames: [detalhe, exameParticularOliveira],
+        fluxoCaixa: fluxo,
+        medicos: [
+          { nome: 'DR. JOEL', socio: false, ativo: true },
+          { nome: 'DR. OLIVEIRA', socio: true, ativo: true },
+        ],
+        repassesAjustes: [],
+      };
 
-    const relatorio = getConsolidatedFinancialReport(reportData, period);
-    const repasseDoc = relatorio.repassesPorMedico.find((m) => m.nome === 'DR. JOEL');
-    expect(repasseDoc).toBeDefined();
-    expect(repasseDoc.honParticular).toBe(1000);
-    expect(repasseDoc.compensacaoConvenio).toBe(400);
-    expect(repasseDoc.repasseLiquido).toBe(600); // 1000 - 400 = 600
+      const relatorio = getConsolidatedFinancialReport(reportData, period);
+  const repasseJoel = relatorio.repassesPorMedico.find((m) => m.nome === 'DR. JOEL');
+  expect(repasseJoel).toBeDefined();
+  expect(repasseJoel.compensacaoConvenio).toBe(0);
 
-    // 5. Verifica dedução nas métricas analíticas individuais do médico
-    const medicoMetrics = getDoctorPeriodMetrics('DR. JOEL', period, reportData);
-    expect(medicoMetrics.compensacaoConvenios).toBe(400);
-    expect(medicoMetrics.repasseLiquido).toBe(600);
-  });
+  const repasseOliveira = relatorio.repassesPorMedico.find((m) => m.nome === 'DR. OLIVEIRA');
+  expect(repasseOliveira).toBeDefined();
+  expect(repasseOliveira.honParticular).toBe(1000);
+  expect(repasseOliveira.compensacaoConvenio).toBe(400);
+  expect(repasseOliveira.repasseLiquido).toBe(600); // 1000 - 400 = 600
+
+  // 5. Verifica dedução nas métricas analíticas individuais do DR. OLIVEIRA
+  const medicoMetrics = getDoctorPeriodMetrics('DR. OLIVEIRA', period, reportData);
+  expect(medicoMetrics.compensacaoConvenios).toBe(400);
+  expect(medicoMetrics.repasseLiquido).toBe(600);
+});
 });
 
 describe('detalhamento de exames por tag de pagamento consolidado', () => {

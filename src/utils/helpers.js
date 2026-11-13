@@ -487,7 +487,7 @@ export function isDoctorMatch(doctorRef, recordDocName, recordDocId) {
     typeof doctorRef === 'object' && doctorRef !== null
       ? doctorRef.id
       : typeof doctorRef === 'string' &&
-          (doctorRef.startsWith('auto_') || /^[0-9a-f-]{36}$/i.test(doctorRef))
+        (doctorRef.startsWith('auto_') || /^[0-9a-f-]{36}$/i.test(doctorRef))
         ? doctorRef
         : null;
 
@@ -573,9 +573,27 @@ export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
 }
 
 /**
- * Calcula as compensações devidas pelo médico à clínica decorrentes de convênios
- * no período aquisitivo (ex: 50% de polipectomias e 100% de acessórios/alças descartáveis
- * que foram pagos pelo convênio na cooperativa/conta do médico).
+ * Verifica se o médico informado é o DR. OLIVEIRA (titular que centraliza o recebimento
+ * dos proventos da Unimed/convênios e, portanto, responde pelas compensações à clínica).
+ */
+export function isCompensacaoTargetDoctor(doctorNameOrObj) {
+  if (!doctorNameOrObj) return false;
+  const rawName =
+    typeof doctorNameOrObj === 'object' ? doctorNameOrObj.nome : String(doctorNameOrObj);
+  const clean = (rawName || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return clean === 'DR. OLIVEIRA' || clean === 'DR OLIVEIRA' || clean.includes('OLIVEIRA');
+}
+
+/**
+ * Calcula as compensações devidas à clínica decorrentes de convênios no período aquisitivo
+ * (ex: 50% de polipectomias e 100% de acessórios/alças descartáveis).
+ * Regra de Negócio: Todas as compensações registradas entram exclusivamente para o DR. OLIVEIRA,
+ * independentemente de qual médico realizou o exame, pois ele recebe todos os proventos da Unimed
+ * e realiza o repasse aos demais médicos.
  * @param {string|object} doctorName - Nome do médico
  * @param {object} targetPeriod - Período financeiro { start, end }
  * @param {Array} examesConvenio - Lista de exames de convênio
@@ -585,11 +603,15 @@ export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesCon
   if (!doctorName || !targetPeriod || !Array.isArray(examesConvenio)) {
     return { total: 0, count: 0, items: [] };
   }
+  if (!isCompensacaoTargetDoctor(doctorName)) {
+    return { total: 0, count: 0, items: [] };
+  }
+
   const items = [];
   let total = 0;
 
   for (const c of examesConvenio) {
-    if (!isDoctorMatch(doctorName, c.medico, c.medicoId)) continue;
+    if (!c) continue;
 
     const comp = Number(c.valorCompensacaoClinica) || 0;
     if (comp <= 0) continue;
@@ -604,6 +626,7 @@ export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesCon
       items.push({
         id: c.id,
         paciente: (c.paciente || 'PACIENTE NÃO IDENTIFICADO').trim().toUpperCase(),
+        medico: (c.medico || 'MÉDICO NÃO IDENTIFICADO').trim().toUpperCase(),
         exame: (c.exame || 'EXAME').trim().toUpperCase(),
         convenio: (c.convenio || 'CONVÊNIO').trim().toUpperCase(),
         data: c.data,
@@ -960,12 +983,12 @@ function parseLocalDate(val) {
 export function getWeekMondayToSaturday(refDate = new Date()) {
   const localD = parseLocalDate(refDate);
   const dayOfWeek = localD.getDay(); // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
-  
+
   // Distance to Monday (Segunda-feira)
   // If today is Sunday (0), distance to Monday of upcoming week is +1, or previous Monday -6.
   // Standard in clinics: if Sunday, view upcoming week (1).
   const distanceToMonday = dayOfWeek === 0 ? 1 : 1 - dayOfWeek;
-  
+
   const monday = new Date(localD.getFullYear(), localD.getMonth(), localD.getDate() + distanceToMonday);
 
   const dayNames = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];

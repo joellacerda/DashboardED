@@ -44,8 +44,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     const honNoPeriodo = getHonorarioMedicoInPeriod(exam, doctor, period);
     const doc1 = (exam.medico || '').trim().toUpperCase();
     const doc2 = (exam.medico2 || '').trim().toUpperCase();
-    const isDoc1 = isDoctorMatch(exam.medico, exam.medicoId, doctor);
-    const isDoc2 = isDoctorMatch(exam.medico2, exam.medico2Id, doctor);
+    const isDoc1 = isDoctorMatch(doctor, exam.medico, exam.medicoId);
+    const isDoc2 = isDoctorMatch(doctor, exam.medico2, exam.medico2Id);
 
     const isMedicoNesteExame = isDoc1 || isDoc2;
     const isNoPeriodo = isDateInPeriod(exam.data, period) || honNoPeriodo > 0;
@@ -79,8 +79,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   examesConvenio.forEach((c) => {
     const doc1 = (c.medico || '').trim().toUpperCase();
     const doc2 = (c.medico2 || '').trim().toUpperCase();
-    const isDoc1 = isDoctorMatch(c.medico, c.medicoId, doctor);
-    const isDoc2 = isDoctorMatch(c.medico2, c.medico2Id, doctor);
+    const isDoc1 = isDoctorMatch(doctor, c.medico, c.medicoId);
+    const isDoc2 = isDoctorMatch(doctor, c.medico2, c.medico2Id);
 
     if (!isDoc1 && !isDoc2) return;
 

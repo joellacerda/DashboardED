@@ -171,16 +171,17 @@ export default function PartilhaCardsAndAlerts({
                       fontSize: 'var(--text-xs)',
                     }}
                   >
-                    👉 <strong>Compensação Devida pelo Médico à Clínica:</strong> Como a clínica tem
+                    👉 <strong>Compensação Devida à Clínica (Centralizada no Dr. Oliveira):</strong> Como a clínica tem
                     direito a{' '}
                     <strong>50% da polipectomia ({formatCurrency(splitCalculations.partePolipClinica)})</strong>{' '}
                     e{' '}
                     <strong>100% do acessório ({formatCurrency(splitCalculations.parteAcessorioClinica)})</strong>{' '}
-                    pela compra do material descartável, o médico deve transferir{' '}
+                    pela compra do material descartável, o valor de{' '}
                     <strong style={{ color: 'var(--color-emerald)', fontSize: 'var(--text-sm)' }}>
                       {formatCurrency(splitCalculations.valorDevolverClinica)}
                     </strong>{' '}
-                    à clínica (ou abater de repasses a pagar a ele).
+                    será lançado automaticamente na coluna de <strong>Compensações</strong> do{' '}
+                    <strong>DR. OLIVEIRA</strong>.
                   </div>
                 ) : (
                   <div

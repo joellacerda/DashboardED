@@ -4,6 +4,7 @@ import {
   isDoctorMatch,
   getHonorarioMedicoInPeriod,
   getDoctorCompensacaoInPeriod,
+  isCompensacaoTargetDoctor,
 } from './helpers';
 
 /**
@@ -50,6 +51,9 @@ export function getAllDoctors(data = {}) {
   examesConvenio.forEach((c) => {
     addIfMissing(c.medico);
     addIfMissing(c.medico2);
+    if (Number(c.valorCompensacaoClinica) > 0 && !list.some((d) => isCompensacaoTargetDoctor(d.nome))) {
+      addIfMissing('DR. OLIVEIRA');
+    }
   });
 
   exames.forEach((e) => {
@@ -103,17 +107,17 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
   const doctor =
     (typeof doctorOrName === 'object' && doctorOrName.nome
       ? {
-          ...doctorOrName,
-          nome: targetName,
-          socio: doctorOrName.socio !== false,
-          ativo: doctorOrName.ativo !== false,
-        }
-      : allDoctors.find((d) => isDoctorMatch(d.nome, d.id, doctorOrName))) || {
-      id: targetName,
-      nome: targetName,
-      socio: true,
-      ativo: true,
-    };
+        ...doctorOrName,
+        nome: targetName,
+        socio: doctorOrName.socio !== false,
+        ativo: doctorOrName.ativo !== false,
+      }
+      : allDoctors.find((d) => isDoctorMatch(doctorOrName, d.nome, d.id))) || {
+    id: targetName,
+    nome: targetName,
+    socio: true,
+    ativo: true,
+  };
 
   const isSocio = doctor.socio !== false;
   const isAtivo = doctor.ativo !== false;
@@ -149,8 +153,8 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
     const dataRef = c.fluxoData || c.data;
     if (!isDateInPeriod(dataRef, period)) return;
 
-    const isDoc1 = isDoctorMatch(c.medico, c.medicoId, doctor);
-    const isDoc2 = isDoctorMatch(c.medico2, c.medico2Id, doctor);
+    const isDoc1 = isDoctorMatch(doctor, c.medico, c.medicoId);
+    const isDoc2 = isDoctorMatch(doctor, c.medico2, c.medico2Id);
     if (!isDoc1 && !isDoc2) return;
 
     if (isDoc1) {

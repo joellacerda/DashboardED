@@ -28,15 +28,16 @@ export default function RepasseCompensacaoModal({ viewingCompensacao, onClose })
             color: 'var(--color-amber)',
           }}
         >
-          💡 <strong>Dedução Automática de Materiais & Procedimentos:</strong>
+          💡 <strong>Dedução Automática de Materiais & Procedimentos (Centralizada no Dr. Oliveira):</strong>
           <div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)' }}>
-            Estes valores foram recebidos pelo médico através do extrato do convênio/cooperativa,
-            mas pertencem à clínica (100% da alça/material descartável e 50% da polipectomia). O
-            total de{' '}
+            Como o <strong>Dr. Oliveira</strong> centraliza o recebimento dos proventos da Unimed e
+            os repassa aos demais médicos, todas as compensações de materiais descartáveis (100% da
+            alça) e 50% de polipectomias registradas nos exames do período (inclusive de outros
+            médicos realizantes) são lançadas no demonstrativo dele. O total de{' '}
             <strong style={{ color: 'var(--color-amber)' }}>
               {formatCurrency(viewingCompensacao?.total || 0)}
             </strong>{' '}
-            é deduzido automaticamente do repasse líquido do médico neste período.
+            é deduzido automaticamente neste período.
           </div>
         </div>
 
@@ -53,6 +54,7 @@ export default function RepasseCompensacaoModal({ viewingCompensacao, onClose })
               <tr>
                 <th>Data</th>
                 <th>Paciente</th>
+                <th>Médico Realizante</th>
                 <th>Exame / Convênio</th>
                 <th style={{ textAlign: 'right' }}>Alça (100% Clínica)</th>
                 <th style={{ textAlign: 'right' }}>Polip. (50% Clínica)</th>
@@ -64,6 +66,7 @@ export default function RepasseCompensacaoModal({ viewingCompensacao, onClose })
                 <tr key={item.id || idx}>
                   <td>{formatDate(item.fluxoData || item.data)}</td>
                   <td style={{ fontWeight: 600 }}>{item.paciente}</td>
+                  <td>{item.medico || '—'}</td>
                   <td>
                     {item.exame} ({item.convenio})
                   </td>
