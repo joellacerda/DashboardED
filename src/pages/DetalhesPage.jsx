@@ -81,14 +81,27 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   useEffect(() => {
     if (prefillData) {
-      const existing = data.find(
-        (d) =>
-          (prefillData.id && String(d.id) === String(prefillData.id)) ||
-          (d.data === prefillData.data &&
+      const targetTipo = (prefillData.tipoExame || prefillData.exame || '').trim().toUpperCase();
+      const existing =
+        data.find(
+          (d) =>
+            prefillData.id &&
+            (String(d.id) === String(prefillData.id) || String(d.exameId) === String(prefillData.id))
+        ) ||
+        data.find((d) => {
+          if (d.isConvenio || d.origemConvenioId) return false;
+          if (prefillData.id && d.exameId && String(d.exameId) !== String(prefillData.id)) {
+            return false;
+          }
+          const sameDateAndPatient =
+            d.data === prefillData.data &&
             d.paciente &&
             prefillData.paciente &&
-            d.paciente.trim().toUpperCase() === prefillData.paciente.trim().toUpperCase())
-      );
+            d.paciente.trim().toUpperCase() === prefillData.paciente.trim().toUpperCase();
+          if (!sameDateAndPatient) return false;
+          const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
+          return !dTipo || !targetTipo || dTipo === targetTipo;
+        });
       if (existing) {
         setEditItem(existing);
       } else {

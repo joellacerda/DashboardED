@@ -74,10 +74,11 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
   if (!convenioItem || !convenioItem.id) return null;
 
   const hasDivisao =
-    (convenioItem.valorClinica !== undefined && convenioItem.valorClinica !== '' && convenioItem.valorClinica !== null) ||
-    (convenioItem.valorMedico !== undefined && convenioItem.valorMedico !== '' && convenioItem.valorMedico !== null) ||
-    convenioItem.fluxoLancado ||
-    (convenioItem.valorRepasse !== undefined && Number(convenioItem.valorRepasse) > 0);
+    Number(convenioItem.valorClinica) > 0 ||
+    Number(convenioItem.valorMedico) > 0 ||
+    Boolean(convenioItem.fluxoLancado) ||
+    Number(convenioItem.valorRepasse) > 0 ||
+    Number(convenioItem.fluxoValorLancado) > 0;
 
   const detalhesList = getData(MODULES.detalhesExames) || [];
   const syncId = `conv_${convenioItem.id}`;

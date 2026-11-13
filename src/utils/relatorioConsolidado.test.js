@@ -170,6 +170,67 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
     expect(reportRow.honorariosConvenio).toBe(directRepasse.honConvenio);
     expect(reportRow.honorariosParticulares).toBe(directRepasse.honParticular);
     expect(reportRow.repasseLiquido).toBe(directRepasse.repasseLiquido);
+    expect(consolidatedReport.honorariosConvenios).toBe(directRepasse.honConvenio);
+    expect(consolidatedReport.honorariosParticulares).toBe(directRepasse.honParticular);
+    expect(consolidatedReport.totalHonorariosMedicos).toBe(directRepasse.honTotal);
+    expect(consolidatedReport.totalAjustesLiquidos).toBe(directRepasse.ajustesLiquidos);
+  });
+
+  it('inclui compensações de convênio em totalAjustesLiquidos e cota de déficit em totalCotaDeficit no relatório consolidado', () => {
+    const p = period('2026-03-16');
+    const data = {
+      medicos: [{ id: 'm1', nome: 'DR. OLIVEIRA', socio: true, ativo: true }],
+      examesConvenio: [
+        {
+          id: 'c_comp',
+          data: '2026-03-20',
+          medico: 'DR. OLIVEIRA',
+          convenio: 'UNIMED',
+          fluxoLancado: true,
+          fluxoData: '2026-03-20',
+          valorCompensacaoClinica: 150,
+          valorRepasse: 600,
+          valorRepasseMedico1: 600,
+        },
+      ],
+      repassesAjustes: [
+        {
+          key: 'dr. oliveira_2026-03-16',
+          creditos: 80,
+          debitos: 20,
+          bnb: 10,
+        },
+      ],
+      fluxoCaixa: [
+        { id: 'f_out', data: '2026-03-20', tipo: 'saida', categoria: 'Aluguel / Condomínio', valor: 500 },
+      ],
+    };
+
+    const report = getConsolidatedFinancialReport(data, p);
+    // ajustesLiquidos = creditos (80) - debitos (20) - bnb (10) - compensacao (150) = -100
+    expect(report.totalCompensacoesConvenio).toBe(150);
+    expect(report.totalAjustesLiquidos).toBe(-100);
+    expect(report.totalCotaDeficit).toBe(500);
+  });
+
+  it('syncConvenioToDetalhes não sincroniza consulta recém-cadastrada sem valores preenchidos nem lançada no caixa', () => {
+    setData(MODULES.detalhesExames, []);
+    const pendingConsulta = {
+      id: 'cons_pendente_1',
+      data: '2026-03-20',
+      paciente: 'PACIENTE CONSULTA',
+      medico: 'DR. OLIVEIRA',
+      convenio: 'UNIMED',
+      exame: 'CONSULTA',
+      valorClinica: 0,
+      valorMedico: '',
+      percentualMedico: 100,
+      fluxoLancado: false,
+    };
+
+    const res = syncConvenioToDetalhes(pendingConsulta);
+    expect(res).toBeNull();
+    expect(getData(MODULES.detalhesExames)).toHaveLength(0);
   });
 
   it('sinaliza folhaNaoLancadaNoCaixa quando há folha líquida calculada mas sem despesa no Fluxo de Caixa', () => {

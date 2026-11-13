@@ -191,6 +191,8 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
       const examDate = prefillData.data || getTodayISO();
       setForm({
         ...emptyForm,
+        id: prefillData.id || '',
+        exameId: prefillData.id || '',
         data: examDate,
         paciente: prefillData.paciente || '',
         tipoExame: prefillData.tipoExame || prefillData.exame || '',
@@ -411,6 +413,8 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
 
     const sanitizedForm = {
       ...form,
+      id: editItem?.id || form.id || prefillData?.id || undefined,
+      exameId: editItem?.exameId || form.exameId || prefillData?.id || editItem?.id || undefined,
       origemConvenioId: editItem?.origemConvenioId || form.origemConvenioId || undefined,
       isConvenio: isFromConvenio,
       manualOverride: isFromConvenio ? true : undefined,
@@ -450,14 +454,24 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
 
     // Se é um novo detalhe originado de um exame da lista simples
     if (!editItem && prefillData) {
-      const matchingExames = exames.filter(
-        (e) =>
-          e.data === savedItem.data &&
-          ((e.exame && e.exame.trim().toUpperCase() === savedItem.tipoExame.trim().toUpperCase()) ||
-            (e.paciente && e.paciente.trim().toUpperCase() === savedItem.paciente.trim().toUpperCase()))
-      );
-      if (matchingExames.length > 0) {
-        updateItem(MODULES.exames, matchingExames[0].id, {
+      const matchingExame =
+        exames.find(
+          (e) =>
+            (prefillData.id && String(e.id) === String(prefillData.id)) ||
+            String(e.id) === String(savedItem.id)
+        ) ||
+        exames.find(
+          (e) =>
+            e.data === savedItem.data &&
+            e.paciente &&
+            e.paciente.trim().toUpperCase() === savedItem.paciente.trim().toUpperCase() &&
+            (!e.exame ||
+              !savedItem.tipoExame ||
+              e.exame.trim().toUpperCase() === savedItem.tipoExame.trim().toUpperCase())
+        );
+      if (matchingExame) {
+        updateItem(MODULES.exames, matchingExame.id, {
+          detalheId: savedItem.id,
           data: savedItem.data,
           paciente: savedItem.paciente,
           medico: savedItem.medico,
@@ -468,16 +482,27 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
     }
 
     if (editItem) {
-      const matchingExames = exames.filter(
-        (e) =>
-          (e.detalheId && e.detalheId === savedItem.id) ||
-          (e.data === editItem.data &&
-            e.paciente &&
-            e.paciente.trim().toUpperCase() === savedItem.paciente.trim().toUpperCase())
-      );
+      const origTipo = (editItem.tipoExame || editItem.exame || '').trim().toUpperCase();
+      const origPaciente = (editItem.paciente || savedItem.paciente || '').trim().toUpperCase();
+      const matchingExames = exames.filter((e) => {
+        if (
+          String(e.id) === String(savedItem.id) ||
+          (savedItem.exameId && String(e.id) === String(savedItem.exameId)) ||
+          (e.detalheId && String(e.detalheId) === String(savedItem.id))
+        ) {
+          return true;
+        }
+        if (e.detalheId && String(e.detalheId) !== String(savedItem.id)) return false;
+        const sameDateAndPatient =
+          e.data === editItem.data && e.paciente && e.paciente.trim().toUpperCase() === origPaciente;
+        if (!sameDateAndPatient) return false;
+        const eTipo = (e.exame || '').trim().toUpperCase();
+        return !eTipo || !origTipo || eTipo === origTipo;
+      });
       if (matchingExames.length > 0) {
         matchingExames.forEach((ex) => {
           updateItem(MODULES.exames, ex.id, {
+            detalheId: savedItem.id,
             data: savedItem.data,
             paciente: savedItem.paciente,
             medico: savedItem.medico,

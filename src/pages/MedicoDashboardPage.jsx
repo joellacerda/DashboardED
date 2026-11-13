@@ -92,10 +92,10 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
     }
   };
 
-  // Maior valor histórico para normalizar escala de barras
+  // Maior valor absoluto histórico para normalizar escala de barras (suporta positivos e negativos)
   const maxHistoricalRepasse = useMemo(() => {
     if (!history.length) return 1;
-    const maxVal = Math.max(...history.map((h) => h.repasseLiquido || 0));
+    const maxVal = Math.max(...history.map((h) => Math.abs(h.repasseLiquido || 0)));
     return maxVal > 0 ? maxVal : 1;
   }, [history]);
 
@@ -387,20 +387,36 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
 
           <div className="medico-history-grid">
             {history.map((h) => {
-              const heightPct = Math.max(8, Math.min(100, Math.round((h.repasseLiquido / maxHistoricalRepasse) * 100)));
+              const isNegative = (h.repasseLiquido || 0) < 0;
+              const absVal = Math.abs(h.repasseLiquido || 0);
+              const heightPct =
+                absVal > 0 ? Math.max(8, Math.min(100, Math.round((absVal / maxHistoricalRepasse) * 100))) : 8;
               const isSelected = h.start === period.start && h.end === period.end;
+              const formattedVal = isNegative
+                ? `-${formatCurrency(absVal)}`
+                : formatCurrency(h.repasseLiquido);
               return (
                 <div
                   key={h.start}
                   className={`medico-history-bar-col ${isSelected ? 'is-active-period' : ''}`}
                   onClick={() => setPeriod(h.period)}
-                  title={`Clique para navegar para o período ${h.label}\nRepasse Líquido: ${formatCurrency(h.repasseLiquido)}\nExames: ${h.totalProcedimentos}`}
+                  title={`Clique para navegar para o período ${h.label}\n${isNegative ? 'Saldo a Ressarcir' : 'Repasse Líquido'}: ${formattedVal}\nExames: ${h.totalProcedimentos}`}
                 >
-                  <div className="medico-history-val-label">{formatCurrency(h.repasseLiquido)}</div>
+                  <div
+                    className="medico-history-val-label"
+                    style={isNegative ? { color: 'var(--color-red)' } : undefined}
+                  >
+                    {formattedVal}
+                  </div>
                   <div className="medico-history-bar-track">
                     <div
                       className={`medico-history-bar-fill ${isSelected ? 'fill-active' : ''}`}
-                      style={{ height: `${heightPct}%` }}
+                      style={{
+                        height: `${heightPct}%`,
+                        ...(isNegative
+                          ? { background: 'var(--color-red, #ef4444)', opacity: isSelected ? 1 : 0.75 }
+                          : {}),
+                      }}
                     />
                   </div>
                   <div className="medico-history-month-label">{h.label.split('—')[0]?.trim()}</div>

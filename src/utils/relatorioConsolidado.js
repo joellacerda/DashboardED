@@ -222,18 +222,26 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     rows: repasseRowsUnified,
   } = calculateAllDoctorsRepasseInPeriod(period, data);
 
+  let totalHonorariosParticularesGeral = 0;
+  let totalHonorariosConveniosGeral = 0;
   let totalHonorariosMedicosGeral = 0;
   let totalRepassesLiquidosGeral = 0;
   let totalAjustesCreditos = 0;
   let totalAjustesDebitos = 0;
   let totalCompensacoesConvenioGeral = 0;
+  let totalAjustesLiquidosGeral = 0;
+  let totalCotaDeficitGeral = 0;
 
   const repassesPorMedico = repasseRowsUnified.map((r) => {
+    totalHonorariosParticularesGeral += r.honParticular;
+    totalHonorariosConveniosGeral += r.honConvenio;
     totalHonorariosMedicosGeral += r.honTotal;
     totalRepassesLiquidosGeral += r.repasseLiquido;
     totalAjustesCreditos += r.creditos;
     totalAjustesDebitos += r.debitosComBnb;
     totalCompensacoesConvenioGeral += r.compensacaoConvenio;
+    totalAjustesLiquidosGeral += r.ajustesLiquidos;
+    totalCotaDeficitGeral += r.cotaDeficit;
 
     return {
       nome: r.nome,
@@ -254,6 +262,11 @@ export function getConsolidatedFinancialReport(data = {}, period) {
       obs: r.obs,
     };
   });
+
+  const honorariosParticularesUnificado =
+    totalHonorariosParticularesGeral > 0 ? totalHonorariosParticularesGeral : honorariosParticulares;
+  const honorariosConveniosUnificado =
+    totalHonorariosConveniosGeral > 0 ? totalHonorariosConveniosGeral : honorariosConvenios;
 
   // Filter only doctors with movement or active doctors
   const repassesRelevantes = repassesPorMedico.filter(
@@ -298,13 +311,15 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     receitaClinicaParticulares: roundCurrency(receitaClinicaParticulares),
     receitaClinicaConvenios: roundCurrency(receitaClinicaConvenios),
     // Repasses Médicos
-    honorariosParticulares: roundCurrency(honorariosParticulares),
-    honorariosConvenios: roundCurrency(honorariosConvenios),
+    honorariosParticulares: roundCurrency(honorariosParticularesUnificado),
+    honorariosConvenios: roundCurrency(honorariosConveniosUnificado),
     totalHonorariosMedicos: roundCurrency(totalHonorariosMedicosGeral),
     totalRepassesLiquidos: roundCurrency(totalRepassesLiquidosGeral),
     totalAjustesCreditos: roundCurrency(totalAjustesCreditos),
     totalAjustesDebitos: roundCurrency(totalAjustesDebitos),
     totalCompensacoesConvenio: roundCurrency(totalCompensacoesConvenioGeral),
+    totalAjustesLiquidos: roundCurrency(totalAjustesLiquidosGeral),
+    totalCotaDeficit: roundCurrency(totalCotaDeficitGeral),
     repassesPorMedico: repassesRelevantes,
     // Despesas Operacionais
     totalDespesasOperacionais: roundCurrency(totalDespesasOperacionais),
@@ -381,11 +396,31 @@ export function exportConsolidatedReportCSV(report, period) {
   addLine(['   2.4 Custos com Acessórios', `-${formatCurrency(report.custosAcessorios)}`, `${((report.custosAcessorios / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
   addLine(['   2.5 Honorários de Anestesistas', `-${formatCurrency(report.custosAnestesistas)}`, `${((report.custosAnestesistas / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
   addLine(['3. RECEITA OPERACIONAL LÍQUIDA', formatCurrency(report.receitaOperacionalLiquida), `${((report.receitaOperacionalLiquida / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['4. REPASSES & HONORÁRIOS MÉDICOS TOTAIS', `-${formatCurrency(report.totalRepassesLiquidos)}`, `${((report.totalRepassesLiquidos / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+  addLine([
+    '4. REPASSES & HONORÁRIOS MÉDICOS TOTAIS',
+    report.totalRepassesLiquidos >= 0
+      ? `-${formatCurrency(report.totalRepassesLiquidos)}`
+      : `+${formatCurrency(Math.abs(report.totalRepassesLiquidos))}`,
+    `${((report.totalRepassesLiquidos / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`,
+  ]);
   addLine(['   4.1 Honorários de Exames Particulares', `-${formatCurrency(report.honorariosParticulares)}`, `${((report.honorariosParticulares / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
   addLine(['   4.2 Honorários de Exames de Convênios', `-${formatCurrency(report.honorariosConvenios)}`, `${((report.honorariosConvenios / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  if (report.totalAjustesDebitos > 0 || report.totalAjustesCreditos > 0) {
-    addLine(['   4.3 Ajustes Líquidos de Repasses', formatCurrency(report.totalAjustesCreditos - report.totalAjustesDebitos), '']);
+  if (
+    report.totalAjustesDebitos > 0 ||
+    report.totalAjustesCreditos > 0 ||
+    report.totalCompensacoesConvenio > 0
+  ) {
+    addLine([
+      '   4.3 Ajustes Líquidos de Repasses',
+      formatCurrency(
+        report.totalAjustesLiquidos ??
+          report.totalAjustesCreditos - report.totalAjustesDebitos - (report.totalCompensacoesConvenio || 0)
+      ),
+      '',
+    ]);
+  }
+  if (report.totalCotaDeficit > 0) {
+    addLine(['   4.4 Rateio de Cota de Déficit (Sócios)', `+${formatCurrency(report.totalCotaDeficit)}`, '']);
   }
   addLine(['5. DESPESAS OPERACIONAIS DO CAIXA', `-${formatCurrency(report.totalDespesasOperacionais)}`, `${((report.totalDespesasOperacionais / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
   Object.entries(report.categoriasDespesas || {}).forEach(([cat, val]) => {

@@ -390,24 +390,26 @@ export default function LockScreen({ isLocked, onUnlock }) {
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSettingPin(false);
-                  setErrorMsg('');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '0.6rem',
-                  borderRadius: '0.5rem',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: 'none',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
+              {hasPin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingPin(false);
+                    setErrorMsg('');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.6rem',
+                    borderRadius: '0.5rem',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+              )}
               <button
                 type="submit"
                 className="btn btn-primary"

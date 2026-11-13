@@ -196,17 +196,36 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     const detalhesList = detalhesExames || [];
     const convList = conveniosData || [];
 
+    const isSameParticularExam = (e, d) => {
+      if (!e || !d || d.isConvenio || d.origemConvenioId) return false;
+      if (e.id && d.id && String(d.id) === String(e.id)) return true;
+      if (e.id && d.exameId && String(d.exameId) === String(e.id)) return true;
+      if (e.detalheId && d.id && String(e.detalheId) === String(d.id)) return true;
+      if (e.id && d.exameId && String(d.exameId) !== String(e.id)) return false;
+
+      const sameDateAndPatient =
+        d.data === e.data &&
+        d.paciente &&
+        e.paciente &&
+        d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase();
+      if (!sameDateAndPatient) return false;
+
+      const eTipo = (e.exame || e.tipoExame || '').trim().toUpperCase();
+      const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
+      if (eTipo && dTipo) {
+        return eTipo === dTipo;
+      }
+      return true;
+    };
+
     const getMatchedDetalhe = (e) =>
       detalhesList.find(
         (d) =>
           !d.isConvenio &&
           !d.origemConvenioId &&
-          (d.id === e.id ||
-            (d.data === e.data &&
-              d.paciente &&
-              e.paciente &&
-              d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase()))
-      );
+          ((e.id && (String(d.id) === String(e.id) || String(d.exameId) === String(e.id))) ||
+            (e.detalheId && String(d.id) === String(e.detalheId)))
+      ) || detalhesList.find((d) => isSameParticularExam(e, d));
 
     const computeParticularValor = (det) => {
       if (!det) return 0;
@@ -241,15 +260,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       };
     });
 
-    const isMatched = (d) =>
-      examesList.some(
-        (e) =>
-          e.id === d.id ||
-          (e.data === d.data &&
-            e.paciente &&
-            d.paciente &&
-            e.paciente.trim().toLowerCase() === d.paciente.trim().toLowerCase())
-      );
+    const isMatched = (d) => examesList.some((e) => isSameParticularExam(e, d));
 
     const standalone = detalhesList
       .filter((d) => !d.isConvenio && !d.origemConvenioId && !isMatched(d))
@@ -547,16 +558,25 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       }
 
       const detalhesList = detalhesExames || [];
-      const matchingDetalhes = detalhesList.filter(
-        (d) =>
-          !d.isConvenio &&
-          (d.id === editId ||
-            (d.data === sanitizedParticular.data &&
-              d.paciente &&
-              d.paciente.trim().toUpperCase() === sanitizedParticular.paciente))
-      );
+      const origData = editItem.data || sanitizedParticular.data;
+      const origPaciente = (editItem.paciente || sanitizedParticular.paciente).trim().toUpperCase();
+      const origExame = (editItem.exame || sanitizedParticular.exame).trim().toUpperCase();
+
+      const matchingDetalhes = detalhesList.filter((d) => {
+        if (d.isConvenio || d.origemConvenioId) return false;
+        if (String(d.id) === String(editId) || (d.exameId && String(d.exameId) === String(editId))) {
+          return true;
+        }
+        if (d.exameId && String(d.exameId) !== String(editId)) return false;
+        const sameDateAndPatient =
+          d.data === origData && d.paciente && d.paciente.trim().toUpperCase() === origPaciente;
+        if (!sameDateAndPatient) return false;
+        const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
+        return !dTipo || !origExame || dTipo === origExame;
+      });
       matchingDetalhes.forEach((det) => {
         updateItem(MODULES.detalhesExames, det.id, {
+          exameId: editId,
           data: sanitizedParticular.data,
           paciente: sanitizedParticular.paciente,
           medico: sanitizedParticular.medico,

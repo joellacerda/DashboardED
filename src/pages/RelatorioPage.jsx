@@ -64,6 +64,9 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
     totalRepassesLiquidos,
     totalAjustesCreditos,
     totalAjustesDebitos,
+    totalCompensacoesConvenio = 0,
+    totalAjustesLiquidos = 0,
+    totalCotaDeficit = 0,
     totalDespesasOperacionais,
     categoriasDespesas,
     resultadoLiquidoClinica,
@@ -396,10 +399,24 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                   <td>
                     <strong>(-) 4. REPASSES & HONORÁRIOS MÉDICOS TOTAIS</strong>
                   </td>
-                  <td style={{ textAlign: 'right', color: 'var(--color-amber)' }}>
-                    <strong>-{formatCurrency(totalRepassesLiquidos)}</strong>
+                  <td
+                    style={{
+                      textAlign: 'right',
+                      color: totalRepassesLiquidos >= 0 ? 'var(--color-amber)' : 'var(--color-emerald)',
+                    }}
+                  >
+                    <strong>
+                      {totalRepassesLiquidos >= 0
+                        ? `-${formatCurrency(totalRepassesLiquidos)}`
+                        : `+${formatCurrency(Math.abs(totalRepassesLiquidos))}`}
+                    </strong>
                   </td>
-                  <td style={{ textAlign: 'right', color: 'var(--color-amber)' }}>
+                  <td
+                    style={{
+                      textAlign: 'right',
+                      color: totalRepassesLiquidos >= 0 ? 'var(--color-amber)' : 'var(--color-emerald)',
+                    }}
+                  >
                     <strong>
                       {faturamentoBrutoTotal > 0
                         ? `${((totalRepassesLiquidos / faturamentoBrutoTotal) * 100).toFixed(1)}%`
@@ -429,13 +446,24 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                       : '0,0%'}
                   </td>
                 </tr>
-                {(totalAjustesCreditos > 0 || totalAjustesDebitos > 0) && (
+                {(totalAjustesCreditos > 0 || totalAjustesDebitos > 0 || totalCompensacoesConvenio > 0) && (
                   <tr className="dre-row-item">
                     <td style={{ paddingLeft: '28px' }}>
-                      4.3 Ajustes Líquidos de Repasses (Créditos / Débitos)
+                      4.3 Ajustes Líquidos de Repasses (Créditos / Débitos / Compensações)
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                      {formatCurrency(totalAjustesCreditos - totalAjustesDebitos)}
+                      {formatCurrency(totalAjustesLiquidos)}
+                    </td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>-</td>
+                  </tr>
+                )}
+                {totalCotaDeficit > 0 && (
+                  <tr className="dre-row-item">
+                    <td style={{ paddingLeft: '28px' }}>
+                      4.4 Rateio de Cota de Déficit (Sócios)
+                    </td>
+                    <td style={{ textAlign: 'right', color: 'var(--color-emerald)' }}>
+                      +{formatCurrency(totalCotaDeficit)}
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>-</td>
                   </tr>
@@ -623,12 +651,41 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                     <td style={{ textAlign: 'right' }}>
                       <strong>{formatCurrency(totalHonorariosMedicos)}</strong>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <strong>{formatCurrency(totalAjustesCreditos - totalAjustesDebitos)}</strong>
+                    <td
+                      style={{
+                        textAlign: 'right',
+                        color:
+                          totalAjustesLiquidos > 0
+                            ? 'var(--color-emerald)'
+                            : totalAjustesLiquidos < 0
+                            ? 'var(--color-red)'
+                            : 'inherit',
+                      }}
+                    >
+                      <strong>{formatCurrency(totalAjustesLiquidos)}</strong>
                     </td>
-                    <td style={{ textAlign: 'right' }}>-</td>
-                    <td style={{ textAlign: 'right', color: 'var(--color-emerald)', fontSize: '1rem' }}>
-                      <strong>{formatCurrency(totalRepassesLiquidos)}</strong>
+                    <td
+                      style={{
+                        textAlign: 'right',
+                        color: totalCotaDeficit > 0 ? 'var(--color-red)' : 'inherit',
+                      }}
+                    >
+                      <strong>
+                        {totalCotaDeficit > 0 ? `-${formatCurrency(totalCotaDeficit)}` : 'R$ 0,00'}
+                      </strong>
+                    </td>
+                    <td
+                      style={{
+                        textAlign: 'right',
+                        color: totalRepassesLiquidos >= 0 ? 'var(--color-emerald)' : 'var(--color-red)',
+                        fontSize: '1rem',
+                      }}
+                    >
+                      <strong>
+                        {totalRepassesLiquidos >= 0
+                          ? formatCurrency(totalRepassesLiquidos)
+                          : `-${formatCurrency(Math.abs(totalRepassesLiquidos))}`}
+                      </strong>
                     </td>
                   </tr>
                 </tfoot>
