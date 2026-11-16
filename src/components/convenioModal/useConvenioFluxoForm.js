@@ -93,16 +93,36 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
 
   const currentConsolidatedEntry = useMemo(() => {
     if (!destinoFluxo.key || !fluxoPeriod.start) return null;
-    return fluxoList.find(
-      (f) =>
-        (f.isConvenioConsolidado || (f.nome && f.nome.toUpperCase() === destinoFluxo.key)) &&
-        (f.periodoStart === fluxoPeriod.start || isDateInPeriod(f.data, fluxoPeriod))
-    );
+    const expectedSyncId = `conv_cons_${destinoFluxo.key.toLowerCase()}_${fluxoPeriod.start.replace(/-/g, '')}`;
+    return fluxoList.find((f) => {
+      if (!f) return false;
+      if (f.id === expectedSyncId) return true;
+      const fConvenioKey =
+        f.convenioConsolidado || (f.nome ? f.nome.trim().toUpperCase() : '');
+      if (fConvenioKey !== destinoFluxo.key) return false;
+
+      const fPeriodStart = f.periodoStart || f.periodStart;
+      if (fPeriodStart) {
+        return fPeriodStart === fluxoPeriod.start;
+      }
+      return isDateInPeriod(f.data, fluxoPeriod);
+    });
   }, [destinoFluxo.key, fluxoPeriod, fluxoList]);
 
   const currentConsolidatedValor = currentConsolidatedEntry
     ? Number(currentConsolidatedEntry.valor || 0)
     : 0;
+
+  const isItemInSelectedFluxoPeriod = useMemo(() => {
+    if (!item || !item.fluxoLancado) return false;
+    if (Array.isArray(currentConsolidatedEntry?.examesIds)) {
+      return currentConsolidatedEntry.examesIds.includes(item.id);
+    }
+    if (item.fluxoPeriodoStart) {
+      return item.fluxoPeriodoStart === fluxoPeriod.start;
+    }
+    return isDateInPeriod(item.fluxoData || item.data, fluxoPeriod);
+  }, [item, currentConsolidatedEntry, fluxoPeriod]);
 
   useEffect(() => {
     if (!isOpen || !item) {
@@ -147,12 +167,12 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
       item.fluxoValorLancado !== undefined && item.fluxoValorLancado !== null
         ? String(item.fluxoValorLancado)
         : initialValorClinica;
-    const initialData = item.fluxoData || getTodayISO();
+    const initialData = item.fluxoData || item.data || getTodayISO();
 
     let initPeriod = getAcquisitionPeriod();
-    if (item.fluxoData) {
+    if (initialData) {
       try {
-        initPeriod = getAcquisitionPeriod(new Date(item.fluxoData.replace(/-/g, '/')));
+        initPeriod = getAcquisitionPeriod(new Date(initialData.replace(/-/g, '/')));
       } catch {
         // fallback
       }
@@ -405,6 +425,7 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     medicosOptions,
     destinoFluxo,
     currentConsolidatedValor,
+    isItemInSelectedFluxoPeriod,
     splitCalculations,
     handleSave,
     handleDesvincularFluxo,
