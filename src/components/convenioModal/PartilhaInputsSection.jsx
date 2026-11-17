@@ -22,14 +22,6 @@ export default function PartilhaInputsSection({
       >
         <button
           type="button"
-          className={`btn btn-sm ${fluxoForm.modoPartilha !== 'polipectomia' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ flex: 1, fontSize: 'var(--text-xs)', fontWeight: 600 }}
-          onClick={() => setFluxoForm((prev) => ({ ...prev, modoPartilha: 'simples' }))}
-        >
-          📊 Partilha Por %
-        </button>
-        <button
-          type="button"
           className={`btn btn-sm ${fluxoForm.modoPartilha === 'polipectomia' ? 'btn-primary' : 'btn-ghost'}`}
           style={{
             flex: 1,
@@ -52,6 +44,14 @@ export default function PartilhaInputsSection({
                 Detectado
               </span>
             )}
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${fluxoForm.modoPartilha !== 'polipectomia' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ flex: 1, fontSize: 'var(--text-xs)', fontWeight: 600 }}
+          onClick={() => setFluxoForm((prev) => ({ ...prev, modoPartilha: 'simples' }))}
+        >
+          📊 Partilha Por %
         </button>
       </div>
 

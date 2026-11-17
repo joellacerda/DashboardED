@@ -19,6 +19,7 @@ export default function FluxoCaixaLancamentoSection({
   item,
   destinoFluxo,
   currentConsolidatedValor,
+  isItemInSelectedFluxoPeriod,
 }) {
   return (
     <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -326,9 +327,12 @@ export default function FluxoCaixaLancamentoSection({
                     ➔ Novo total consolidado:{' '}
                     <strong style={{ color: 'var(--color-emerald)' }}>
                       {formatCurrency(
-                        currentConsolidatedValor -
-                          (Number(item?.fluxoValorLancado) || 0) +
-                          Number(fluxoForm.valor)
+                        Math.max(
+                          0,
+                          currentConsolidatedValor -
+                            (isItemInSelectedFluxoPeriod ? Number(item?.fluxoValorLancado) || 0 : 0) +
+                            Number(fluxoForm.valor)
+                        )
                       )}
                     </strong>
                   </span>

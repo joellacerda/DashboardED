@@ -491,6 +491,17 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
           exame: exameUpper,
           procedimentoComplementar: complUpper,
         };
+        if (existing.data !== form.data && form.data) {
+          try {
+            const nextP = getAcquisitionPeriod(new Date(form.data.replace(/-/g, '/')));
+            sanitizedForm.fluxoData = form.data;
+            sanitizedForm.fluxoPeriodoStart = nextP.start;
+            sanitizedForm.fluxoPeriodoEnd = nextP.end;
+            sanitizedForm.fluxoPeriodoLabel = nextP.label;
+          } catch {
+            // ignore
+          }
+        }
         const updated = updateItem(MODULES.examesConvenio, editItem.id, sanitizedForm);
         if (updated) syncConvenioToDetalhes(updated);
       } else {

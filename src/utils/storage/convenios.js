@@ -313,7 +313,7 @@ export function syncConveniosFluxoConsolidado() {
       let pEnd = item.fluxoPeriodoEnd;
       let pLabel = item.fluxoPeriodoLabel;
 
-      if (!pStart || !pEnd) {
+      if (!pStart || !pEnd || !isDateInPeriod(paymentDate, { start: pStart, end: pEnd })) {
         try {
           const p = getAcquisitionPeriod(new Date(paymentDate.replace(/-/g, '/')));
           pStart = p.start;
@@ -408,6 +408,8 @@ export function syncConveniosFluxoConsolidado() {
         }
         const fUpper = (f.nome || '').trim().toUpperCase();
         if (
+          !f.periodoStart &&
+          !f.periodStart &&
           (fUpper === grp.convenioKey || fUpper === grp.displayNome.toUpperCase()) &&
           isDateInPeriod(f.data, { start: grp.periodStart, end: grp.periodEnd })
         ) {
@@ -439,9 +441,12 @@ export function syncConveniosFluxoConsolidado() {
       if (existingIdx !== -1) {
         const existing = nextFluxo[existingIdx];
         if (
+          existing.id !== syncId ||
           existing.valor !== roundedValor ||
           existing.nome !== grp.displayNome ||
           existing.data !== targetDate ||
+          existing.periodoStart !== grp.periodStart ||
+          existing.convenioConsolidado !== grp.convenioKey ||
           existing.qtdExames !== grp.examIds.length
         ) {
           const merged = { ...existing, ...consolidatedRecord };

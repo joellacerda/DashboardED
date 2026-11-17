@@ -1,8 +1,9 @@
 import { getData, setData, MODULES, getLocalStorage } from './core';
 import { enqueueSyncOperation } from '../../services/syncQueue';
+import { getAcquisitionPeriod, isDateInPeriod } from '../helpers';
 
 export const SCHEMA_VERSION_KEY = 'endodiagnose_schema_version';
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 let _hasRunMigrations = false;
 
@@ -211,6 +212,42 @@ export function runDataMigrations(convenioSyncFns = {}) {
       migrate(MODULES.exames, assignDoctorIds);
       migrate(MODULES.examesConvenio, assignDoctorIds);
       migrate(MODULES.detalhesExames, assignDoctorIds);
+    }
+
+    // Migração V4: Realinhar fluxoData e período de competência de examesConvenio com a data do exame (item.data)
+    // para que o acumulado consolidado de COOPEND e UNIMED seja separado corretamente mês a mês
+    if (storedVersion < 4) {
+      migrate(MODULES.examesConvenio, (cItem) => {
+        if (!cItem || !cItem.data) return cItem;
+        try {
+          const examPeriod = getAcquisitionPeriod(new Date(cItem.data.replace(/-/g, '/')));
+          if (!examPeriod || !examPeriod.start) return cItem;
+
+          const needsPeriodFix =
+            (cItem.fluxoData && !isDateInPeriod(cItem.fluxoData, examPeriod)) ||
+            (cItem.fluxoPeriodoStart && cItem.fluxoPeriodoStart !== examPeriod.start);
+
+          if (needsPeriodFix) {
+            return {
+              ...cItem,
+              fluxoData: cItem.data,
+              fluxoPeriodoStart: examPeriod.start,
+              fluxoPeriodoEnd: examPeriod.end,
+              fluxoPeriodoLabel: examPeriod.label,
+            };
+          }
+        } catch {
+          // ignore invalid dates
+        }
+        return cItem;
+      });
+
+      if (typeof convenioSyncFns.syncAllConveniosToDetalhes === 'function') {
+        convenioSyncFns.syncAllConveniosToDetalhes();
+      }
+      if (typeof convenioSyncFns.syncConveniosFluxoConsolidado === 'function') {
+        convenioSyncFns.syncConveniosFluxoConsolidado();
+      }
     }
 
     storage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION));

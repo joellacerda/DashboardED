@@ -8,7 +8,7 @@ import {
   MODULES,
 } from './storage';
 import { getConsolidatedFinancialReport } from './relatorioConsolidado';
-import { getAcquisitionPeriod, getDoctorCompensacaoInPeriod } from './helpers';
+import { getAcquisitionPeriod, getDoctorCompensacaoInPeriod, DEFAULT_EXAMES } from './helpers';
 import { getDoctorPeriodMetrics } from './medicoAnalytics';
 
 // Simple in-memory localStorage shim if needed
@@ -639,6 +639,48 @@ describe('detalhamento de exames por tag de pagamento consolidado', () => {
     expect(examesUnimed.length).toBe(1);
     expect(examesUnimed[0].convenio).toBe('UNIMED');
     expect(examesUnimed[0].paciente).toBe('ANA BEATRIZ');
+  });
+
+  it('separa ("zera") o acumulado de COOPEND mês a mês por período aquisitivo', () => {
+    const exameOutNov = {
+      id: 'ex_coopend_out',
+      convenio: 'ABERTTA SAUDE',
+      paciente: 'PACIENTE OUTUBRO',
+      data: '2026-11-15',
+      fluxoLancado: true,
+      fluxoValorLancado: 406.18,
+      fluxoData: '2026-11-15',
+    };
+    const exameNovDez = {
+      id: 'ex_coopend_nov',
+      convenio: 'ABERTTA SAUDE',
+      paciente: 'PACIENTE NOVEMBRO',
+      data: '2026-11-16',
+      fluxoLancado: true,
+      fluxoValorLancado: 250.0,
+      fluxoData: '2026-11-16',
+    };
+
+    setData(MODULES.examesConvenio, [exameOutNov, exameNovDez]);
+    const fluxo = syncConveniosFluxoConsolidado();
+
+    const coopendOutNov = fluxo.find(
+      (f) => f.convenioConsolidado === 'COOPEND' && f.periodoStart === '2026-10-16'
+    );
+    const coopendNovDez = fluxo.find(
+      (f) => f.convenioConsolidado === 'COOPEND' && f.periodoStart === '2026-11-16'
+    );
+
+    expect(coopendOutNov).toBeDefined();
+    expect(coopendOutNov.valor).toBe(406.18);
+
+    expect(coopendNovDez).toBeDefined();
+    expect(coopendNovDez.valor).toBe(250.0);
+  });
+
+  it('inclui RETOSSIGMOIDOSCOPIA e COLOCAÇÃO DE BALÃO na lista padrão de exames realizáveis', () => {
+    expect(DEFAULT_EXAMES).toContain('RETOSSIGMOIDOSCOPIA');
+    expect(DEFAULT_EXAMES).toContain('COLOCAÇÃO DE BALÃO');
   });
 });
 

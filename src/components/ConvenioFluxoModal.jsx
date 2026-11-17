@@ -19,6 +19,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
     medicosOptions,
     destinoFluxo,
     currentConsolidatedValor,
+    isItemInSelectedFluxoPeriod,
     splitCalculations,
     handleSave,
     handleDesvincularFluxo,
@@ -153,6 +154,7 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
           item={item}
           destinoFluxo={destinoFluxo}
           currentConsolidatedValor={currentConsolidatedValor}
+          isItemInSelectedFluxoPeriod={isItemInSelectedFluxoPeriod}
         />
       </form>
     </Modal>

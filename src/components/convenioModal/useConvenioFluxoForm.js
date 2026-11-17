@@ -42,7 +42,7 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     medico2: '',
     porcentagemMedico1: 87.5,
     porcentagemMedico2: 12.5,
-    modoPartilha: 'simples',
+    modoPartilha: 'polipectomia',
     valorTaxaSala: '',
     valorHonorariosBase: '',
     valorPolipectomia: '',
@@ -179,18 +179,7 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     }
     setFluxoPeriod(initPeriod);
 
-    const hasPolipectomiaOrCompl = Boolean(
-      item.modoPartilha === 'polipectomia' ||
-        item.valorPolipectomia ||
-        item.valorAcessorio ||
-        item.valorTaxaSala ||
-        item.valorHonorariosBase ||
-        (item.procedimentoComplementar &&
-          /polipectomia|mucosectomia/i.test(item.procedimentoComplementar))
-    );
-
-    const initialModo =
-      item.modoPartilha || (hasPolipectomiaOrCompl ? 'polipectomia' : 'simples');
+    const initialModo = item.modoPartilha || 'polipectomia';
     const initialTaxaSala =
       item.valorTaxaSala !== undefined && item.valorTaxaSala !== null
         ? String(item.valorTaxaSala)

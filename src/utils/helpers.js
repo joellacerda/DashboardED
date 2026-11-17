@@ -2,6 +2,8 @@ export const DEFAULT_EXAMES = [
   'CONSULTA',
   'ENDOSCOPIA',
   'COLONOSCOPIA',
+  'RETOSSIGMOIDOSCOPIA',
+  'COLOCAÇÃO DE BALÃO',
   'PLASMA DE ARGÔNIO',
   'ECOENDOSCOPIA',
   'ESD',
@@ -9,7 +11,7 @@ export const DEFAULT_EXAMES = [
 ];
 
 // Exams that can have a complementary procedure (polipectomia/mucosectomia)
-export const EXAMES_COM_COMPLEMENTAR = ['COLONOSCOPIA', 'ENDOSCOPIA'];
+export const EXAMES_COM_COMPLEMENTAR = ['COLONOSCOPIA', 'ENDOSCOPIA', 'RETOSSIGMOIDOSCOPIA'];
 export const PROCEDIMENTOS_COMPLEMENTARES = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
 
 // Check if an exam type supports complementary procedures
@@ -19,7 +21,8 @@ export function examePermiteComplementar(tipoExame) {
   return (
     EXAMES_COM_COMPLEMENTAR.includes(clean) ||
     clean.includes('COLONOSCOPIA') ||
-    clean.includes('ENDOSCOPIA')
+    clean.includes('ENDOSCOPIA') ||
+    clean.includes('RETOSSIGMOIDOSCOPIA')
   );
 }
 
