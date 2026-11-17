@@ -5,7 +5,6 @@ import {
   formatDate,
   getTodayISO,
   getAcquisitionPeriod,
-  navigateAcquisitionPeriod,
   isDateInPeriod,
   exportCSV,
   exportPDF,
@@ -15,6 +14,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ExportMenu from '../components/ExportMenu';
 import Pagination from '../components/Pagination';
+import PeriodSelector from '../components/PeriodSelector';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired, validatePositiveNumber } from '../utils/validation';
 import { MODULES, getConvenioFluxoDestino } from '../utils/storage';
@@ -303,37 +303,7 @@ function formatDescricao(nome) {
       <div className="page-header">
         <h1 className="page-title">Fluxo de Caixa</h1>
         <div className="header-actions">
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-            {!isCurrentPeriod && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
           <button className="btn btn-primary" onClick={openNew}>
             + Nova Movimentação
           </button>

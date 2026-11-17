@@ -4,7 +4,6 @@ import {
   formatCurrency,
   formatDate,
   getAcquisitionPeriod,
-  navigateAcquisitionPeriod,
   isDateInPeriod,
   getHonorarioInPeriod,
   getHonorarioMedicoInPeriod,
@@ -21,6 +20,7 @@ import ExportMenu from '../components/ExportMenu';
 import DetalhesExpandedRow from '../components/DetalhesExpandedRow';
 import DetalhesFormModal from '../components/DetalhesFormModal';
 import Pagination from '../components/Pagination';
+import PeriodSelector from '../components/PeriodSelector';
 import { useToast } from '../contexts/ToastContext';
 import { MODULES } from '../utils/storage';
 
@@ -296,37 +296,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       <div className="page-header">
         <h1 className="page-title">Detalhes de Exames</h1>
         <div className="header-actions">
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-            {!isCurrentPeriod && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
           <button className="btn btn-primary" onClick={openNew}>
             + Novo Detalhe
           </button>

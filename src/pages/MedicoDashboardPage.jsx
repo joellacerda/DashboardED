@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   formatCurrency,
   getAcquisitionPeriod,
-  navigateAcquisitionPeriod,
 } from '../utils/helpers';
 import {
   getAllDoctors,
@@ -13,16 +13,35 @@ import {
 } from '../utils/medicoAnalytics';
 
 export default function MedicoDashboardPage({ initialDoctor = null }) {
-  const data = useData();
+  const {
+    medicos,
+    detalhesExames,
+    examesConvenio,
+    exames,
+    fluxoCaixa,
+    repassesAjustes,
+  } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
   const isCurrentPeriod = period.start === currentPeriod.start && period.end === currentPeriod.end;
 
+  const analyticsData = useMemo(
+    () => ({
+      medicos,
+      detalhesExames,
+      examesConvenio,
+      exames,
+      fluxoCaixa,
+      repassesAjustes,
+    }),
+    [medicos, detalhesExames, examesConvenio, exames, fluxoCaixa, repassesAjustes]
+  );
+
   // Lista unificada de todos os médicos
   const doctorsList = useMemo(() => {
-    return getAllDoctors(data);
-  }, [data]);
+    return getAllDoctors(analyticsData);
+  }, [analyticsData]);
 
   // Médico selecionado atualmente
   const [selectedDoctorName, setSelectedDoctorName] = useState(() => {
@@ -43,14 +62,14 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
   // Métricas do médico no período ativo
   const metrics = useMemo(() => {
     if (!selectedDoctorName) return null;
-    return getDoctorPeriodMetrics(selectedDoctorName, period, data);
-  }, [selectedDoctorName, period, data]);
+    return getDoctorPeriodMetrics(selectedDoctorName, period, analyticsData);
+  }, [selectedDoctorName, period, analyticsData]);
 
   // Histórico de repasses dos últimos 6 períodos
   const history = useMemo(() => {
     if (!selectedDoctorName) return [];
-    return getDoctorHistoricalEvolution(selectedDoctorName, period, data, 6);
-  }, [selectedDoctorName, period, data]);
+    return getDoctorHistoricalEvolution(selectedDoctorName, period, analyticsData, 6);
+  }, [selectedDoctorName, period, analyticsData]);
 
   // Filtros da tabela de atendimentos
   const [searchFilter, setSearchFilter] = useState('');
@@ -202,38 +221,7 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
           </div>
 
           {/* Seletor de Período Aquisitivo */}
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod((p) => navigateAcquisitionPeriod(p, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod((p) => navigateAcquisitionPeriod(p, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-
-            {!isCurrentPeriod && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
 
           {/* Action Buttons */}
           <div className="table-actions">

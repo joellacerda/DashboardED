@@ -68,15 +68,11 @@ export function getStorageUsageInfo() {
     if (raw !== null) {
       bytes = (storageKey.length + raw.length) * 2;
       totalBytes += bytes;
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          count = parsed.length;
-        } else if (parsed && typeof parsed === 'object') {
-          count = Object.keys(parsed).length;
-        }
-      } catch {
-        count = 0;
+      const cached = getData(mod);
+      if (Array.isArray(cached)) {
+        count = cached.length;
+      } else if (cached && typeof cached === 'object') {
+        count = Object.keys(cached).length;
       }
     }
 

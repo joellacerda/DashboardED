@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
 import StorageMonitorWidget from '../components/StorageMonitorWidget';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   formatCurrency,
   getAcquisitionPeriod,
@@ -231,34 +232,7 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
       <div className="page-header">
         <h1 className="page-title">Visão Geral</h1>
         <div className="header-actions">
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-            {!isCurrentPeriod && (
-              <button
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
           {onOpenAuditModal && (
             <button
               type="button"

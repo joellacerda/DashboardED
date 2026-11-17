@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   formatCurrency,
   getAcquisitionPeriod,
-  navigateAcquisitionPeriod,
 } from '../utils/helpers';
 import {
   getConsolidatedFinancialReport,
@@ -11,7 +11,15 @@ import {
 } from '../utils/relatorioConsolidado';
 
 export default function RelatorioPage({ onNavigateToDoctor = null }) {
-  const data = useData();
+  const {
+    exames,
+    examesConvenio,
+    fluxoCaixa,
+    detalhesExames,
+    folhaPagamento,
+    medicos,
+    repassesAjustes,
+  } = useData();
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
 
   const currentPeriod = useMemo(() => getAcquisitionPeriod(), []);
@@ -19,8 +27,28 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
 
   // Generate complete consolidated report for the active period
   const report = useMemo(() => {
-    return getConsolidatedFinancialReport(data, period);
-  }, [data, period]);
+    return getConsolidatedFinancialReport(
+      {
+        exames,
+        examesConvenio,
+        fluxoCaixa,
+        detalhesExames,
+        folhaPagamento,
+        medicos,
+        repassesAjustes,
+      },
+      period
+    );
+  }, [
+    exames,
+    examesConvenio,
+    fluxoCaixa,
+    detalhesExames,
+    folhaPagamento,
+    medicos,
+    repassesAjustes,
+    period,
+  ]);
 
   const handlePrint = () => {
     const originalTitle = document.title;
@@ -113,38 +141,7 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
 
         <div className="header-actions">
           {/* Period Navigator */}
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod((p) => navigateAcquisitionPeriod(p, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod((p) => navigateAcquisitionPeriod(p, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-
-            {!isCurrentPeriod && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
 
           {/* Action Buttons */}
           <div className="table-actions">

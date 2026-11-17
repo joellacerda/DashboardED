@@ -43,7 +43,7 @@ export function DataProvider({ children }) {
     return initial;
   });
 
-  const [storageInfo, setStorageInfo] = useState(() => getStorageUsageInfo());
+  const [storageVersion, setStorageVersion] = useState(0);
 
   // Atualiza um módulo específico no estado React a partir do localStorage/cache
   const refreshModule = useCallback((module) => {
@@ -232,21 +232,20 @@ export function DataProvider({ children }) {
   );
 
   const refreshStorageInfo = useCallback(() => {
-    setStorageInfo(getStorageUsageInfo());
+    setStorageVersion((v) => v + 1);
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setStorageInfo(getStorageUsageInfo());
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [data]);
+  const storageInfo = useMemo(() => {
+    void data;
+    void storageVersion;
+    return getStorageUsageInfo();
+  }, [data, storageVersion]);
 
   const archiveAndPurge = useCallback(
     async (cutoffDate) => {
       const result = await archiveAndPurgeData(cutoffDate);
       reloadAll();
-      setStorageInfo(getStorageUsageInfo());
+      setStorageVersion((v) => v + 1);
       return result;
     },
     [reloadAll]

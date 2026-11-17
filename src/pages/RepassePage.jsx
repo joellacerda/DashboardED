@@ -1,7 +1,4 @@
-import {
-  getAcquisitionPeriod,
-  navigateAcquisitionPeriod,
-} from '../utils/helpers';
+import PeriodSelector from '../components/PeriodSelector';
 import { useRepasseData } from './repasse/useRepasseData';
 import RepasseSummaryCards from './repasse/RepasseSummaryCards';
 import RepasseTable from './repasse/RepasseTable';
@@ -59,37 +56,7 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
       <div className="page-header">
         <h1 className="page-title">Repasses Médicos</h1>
         <div className="header-actions">
-          <div className="period-selector-wrapper">
-            <div className="period-selector">
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, -1))}
-                title="Período anterior"
-              >
-                ◀
-              </button>
-              <span className="period-label">{period.label}</span>
-              <button
-                type="button"
-                className="period-btn"
-                onClick={() => setPeriod(navigateAcquisitionPeriod(period, 1))}
-                title="Próximo período"
-              >
-                ▶
-              </button>
-            </div>
-            {!isCurrentPeriod && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm period-today-btn"
-                onClick={() => setPeriod(getAcquisitionPeriod())}
-                title="Ir para o período atual"
-              >
-                Hoje
-              </button>
-            )}
-          </div>
+          <PeriodSelector period={period} onChange={setPeriod} isCurrentPeriod={isCurrentPeriod} />
           <button className="btn btn-secondary" onClick={() => setManageMedicosModal(true)}>
             ⚙️ Gerenciar Médicos & Sócios
           </button>
