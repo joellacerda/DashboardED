@@ -35,6 +35,31 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   // --- 1. Procedimentos Particulares ---
   const procedimentosParticulares = [];
   let totalFaturamentoParticulares = 0;
+  const examesList = data.exames || [];
+
+  const isSameParticularExam = (e, d) => {
+    if (!e || !d || d.isConvenio || d.origemConvenioId || String(d.id || '').startsWith('conv_')) {
+      return false;
+    }
+    if (e.id && d.id && String(d.id) === String(e.id)) return true;
+    if (e.id && d.exameId && String(d.exameId) === String(e.id)) return true;
+    if (e.detalheId && d.id && String(e.detalheId) === String(d.id)) return true;
+    if (e.id && d.exameId && String(d.exameId) !== String(e.id)) return false;
+
+    const sameDateAndPatient =
+      d.data === e.data &&
+      d.paciente &&
+      e.paciente &&
+      d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase();
+    if (!sameDateAndPatient) return false;
+
+    const eTipo = (e.exame || e.tipoExame || '').trim().toUpperCase();
+    const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
+    if (eTipo && dTipo) {
+      return eTipo === dTipo;
+    }
+    return true;
+  };
 
   detalhesExames.forEach((exam) => {
     if (exam.isConvenio || exam.origemConvenioId || String(exam.id || '').startsWith('conv_')) {
@@ -66,10 +91,39 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
         honorarioMedico: honNoPeriodo,
         isSplit,
         outroMedico: isSplit ? outroMedico : null,
+        isMainDoctor: isDoc1,
       });
 
       totalFaturamentoParticulares += valExam;
     }
+  });
+
+  // Inclui também exames particulares cadastrados em `exames` que ainda não possuem registro em `detalhesExames`
+  examesList.forEach((exam) => {
+    if (!exam || !isDateInPeriod(exam.data, period)) return;
+    if (detalhesExames.some((d) => isSameParticularExam(exam, d))) return;
+
+    const doc1 = (exam.medico || '').trim().toUpperCase();
+    const doc2 = (exam.medico2 || '').trim().toUpperCase();
+    const isDoc1 = isDoctorMatch(doctor, exam.medico, exam.medicoId);
+    if (!isDoc1) return;
+
+    const isSplit = !!(exam.temDivisao || exam.medico2);
+    const outroMedico = doc2;
+
+    procedimentosParticulares.push({
+      id: exam.id || `${exam.data}_${exam.paciente}`,
+      data: exam.data,
+      paciente: exam.paciente || 'Paciente Não Identificado',
+      exame: exam.exame || exam.tipoExame || 'Exame Particular',
+      tipo: 'Particular',
+      convenioNome: null,
+      valorTotal: 0,
+      honorarioMedico: 0,
+      isSplit,
+      outroMedico: isSplit ? outroMedico : null,
+      isMainDoctor: true,
+    });
   });
 
   // --- 2. Procedimentos de Convênio ---
@@ -114,17 +168,22 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
       honorarioMedico: honMedico,
       isSplit: !!(c.temDivisaoMedico2 || c.medico2),
       outroMedico: isDoc1 ? doc2 : doc1,
+      isMainDoctor: isDoc1,
     });
 
     totalFaturamentoConvenios += valFaturado;
   });
 
   // --- 3. Extrato Unificado de Procedimentos (ordenado por data mais recente) ---
+  // Nota: `todosProcedimentos` inclui todos os itens com repasse (inclusive quando o médico é 2º médico apenas na divisão de honorários),
+  // mas a contagem de volume realizado (`totalProcedimentos`, `totalParticulares`, `totalConvenios`) considera apenas quando é o médico realizante principal (`isMainDoctor`).
   const todosProcedimentos = [...procedimentosParticulares, ...procedimentosConvenios].sort(
     (a, b) => new Date(b.data || 0) - new Date(a.data || 0)
   );
 
-  const totalProcedimentos = todosProcedimentos.length;
+  const countParticularesRealizados = procedimentosParticulares.filter((p) => p.isMainDoctor !== false).length;
+  const countConveniosRealizados = procedimentosConvenios.filter((p) => p.isMainDoctor !== false).length;
+  const totalProcedimentos = countParticularesRealizados + countConveniosRealizados;
   const totalHonorariosParticulares = repasseInfo.honParticular;
   const totalHonorariosConvenios = repasseInfo.honConvenio;
   const totalHonorariosBrutos = repasseInfo.honTotal;
@@ -134,6 +193,7 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   // --- 4. Distribuição por Tipo de Exame Realizado ---
   const procedimentosPorTipoMap = {};
   todosProcedimentos.forEach((p) => {
+    if (p.isMainDoctor === false) return;
     const tipo = (p.exame || 'Outros').trim();
     if (!procedimentosPorTipoMap[tipo]) {
       procedimentosPorTipoMap[tipo] = { nome: tipo, quantidade: 0, honorarios: 0 };
@@ -147,8 +207,18 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   );
 
   // --- 6. Participação do médico no volume total da clínica ---
+  const examesParticularesClinica = examesList.filter((e) => isDateInPeriod(e.data, period));
+  const standaloneDetalhesClinica = detalhesExames.filter(
+    (d) =>
+      !d.isConvenio &&
+      !d.origemConvenioId &&
+      !String(d.id || '').startsWith('conv_') &&
+      isDateInPeriod(d.data, period) &&
+      !examesParticularesClinica.some((e) => isSameParticularExam(e, d))
+  );
   const totalExamesClinica =
-    (data.exames || []).filter((e) => isDateInPeriod(e.data, period)).length +
+    examesParticularesClinica.length +
+    standaloneDetalhesClinica.length +
     (data.examesConvenio || []).filter((c) => isDateInPeriod(c.data, period)).length;
 
   const participacaoVolume =
@@ -163,11 +233,11 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     totalProcedimentos,
     participacaoVolume: Math.round(participacaoVolume * 10) / 10,
     // Particulares
-    totalParticulares: procedimentosParticulares.length,
+    totalParticulares: countParticularesRealizados,
     totalHonorariosParticulares: roundCurrency(totalHonorariosParticulares),
     totalFaturamentoParticulares: roundCurrency(totalFaturamentoParticulares),
     // Convênios
-    totalConvenios: procedimentosConvenios.length,
+    totalConvenios: countConveniosRealizados,
     totalHonorariosConvenios: roundCurrency(totalHonorariosConvenios),
     totalFaturamentoConvenios: roundCurrency(totalFaturamentoConvenios),
     // Totais e Médias

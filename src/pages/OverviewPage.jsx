@@ -72,7 +72,50 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
     () => examesConvenio.filter((e) => isDateInPeriod(e.data, period)),
     [examesConvenio, period]
   );
-  const totalExames = examesParticularesInPeriod.length + examesConvenioInPeriod.length;
+
+  const detalhesNoPeriodo = useMemo(
+    () => detalhes.filter((d) => isDateInPeriod(d.data, period)),
+    [detalhes, period]
+  );
+
+  const isSameParticularExam = (e, d) => {
+    if (!e || !d || d.isConvenio || d.origemConvenioId || String(d.id || '').startsWith('conv_')) {
+      return false;
+    }
+    if (e.id && d.id && String(d.id) === String(e.id)) return true;
+    if (e.id && d.exameId && String(d.exameId) === String(e.id)) return true;
+    if (e.detalheId && d.id && String(e.detalheId) === String(d.id)) return true;
+    if (e.id && d.exameId && String(d.exameId) !== String(e.id)) return false;
+
+    const sameDateAndPatient =
+      d.data === e.data &&
+      d.paciente &&
+      e.paciente &&
+      d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase();
+    if (!sameDateAndPatient) return false;
+
+    const eTipo = (e.exame || e.tipoExame || '').trim().toUpperCase();
+    const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
+    if (eTipo && dTipo) {
+      return eTipo === dTipo;
+    }
+    return true;
+  };
+
+  const standaloneDetalhesInPeriod = useMemo(
+    () =>
+      detalhesNoPeriodo.filter(
+        (d) =>
+          !d.isConvenio &&
+          !d.origemConvenioId &&
+          !String(d.id || '').startsWith('conv_') &&
+          !examesParticularesInPeriod.some((e) => isSameParticularExam(e, d))
+      ),
+    [detalhesNoPeriodo, examesParticularesInPeriod]
+  );
+
+  const totalParticularesInPeriod = examesParticularesInPeriod.length + standaloneDetalhesInPeriod.length;
+  const totalExames = totalParticularesInPeriod + examesConvenioInPeriod.length;
 
   const periodFluxo = useMemo(
     () => fluxo.filter((f) => isDateInPeriod(f.data, period)),
@@ -86,10 +129,6 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
     .reduce((s, f) => s + Number(f.valor || 0), 0);
   const saldo = totalEntradas - totalSaidas;
 
-  const detalhesNoPeriodo = useMemo(
-    () => detalhes.filter((d) => isDateInPeriod(d.data, period)),
-    [detalhes, period]
-  );
   const totalClinica = detalhesNoPeriodo.reduce((s, d) => s + Number(d.taxaClinica || 0), 0);
   const totalAcessorios = detalhesNoPeriodo.reduce((s, d) => s + Number(d.valorAcessorios || 0), 0);
   const totalBiopsia = detalhesNoPeriodo.reduce((s, d) => s + Number(d.valorBiopsia || 0), 0);
@@ -115,7 +154,23 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
     () => examesConvenio.filter((e) => isDateInPeriod(e.data, previousPeriod)),
     [examesConvenio, previousPeriod]
   );
-  const prevTotalExames = prevExamesParticulares.length + prevExamesConvenio.length;
+  const prevDetalhes = useMemo(
+    () => detalhes.filter((d) => isDateInPeriod(d.data, previousPeriod)),
+    [detalhes, previousPeriod]
+  );
+  const prevStandaloneDetalhes = useMemo(
+    () =>
+      prevDetalhes.filter(
+        (d) =>
+          !d.isConvenio &&
+          !d.origemConvenioId &&
+          !String(d.id || '').startsWith('conv_') &&
+          !prevExamesParticulares.some((e) => isSameParticularExam(e, d))
+      ),
+    [prevDetalhes, prevExamesParticulares]
+  );
+  const prevTotalExames =
+    prevExamesParticulares.length + prevStandaloneDetalhes.length + prevExamesConvenio.length;
 
   const prevPeriodFluxo = useMemo(
     () => fluxo.filter((f) => isDateInPeriod(f.data, previousPeriod)),
@@ -129,10 +184,6 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
     .reduce((s, f) => s + Number(f.valor || 0), 0);
   const prevSaldo = prevEntradas - prevSaidas;
 
-  const prevDetalhes = useMemo(
-    () => detalhes.filter((d) => isDateInPeriod(d.data, previousPeriod)),
-    [detalhes, previousPeriod]
-  );
   const prevTotalClinica = prevDetalhes.reduce((s, d) => s + Number(d.taxaClinica || 0), 0);
   const prevTotalAcessorios = prevDetalhes.reduce((s, d) => s + Number(d.valorAcessorios || 0), 0);
   const prevTotalBiopsia = prevDetalhes.reduce((s, d) => s + Number(d.valorBiopsia || 0), 0);
@@ -157,31 +208,23 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
   const varSaldo = calcVariation(saldo, prevSaldo);
 
   // Combined exam distribution by type in selected period
-  const isMatchedInParticulares = (d) =>
-    examesParticularesInPeriod.some(
-      (e) =>
-        e.id === d.id ||
-        (e.data === d.data &&
-          e.paciente &&
-          d.paciente &&
-          e.paciente.trim().toLowerCase() === d.paciente.trim().toLowerCase())
-    );
-
-  const standaloneDetalhesInPeriod = detalhesNoPeriodo.filter((d) => !isMatchedInParticulares(d));
-
   const allExamsCombined = [
-    ...examesParticularesInPeriod.map((e) => ({
-      exame: e.exame,
-      procedimentoComplementar: e.procedimentoComplementar,
-      medico: e.medico,
-    })),
+    ...examesParticularesInPeriod.map((e) => {
+      const match = detalhesNoPeriodo.find((d) => isSameParticularExam(e, d));
+      return {
+        exame: e.exame || match?.tipoExame || '',
+        procedimentoComplementar:
+          e.procedimentoComplementar || match?.procedimentoComplementar || '',
+        medico: e.medico || match?.medico || '',
+      };
+    }),
     ...examesConvenioInPeriod.map((e) => ({
       exame: e.exame,
       procedimentoComplementar: e.procedimentoComplementar,
       medico: e.medico,
     })),
     ...standaloneDetalhesInPeriod.map((d) => ({
-      exame: d.tipoExame,
+      exame: d.tipoExame || d.exame,
       procedimentoComplementar: d.procedimentoComplementar,
       medico: d.medico,
     })),
@@ -203,7 +246,7 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
     .slice(0, 8);
   const maxExamCount = examTypes.length > 0 ? examTypes[0][1] : 1;
 
-  // Combined doctor distribution in selected period
+  // Combined doctor distribution in selected period (apenas médico realizante principal; medico2 é exclusivo para divisão de honorários)
   const examCountByDoctor = {};
   allExamsCombined.forEach((e) => {
     if (e.medico && e.medico.trim()) {
@@ -259,7 +302,7 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
             </div>
             <div className="summary-card-value">{totalExames}</div>
             <div className="summary-card-footer">
-              {examesParticularesInPeriod.length} particulares · {examesConvenioInPeriod.length} convênios
+              {totalParticularesInPeriod} particulares · {examesConvenioInPeriod.length} convênios
             </div>
           </div>
 
@@ -434,12 +477,12 @@ export default function OverviewPage({ onOpenStorageManager, onOpenAuditModal })
                   <div
                     className="bar-fill"
                     style={{
-                      width: `${totalExames > 0 ? (examesParticularesInPeriod.length / totalExames) * 100 : 0}%`,
+                      width: `${totalExames > 0 ? (totalParticularesInPeriod / totalExames) * 100 : 0}%`,
                     }}
                   />
                 </div>
                 <span className="bar-value-outside">
-                  {examesParticularesInPeriod.length} ({totalExames > 0 ? ((examesParticularesInPeriod.length / totalExames) * 100).toFixed(0) : 0}%)
+                  {totalParticularesInPeriod} ({totalExames > 0 ? ((totalParticularesInPeriod / totalExames) * 100).toFixed(0) : 0}%)
                 </span>
               </div>
               <div className="bar-row">
