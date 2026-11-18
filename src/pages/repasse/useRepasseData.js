@@ -139,16 +139,49 @@ export function useRepasseData() {
     toast.success('Ajustes de repasse salvos com sucesso!');
   };
 
+  const persistDoctorsGroupOrder = (orderedGroup) => {
+    if (!Array.isArray(orderedGroup)) return;
+    const currentMedicos = medicosList || [];
+
+    orderedGroup.forEach((doc, idx) => {
+      const nextOrdem = idx + 1;
+      const docNameUpper = (doc.nome || '').trim().toUpperCase();
+      const existing = currentMedicos.find(
+        (m) =>
+          (doc.id && !doc.auto && String(m.id) === String(doc.id)) ||
+          (m.nome && m.nome.trim().toUpperCase() === docNameUpper)
+      );
+
+      if (existing) {
+        if (Number(existing.ordem) !== nextOrdem) {
+          updateItem(MODULES.medicos, existing.id, { ordem: nextOrdem });
+        }
+      } else if (docNameUpper) {
+        addItem(MODULES.medicos, {
+          nome: docNameUpper,
+          socio: doc.socio !== false,
+          ativo: doc.ativo !== false,
+          ordem: nextOrdem,
+        });
+      }
+    });
+  };
+
   const handleAddMedico = (e) => {
     e.preventDefault();
     if (!newMedicoNome.trim()) return;
 
     const currentMedicos = medicosList || [];
     const nomeUpper = newMedicoNome.trim().toUpperCase();
+    const activeCount = allDoctors.filter((m) => m.ativo !== false).length;
     const existing = currentMedicos.find((m) => m.nome.trim().toUpperCase() === nomeUpper);
     if (existing) {
       if (existing.ativo === false) {
-        updateItem(MODULES.medicos, existing.id, { ativo: true, socio: newMedicoSocio });
+        updateItem(MODULES.medicos, existing.id, {
+          ativo: true,
+          socio: newMedicoSocio,
+          ordem: activeCount + 1,
+        });
         setNewMedicoNome('');
         toast.success('Médico reativado com sucesso!');
         return;
@@ -157,7 +190,12 @@ export function useRepasseData() {
       return;
     }
 
-    addItem(MODULES.medicos, { nome: nomeUpper, socio: newMedicoSocio, ativo: true });
+    addItem(MODULES.medicos, {
+      nome: nomeUpper,
+      socio: newMedicoSocio,
+      ativo: true,
+      ordem: activeCount + 1,
+    });
     setNewMedicoNome('');
     toast.success('Médico adicionado com sucesso!');
   };
@@ -191,15 +229,58 @@ export function useRepasseData() {
       (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
     );
     const isCurrentlyActive = medico.ativo !== false;
+    const nextAtivo = !isCurrentlyActive;
+    const targetGroupCount = allDoctors.filter((m) => (m.ativo !== false) === nextAtivo).length;
+
     if (index !== -1) {
-      updateItem(MODULES.medicos, currentMedicos[index].id, { ativo: !isCurrentlyActive });
+      updateItem(MODULES.medicos, currentMedicos[index].id, {
+        ativo: nextAtivo,
+        ordem: targetGroupCount + 1,
+      });
     } else {
       addItem(MODULES.medicos, {
         nome: medico.nome.trim().toUpperCase(),
         socio: medico.socio !== false,
-        ativo: !isCurrentlyActive,
+        ativo: nextAtivo,
+        ordem: targetGroupCount + 1,
       });
     }
+  };
+
+  const moveMedico = (medico, direction) => {
+    if (!medico || !direction) return;
+    const isGroupActive = medico.ativo !== false;
+    const group = allDoctors.filter((m) => (m.ativo !== false) === isGroupActive);
+    const currentIndex = group.findIndex(
+      (m) => m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
+    );
+    const targetIndex = currentIndex + direction;
+    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= group.length) return;
+
+    const updatedGroup = [...group];
+    const [moved] = updatedGroup.splice(currentIndex, 1);
+    updatedGroup.splice(targetIndex, 0, moved);
+    persistDoctorsGroupOrder(updatedGroup);
+  };
+
+  const reorderMedicos = (fromMedico, toMedico) => {
+    if (!fromMedico || !toMedico) return;
+    const isGroupActive = fromMedico.ativo !== false;
+    if ((toMedico.ativo !== false) !== isGroupActive) return;
+
+    const group = allDoctors.filter((m) => (m.ativo !== false) === isGroupActive);
+    const fromIndex = group.findIndex(
+      (m) => m.nome.trim().toUpperCase() === fromMedico.nome.trim().toUpperCase()
+    );
+    const toIndex = group.findIndex(
+      (m) => m.nome.trim().toUpperCase() === toMedico.nome.trim().toUpperCase()
+    );
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+    const updatedGroup = [...group];
+    const [moved] = updatedGroup.splice(fromIndex, 1);
+    updatedGroup.splice(toIndex, 0, moved);
+    persistDoctorsGroupOrder(updatedGroup);
   };
 
   const exportColumns = [
@@ -256,5 +337,7 @@ export function useRepasseData() {
     handleDeleteMedico,
     toggleMedicoSocio,
     toggleMedicoAtivo,
+    moveMedico,
+    reorderMedicos,
   };
 }

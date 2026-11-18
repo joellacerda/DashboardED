@@ -49,6 +49,8 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
     handleDeleteMedico,
     toggleMedicoSocio,
     toggleMedicoAtivo,
+    moveMedico,
+    reorderMedicos,
   } = useRepasseData();
 
   return (
@@ -130,6 +132,8 @@ export default function RepassePage({ onNavigateToDoctor = null }) {
         handleAddMedico={handleAddMedico}
         toggleMedicoSocio={toggleMedicoSocio}
         toggleMedicoAtivo={toggleMedicoAtivo}
+        moveMedico={moveMedico}
+        reorderMedicos={reorderMedicos}
         deleteMedicoId={deleteMedicoId}
         setDeleteMedicoId={setDeleteMedicoId}
         handleDeleteMedico={handleDeleteMedico}

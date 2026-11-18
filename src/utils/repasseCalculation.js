@@ -60,7 +60,26 @@ export function getAllDoctors(data = {}) {
     addIfMissing(e.medico);
   });
 
-  return list.sort((a, b) => a.nome.localeCompare(b.nome));
+  return list.sort((a, b) => {
+    const aActive = a.ativo !== false;
+    const bActive = b.ativo !== false;
+    if (aActive !== bActive) {
+      return aActive ? -1 : 1;
+    }
+    const aOrd = Number(a.ordem);
+    const bOrd = Number(b.ordem);
+    const aHasOrd =
+      a.ordem !== undefined && a.ordem !== null && a.ordem !== '' && Number.isFinite(aOrd);
+    const bHasOrd =
+      b.ordem !== undefined && b.ordem !== null && b.ordem !== '' && Number.isFinite(bOrd);
+    if (aHasOrd && bHasOrd && aOrd !== bOrd) {
+      return aOrd - bOrd;
+    }
+    if (aHasOrd !== bHasOrd) {
+      return aHasOrd ? -1 : 1;
+    }
+    return a.nome.localeCompare(b.nome);
+  });
 }
 
 /**

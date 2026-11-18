@@ -979,6 +979,16 @@ export function getActiveMedicosOptions({ medicos = [], exames = [], detalhesExa
   const active = new Set(medicos.filter((m) => m.ativo !== false).map((m) => normalize(m.nome)));
   active.delete('');
 
+  const orderMap = new Map();
+  medicos.forEach((m) => {
+    if (m.ativo === false) return;
+    const n = normalize(m.nome);
+    const ord = Number(m.ordem);
+    if (n && m.ordem !== undefined && m.ordem !== null && m.ordem !== '' && Number.isFinite(ord)) {
+      orderMap.set(n, ord);
+    }
+  });
+
   const addIfActive = (name) => {
     const n = normalize(name);
     if (n && !inactive.has(n)) active.add(n);
@@ -991,5 +1001,15 @@ export function getActiveMedicosOptions({ medicos = [], exames = [], detalhesExa
   });
   examesConvenio.forEach((c) => addIfActive(c.medico));
 
-  return Array.from(active).sort((a, b) => a.localeCompare(b));
+  return Array.from(active).sort((a, b) => {
+    const aHasOrd = orderMap.has(a);
+    const bHasOrd = orderMap.has(b);
+    if (aHasOrd && bHasOrd && orderMap.get(a) !== orderMap.get(b)) {
+      return orderMap.get(a) - orderMap.get(b);
+    }
+    if (aHasOrd !== bHasOrd) {
+      return aHasOrd ? -1 : 1;
+    }
+    return a.localeCompare(b);
+  });
 }

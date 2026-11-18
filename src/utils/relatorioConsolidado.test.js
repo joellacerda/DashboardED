@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getConsolidatedFinancialReport } from './relatorioConsolidado';
 import { getAcquisitionPeriod, getHonorarioInPeriod } from './helpers';
-import { calculateDoctorRepasseInPeriod } from './repasseCalculation';
+import { calculateDoctorRepasseInPeriod, getAllDoctors } from './repasseCalculation';
 import { getDoctorPeriodMetrics } from './medicoAnalytics';
 import { syncConvenioToDetalhes, getData, setData, MODULES } from './storage';
 
@@ -330,5 +330,23 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
     expect(repasse.compensacaoConvenios).toBe(1038.25);
     expect(repasse.total).toBe(-522.6);
     expect(repasse.repasseLiquido).toBe(-522.6);
+  });
+
+  it('getAllDoctors posiciona médicos ativos no topo e respeita a ordem personalizada', () => {
+    const doctors = getAllDoctors({
+      medicos: [
+        { id: '1', nome: 'DR. ALBERTO', ativo: false, socio: false, ordem: 1 },
+        { id: '2', nome: 'DR. LEVI', ativo: true, socio: false, ordem: 2 },
+        { id: '3', nome: 'DR. OLIVEIRA', ativo: true, socio: true, ordem: 1 },
+        { id: '4', nome: 'DR. RAPHAEL', ativo: false, socio: false, ordem: 2 },
+      ],
+    });
+
+    expect(doctors.map((d) => d.nome)).toEqual([
+      'DR. OLIVEIRA',
+      'DR. LEVI',
+      'DR. ALBERTO',
+      'DR. RAPHAEL',
+    ]);
   });
 });

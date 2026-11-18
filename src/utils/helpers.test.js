@@ -418,4 +418,15 @@ describe('getActiveMedicosOptions', () => {
     expect(getActiveMedicosOptions()).toEqual([]);
     expect(getActiveMedicosOptions({ medicos: [{ nome: undefined }] })).toEqual([]);
   });
+
+  it('respeita a propriedade ordem dos médicos ativos quando definida', () => {
+    const lista = getActiveMedicosOptions({
+      medicos: [
+        { nome: 'DR. LEVI', ativo: true, ordem: 2 },
+        { nome: 'DR. OLIVEIRA', ativo: true, ordem: 1 },
+        { nome: 'DR. RAPHAEL', ativo: false, ordem: 1 },
+      ],
+    });
+    expect(lista).toEqual(['DR. OLIVEIRA', 'DR. LEVI']);
+  });
 });
