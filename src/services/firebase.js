@@ -296,33 +296,6 @@ export function sanitizeForFirestore(obj) {
   return clean;
 }
 
-// Save single item to Firestore in the background
-export async function saveToCloud(module, item) {
-  if (!isCloudConfigured() || !item || !item.id) return;
-  try {
-    const services = await getServices();
-    if (!services?.db) return;
-    const cleanItem = sanitizeForFirestore(item);
-    const docRef = services.sdk.firestoreMod.doc(services.db, module, item.id);
-    await services.sdk.firestoreMod.setDoc(docRef, cleanItem, { merge: true });
-  } catch (err) {
-    console.error(`Erro ao sincronizar item com a nuvem (${module}):`, err);
-  }
-}
-
-// Delete single item from Firestore in the background
-export async function deleteFromCloud(module, id) {
-  if (!isCloudConfigured() || !id) return;
-  try {
-    const services = await getServices();
-    if (!services?.db) return;
-    const docRef = services.sdk.firestoreMod.doc(services.db, module, id);
-    await services.sdk.firestoreMod.deleteDoc(docRef);
-  } catch (err) {
-    console.error(`Erro ao excluir item da nuvem (${module}):`, err);
-  }
-}
-
 // Upload all local data to Firestore
 export async function uploadAllLocalToCloud(modulesData) {
   const services = await getServices();

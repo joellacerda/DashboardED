@@ -15,30 +15,14 @@ import {
   syncConvenioToDetalhes,
   removeConvenioFromDetalhes,
   getAuditLogs,
+  getStorageUsageInfo,
+  previewArchiveData,
 } from './storage';
-
-// In-memory mock de localStorage para testes rápidos e isolados
-const mockStorage = (() => {
-  let store = {};
-  return {
-    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => {
-      store[key] = String(value);
-    },
-    removeItem: (key) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-})();
-
-globalThis.localStorage = mockStorage;
+import { calcLiquido } from '../pages/folha/useFolhaData';
 
 describe('Storage Layer — Fase 4', () => {
   beforeEach(() => {
-    mockStorage.clear();
+    localStorage.clear();
     clearMemoryCache();
     resetMigrationStatus();
   });
@@ -178,6 +162,54 @@ describe('Storage Layer — Fase 4', () => {
       expect(acoes).toContain('CRIAR');
       expect(acoes).toContain('EDITAR');
       expect(acoes).toContain('EXCLUIR');
+    });
+  });
+
+  describe('Monitoramento de Storage, Prévia de Arquivamento e Folha', () => {
+    it('getStorageUsageInfo contabiliza registros a partir do cache sem re-parsear JSON', () => {
+      setData(MODULES.exames, [
+        { id: 'e1', data: '2025-01-10', paciente: 'ANA' },
+        { id: 'e2', data: '2026-03-10', paciente: 'BRUNO' },
+      ]);
+      setData(MODULES.medicos, [{ id: 'm1', nome: 'DR. TESTE' }]);
+
+      const info = getStorageUsageInfo();
+      expect(info.totalRecords).toBe(3);
+      expect(info.totalBytes).toBeGreaterThan(0);
+      const examesCol = info.collections.find((c) => c.module === MODULES.exames);
+      expect(examesCol.count).toBe(2);
+    });
+
+    it('previewArchiveData separa registros anteriores à data de corte', () => {
+      setData(MODULES.exames, [
+        { id: 'old1', data: '2024-06-15', paciente: 'ANTIGO' },
+        { id: 'new1', data: '2026-02-20', paciente: 'RECENTE' },
+      ]);
+      setData(MODULES.fluxoCaixa, [
+        { id: 'f_old', data: '2024-11-01', tipo: 'entrada', valor: 300 },
+        { id: 'f_new', data: '2026-03-01', tipo: 'saida', valor: 100 },
+      ]);
+
+      const preview = previewArchiveData('2025-01-01');
+      expect(preview.totalArchived).toBe(2);
+      expect(preview.totalRemaining).toBe(2);
+      expect(preview.modules.exames.archiveCount).toBe(1);
+      expect(preview.modules.exames.keepCount).toBe(1);
+      expect(preview.modules.fluxoCaixa.archiveCount).toBe(1);
+      expect(preview.modules.fluxoCaixa.keepCount).toBe(1);
+    });
+
+    it('calcLiquido calcula salário líquido somando proventos e subtraindo descontos', () => {
+      expect(
+        calcLiquido({
+          salarioBase: 2500,
+          valeAlimentacao: 400,
+          valeTransporte: 200,
+          extras: 150,
+          produtividade: 300,
+          descontos: 250,
+        })
+      ).toBe(3300);
     });
   });
 });

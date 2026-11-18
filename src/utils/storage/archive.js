@@ -2,6 +2,7 @@ import {
   getData,
   setData,
   getAllData,
+  getLocalStorage,
   MODULE_KEYS,
   STORAGE_KEYS,
   notifyDataChanged,
@@ -41,7 +42,8 @@ export const MODULE_LABELS = Object.freeze({
  * Calcula detalhadamente o uso do localStorage no domínio atual.
  */
 export function getStorageUsageInfo() {
-  if (typeof window === 'undefined' || !window.localStorage) {
+  const storage = getLocalStorage();
+  if (!storage) {
     return {
       totalBytes: 0,
       formattedTotal: '0 B',
@@ -61,7 +63,7 @@ export function getStorageUsageInfo() {
   // 1. Analisa cada coleção do sistema
   MODULE_KEYS.forEach((mod) => {
     const storageKey = STORAGE_KEYS[mod];
-    const raw = localStorage.getItem(storageKey);
+    const raw = storage.getItem(storageKey);
     let bytes = 0;
     let count = 0;
 
@@ -91,11 +93,11 @@ export function getStorageUsageInfo() {
   let otherBytes = 0;
   let otherKeysCount = 0;
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
+    for (let i = 0; i < storage.length; i++) {
+      const k = storage.key(i);
       if (!k) continue;
       if (!recognizedKeys.has(k)) {
-        const v = localStorage.getItem(k) || '';
+        const v = storage.getItem(k) || '';
         const b = (k.length + v.length) * 2;
         otherBytes += b;
         totalBytes += b;

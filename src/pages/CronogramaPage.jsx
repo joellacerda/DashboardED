@@ -24,8 +24,6 @@ export default function CronogramaPage() {
   const [activeSlotTarget, setActiveSlotTarget] = useState(null); // { slot, sala, day, turnoInfo }
   const [salasModalOpen, setSalasModalOpen] = useState(false);
 
-  const refresh = () => {};
-
   // Visible active rooms sorted by ordem
   const visibleSalas = useMemo(() => {
     return salas
@@ -118,7 +116,6 @@ export default function CronogramaPage() {
       dia: diaId,
     };
     saveCronogramaSlot(normalizedData);
-    refresh();
     if (toast?.show) {
       toast.show(slotData.trancado ? 'Turno trancado!' : 'Escala salva com sucesso!', 'success');
     }
@@ -126,7 +123,6 @@ export default function CronogramaPage() {
 
   const handleDeleteSlot = (id) => {
     deleteCronogramaSlot(id);
-    refresh();
     if (toast?.show) {
       toast.show('Turno liberado!', 'info');
     }
@@ -141,7 +137,6 @@ export default function CronogramaPage() {
     if (existing?.trancado) {
       // Unlock
       deleteCronogramaSlot(existing.id);
-      refresh();
       if (toast?.show) {
         toast.show(`Turno destrancado (${sala.nome})`, 'success');
       }
@@ -162,7 +157,6 @@ export default function CronogramaPage() {
         updatedAt: new Date().toISOString(),
       };
       saveCronogramaSlot(newSlot);
-      refresh();
       if (toast?.show) {
         toast.show(`Turno trancado (${sala.nome})`, 'info');
       }

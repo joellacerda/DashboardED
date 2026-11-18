@@ -101,8 +101,6 @@ export default function FluxoCaixaPage() {
     setCurrentPage(1);
   }, [period, search, typeFilter, categoryFilter]);
 
-  const refresh = () => {};
-
   const filtered = useMemo(() => {
     let items = data.filter((f) => isDateInPeriod(f.data, period));
     if (search) {
@@ -235,7 +233,6 @@ function formatDescricao(nome) {
     } else {
       addItem(MODULES.fluxoCaixa, sanitizedForm);
     }
-    refresh();
     setModalOpen(false);
     toast.success(editId ? 'Lançamento atualizado no Fluxo de Caixa!' : 'Lançamento registrado no Fluxo de Caixa!');
   };
@@ -293,7 +290,6 @@ function formatDescricao(nome) {
   const handleDelete = () => {
     if (deleteId) {
       deleteItem(MODULES.fluxoCaixa, deleteId);
-      refresh();
       toast.success('Lançamento excluído do Fluxo de Caixa.');
     }
   };

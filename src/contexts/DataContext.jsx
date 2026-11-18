@@ -14,7 +14,6 @@ import {
   saveSalasConfig as storageSaveSalasConfig,
   saveCronogramaSlot as storageSaveCronogramaSlot,
   deleteCronogramaSlot as storageDeleteCronogramaSlot,
-  replicateWeekSchedule as storageReplicateWeekSchedule,
   getStorageUsageInfo,
   previewArchiveData,
   archiveAndPurgeData,
@@ -209,16 +208,6 @@ export function DataProvider({ children }) {
     });
   }, []);
 
-  const replicateWeekSchedule = useCallback((sourceDays, targetDays, overwrite) => {
-    const result = storageReplicateWeekSchedule(sourceDays, targetDays, overwrite);
-    const freshSlots = getData(MODULES.cronogramaSalas);
-    setDataState((prev) => ({
-      ...prev,
-      cronogramaSalas: freshSlots,
-    }));
-    return result;
-  }, []);
-
   // Lista dinâmica e reativa de médicos ativos para seleção em exames e cronograma
   const activeMedicosOptions = useMemo(
     () =>
@@ -318,7 +307,6 @@ export function DataProvider({ children }) {
       saveSalasConfig,
       saveCronogramaSlot,
       deleteCronogramaSlot,
-      replicateWeekSchedule,
     }),
     [
       refreshStorageInfo,
@@ -339,7 +327,6 @@ export function DataProvider({ children }) {
       saveSalasConfig,
       saveCronogramaSlot,
       deleteCronogramaSlot,
-      replicateWeekSchedule,
     ]
   );
 
