@@ -4,11 +4,10 @@ import {
   addItem,
   updateItem,
   deleteItem,
-  notifyDataChanged,
   MODULES,
 } from './core';
 import { enqueueSyncOperation } from '../../services/syncQueue';
-import { getAcquisitionPeriod, isDateInPeriod, getTodayISO } from '../helpers';
+import { getAcquisitionPeriod, isDateInPeriod, getTodayISO, roundCurrency } from '../helpers';
 
 function hasDetalheRecordChanged(existing, next) {
   if (!existing || !next) return true;
@@ -177,20 +176,20 @@ export function syncConvenioToDetalhes(convenioItem, forceOverride = false) {
     divisaoTipo: 'valor',
     porcentagemMedico1: pctMed1,
     porcentagemMedico2: pctMed2,
-    valorMedico1: Math.round(repMed1 * 100) / 100,
-    valorMedico2: Math.round(repMed2 * 100) / 100,
-    honorariosMedicos: Math.round(repasseTotal * 100) / 100,
-    taxaClinica: Math.round(direitoClinica * 100) / 100,
-    valorAcessorios: Math.round((Number(convenioItem.valorAcessorio) || 0) * 100) / 100,
+    valorMedico1: roundCurrency(repMed1),
+    valorMedico2: roundCurrency(repMed2),
+    honorariosMedicos: roundCurrency(repasseTotal),
+    taxaClinica: roundCurrency(direitoClinica),
+    valorAcessorios: roundCurrency(Number(convenioItem.valorAcessorio) || 0),
     acessorioParaMedico: false,
-    valorCompensacaoClinica: Math.round((Number(convenioItem.valorCompensacaoClinica) || 0) * 100) / 100,
-    valorPagamento: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
+    valorCompensacaoClinica: roundCurrency(Number(convenioItem.valorCompensacaoClinica) || 0),
+    valorPagamento: roundCurrency(total > 0 ? total : valClinicaNum),
     numParcelas: '1',
     formaPagamento: formaStr,
     pagamentos: [
       {
         forma: formaStr,
-        valor: Math.round((total > 0 ? total : valClinicaNum) * 100) / 100,
+        valor: roundCurrency(total > 0 ? total : valClinicaNum),
         parcelas: 1,
       },
     ],
@@ -314,17 +313,13 @@ export function syncConveniosFluxoConsolidado() {
       let pLabel = item.fluxoPeriodoLabel;
 
       if (!pStart || !pEnd || !isDateInPeriod(paymentDate, { start: pStart, end: pEnd })) {
-        try {
-          const p = getAcquisitionPeriod(new Date(paymentDate.replace(/-/g, '/')));
-          pStart = p.start;
-          pEnd = p.end;
-          pLabel = p.label;
-        } catch {
-          const p = getAcquisitionPeriod();
-          pStart = p.start;
-          pEnd = p.end;
-          pLabel = p.label;
-        }
+        const parsedDate = new Date(String(paymentDate).slice(0, 10) + 'T00:00:00');
+        const p = !Number.isNaN(parsedDate.getTime())
+          ? getAcquisitionPeriod(parsedDate)
+          : getAcquisitionPeriod();
+        pStart = p.start;
+        pEnd = p.end;
+        pLabel = p.label;
       }
 
       const groupKey = `${destino.key}_${pStart}`;
@@ -418,7 +413,7 @@ export function syncConveniosFluxoConsolidado() {
         return false;
       });
 
-      const roundedValor = Math.round(grp.totalValor * 100) / 100;
+      const roundedValor = roundCurrency(grp.totalValor);
       const targetDate = grp.latestDate || grp.periodStart;
 
       const consolidatedRecord = {
@@ -449,6 +444,9 @@ export function syncConveniosFluxoConsolidado() {
           existing.convenioConsolidado !== grp.convenioKey ||
           existing.qtdExames !== grp.examIds.length
         ) {
+          if (existing.id && existing.id !== syncId) {
+            enqueueFluxoDelete(existing.id);
+          }
           const merged = { ...existing, ...consolidatedRecord };
           nextFluxo[existingIdx] = merged;
           enqueueFluxoUpsert(merged);
@@ -488,7 +486,6 @@ export function syncConveniosFluxoConsolidado() {
 
     if (fluxoChanged) {
       setData(MODULES.fluxoCaixa, finalFluxo);
-      notifyDataChanged(MODULES.fluxoCaixa);
     }
 
     return finalFluxo;

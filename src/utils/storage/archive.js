@@ -10,19 +10,43 @@ import {
 import { addAuditLog } from './audit';
 import { enqueueSyncOperation } from '../../services/syncQueue';
 import { recordBackupDone } from '../security';
+import { getAllInstallmentPeriods, downloadBlob, formatDateISO } from '../helpers';
 
 export const ESTIMATED_LOCALSTORAGE_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB
 
 /**
- * Formata bytes em formato legível (B, KB, MB, GB).
+ * Formata bytes em formato legível (B, KB, MB, GB, TB).
  */
 export function formatBytes(bytes, decimals = 1) {
-  if (bytes === 0 || !bytes || isNaN(bytes)) return '0 B';
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+/**
+ * Determina se um registro pode ser arquivado com segurança sem perder parcelas futuras
+ * (ex: cartão parcelado em 10x) ou recebimentos de convênio posteriores à data de corte.
+ */
+function isItemEligibleForArchive(mod, item, cutoffDate) {
+  if (!item || !item.data || item.data >= cutoffDate) return false;
+
+  if (mod === 'detalhesExames') {
+    const periods = getAllInstallmentPeriods(item);
+    if (periods.length > 0 && periods.some((p) => p.end >= cutoffDate)) {
+      return false;
+    }
+  }
+
+  if (mod === 'examesConvenio') {
+    if (item.fluxoData && item.fluxoData >= cutoffDate) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export const MODULE_LABELS = Object.freeze({
@@ -165,7 +189,7 @@ export function previewArchiveData(cutoffDate) {
     const toKeep = [];
 
     list.forEach((item) => {
-      if (item && item.data && item.data < cutoffDate) {
+      if (isItemEligibleForArchive(mod, item, cutoffDate)) {
         toArchive.push(item);
       } else {
         toKeep.push(item);
@@ -212,7 +236,7 @@ export async function archiveAndPurgeData(cutoffDate) {
     const toKeep = [];
 
     list.forEach((item) => {
-      if (item && item.data && item.data < cutoffDate) {
+      if (isItemEligibleForArchive(mod, item, cutoffDate)) {
         toArchive.push(item);
       } else {
         toKeep.push(item);
@@ -260,14 +284,7 @@ export async function archiveAndPurgeData(cutoffDate) {
 
   try {
     const blob = new Blob([backupJsonString], { type: 'application/json;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', backupFileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, backupFileName);
     recordBackupDone();
   } catch (downloadErr) {
     console.error('Falha ao disparar download do backup pré-expurgo:', downloadErr);
@@ -332,13 +349,6 @@ export function exportAllDataAsJSON() {
   };
   const str = JSON.stringify(payload, null, 2);
   const blob = new Blob([str], { type: 'application/json;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `backup_endodiagnose_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `backup_endodiagnose_${formatDateISO(new Date())}.json`);
   recordBackupDone();
 }

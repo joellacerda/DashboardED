@@ -1,10 +1,27 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useId } from 'react';
+
+// Pilha global de modais abertos: apenas o modal do topo responde a Escape/Tab
+const openModalStack = [];
+
+function getVisibleFocusableElements(container) {
+  if (!container) return [];
+  const candidates = container.querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  return Array.from(candidates).filter((el) => {
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+  });
+}
 
 export default function Modal({ isOpen, onClose, title, children, footer, className = '', maxWidth }) {
+  const modalId = useId();
+  const titleId = `${modalId}-title`;
   const overlayRef = useRef(null);
   const modalRef = useRef(null);
   const previousActiveElementRef = useRef(null);
   const onCloseRef = useRef(onClose);
+  const mouseDownOnOverlayRef = useRef(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -13,68 +30,58 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
   useEffect(() => {
     if (!isOpen) return;
 
+    openModalStack.push(modalId);
     previousActiveElementRef.current = document.activeElement;
 
-    // Foca o primeiro elemento apropriado do modal
     const focusTimer = setTimeout(() => {
       if (!modalRef.current) return;
+      if (openModalStack[openModalStack.length - 1] !== modalId) return;
 
-      // Se o usuário já focou algum elemento dentro do modal, não rouba o foco
       if (modalRef.current.contains(document.activeElement) && document.activeElement !== modalRef.current) {
         return;
       }
 
-      // Prioridade:
-      // 1. Elemento com autofocus explícito
-      // 2. Primeiro campo interativo no corpo (.modal-body)
-      // 3. Primeiro botão no rodapé (.modal-footer)
-      // 4. Qualquer elemento focável no modal
-      // 5. O próprio container do modal
       const autoFocusEl = modalRef.current.querySelector('[autofocus]');
-      if (autoFocusEl) {
+      if (autoFocusEl && autoFocusEl.offsetParent !== null) {
         autoFocusEl.focus();
         return;
       }
 
-      const bodyFocusable = modalRef.current.querySelector(
-        '.modal-body input:not([disabled]), .modal-body select:not([disabled]), .modal-body textarea:not([disabled]), .modal-body button:not([disabled]), .modal-body [tabindex]:not([tabindex="-1"])'
-      );
-      if (bodyFocusable) {
-        bodyFocusable.focus();
+      const bodyEl = modalRef.current.querySelector('.modal-body');
+      const bodyFocusable = getVisibleFocusableElements(bodyEl);
+      if (bodyFocusable.length > 0) {
+        bodyFocusable[0].focus();
         return;
       }
 
-      const footerFocusable = modalRef.current.querySelector(
-        '.modal-footer button:not([disabled]), .modal-footer [tabindex]:not([tabindex="-1"])'
-      );
-      if (footerFocusable) {
-        footerFocusable.focus();
+      const footerEl = modalRef.current.querySelector('.modal-footer');
+      const footerFocusable = getVisibleFocusableElements(footerEl);
+      if (footerFocusable.length > 0) {
+        footerFocusable[0].focus();
         return;
       }
 
-      const focusable = modalRef.current.querySelectorAll(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length > 0) {
-        focusable[0].focus();
+      const allFocusable = getVisibleFocusableElements(modalRef.current);
+      if (allFocusable.length > 0) {
+        allFocusable[0].focus();
       } else {
         modalRef.current.focus();
       }
     }, 50);
 
     const handleKey = (e) => {
+      // Apenas o modal no topo da pilha captura Escape e Tab
+      if (openModalStack[openModalStack.length - 1] !== modalId) return;
+
       if (e.key === 'Escape') {
+        e.stopPropagation();
         onCloseRef.current?.();
         return;
       }
 
       if (e.key === 'Tab') {
         if (!modalRef.current) return;
-        const focusable = Array.from(
-          modalRef.current.querySelectorAll(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        );
+        const focusable = getVisibleFocusableElements(modalRef.current);
 
         if (focusable.length === 0) {
           e.preventDefault();
@@ -84,10 +91,10 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
 
-        if (e.shiftKey && document.activeElement === first) {
+        if (e.shiftKey && (document.activeElement === first || !modalRef.current.contains(document.activeElement))) {
           e.preventDefault();
           last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
+        } else if (!e.shiftKey && (document.activeElement === last || !modalRef.current.contains(document.activeElement))) {
           e.preventDefault();
           first.focus();
         }
@@ -98,11 +105,17 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
     return () => {
       clearTimeout(focusTimer);
       document.removeEventListener('keydown', handleKey);
-      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+      const idx = openModalStack.lastIndexOf(modalId);
+      if (idx !== -1) openModalStack.splice(idx, 1);
+      if (
+        openModalStack.length === 0 &&
+        previousActiveElementRef.current &&
+        typeof previousActiveElementRef.current.focus === 'function'
+      ) {
         previousActiveElementRef.current.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, modalId]);
 
   if (!isOpen) return null;
 
@@ -110,8 +123,14 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
     <div
       className="modal-overlay"
       ref={overlayRef}
+      onMouseDown={(e) => {
+        mouseDownOnOverlayRef.current = e.target === overlayRef.current;
+      }}
       onClick={(e) => {
-        if (e.target === overlayRef.current) onCloseRef.current?.();
+        if (mouseDownOnOverlayRef.current && e.target === overlayRef.current) {
+          onCloseRef.current?.();
+        }
+        mouseDownOnOverlayRef.current = false;
       }}
     >
       <div
@@ -121,11 +140,16 @@ export default function Modal({ isOpen, onClose, title, children, footer, classN
         style={maxWidth ? { width: `min(100%, ${maxWidth})` } : undefined}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
       >
         <div className="modal-header">
-          <h2 className="modal-title">{title}</h2>
-          <button className="modal-close" onClick={() => onCloseRef.current?.()} aria-label="Fechar">
+          <h2 id={titleId} className="modal-title">{title}</h2>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={() => onCloseRef.current?.()}
+            aria-label="Fechar"
+          >
             ✕
           </button>
         </div>

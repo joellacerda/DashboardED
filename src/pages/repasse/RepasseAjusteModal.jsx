@@ -17,16 +17,16 @@ export default function RepasseAjusteModal({
       title={`Ajustes de Repasse — ${selectedMedico?.nome || ''}`}
       footer={
         <>
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
-          <button className="btn btn-primary" onClick={handleSaveAjuste}>
+          <button type="submit" form="repasse-ajuste-form" className="btn btn-primary">
             Salvar Ajustes
           </button>
         </>
       }
     >
-      <form onSubmit={handleSaveAjuste} autoComplete="off">
+      <form id="repasse-ajuste-form" onSubmit={handleSaveAjuste} autoComplete="off">
         <div className="modal-form-grid">
           {selectedRow?.compensacaoConvenios > 0 && (
             <div

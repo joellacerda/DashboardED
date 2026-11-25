@@ -117,8 +117,9 @@ export default function FluxoCaixaPage() {
     if (categoryFilter) {
       items = items.filter((e) => e.categoria === categoryFilter);
     }
-    // Ordenar por data decrescente (e desempate por criação mais recente)
-    return items.sort((a, b) => {
+    // Ordenar por data decrescente (O(N log N) com índice em Map, evitando data.indexOf O(N²))
+    const indexMap = new Map(data.map((item, idx) => [item, idx]));
+    return [...items].sort((a, b) => {
       const dateComparison = (b.data || '').localeCompare(a.data || '');
       if (dateComparison !== 0) return dateComparison;
       if (a.createdAt && b.createdAt) {
@@ -126,9 +127,7 @@ export default function FluxoCaixaPage() {
       }
       if (a.createdAt) return -1;
       if (b.createdAt) return 1;
-      const indexA = data.indexOf(a);
-      const indexB = data.indexOf(b);
-      return indexB - indexA;
+      return (indexMap.get(b) ?? 0) - (indexMap.get(a) ?? 0);
     });
   }, [data, period, search, typeFilter, categoryFilter]);
 
@@ -159,13 +158,19 @@ export default function FluxoCaixaPage() {
     return Array.from(set).sort();
   }, [data, typeFilter]);
 
-  const totalEntradas = filtered
-    .filter((f) => f.tipo === 'entrada')
-    .reduce((s, f) => s + Number(f.valor), 0);
-  const totalSaidas = filtered
-    .filter((f) => f.tipo === 'saida')
-    .reduce((s, f) => s + Number(f.valor), 0);
-  const saldo = totalEntradas - totalSaidas;
+  const { totalEntradas, totalSaidas, saldo } = useMemo(() => {
+    let entradas = 0;
+    let saidas = 0;
+    for (const f of filtered) {
+      const val = Number(f.valor) || 0;
+      if (f.tipo === 'entrada') entradas += val;
+      else if (f.tipo === 'saida') saidas += val;
+    }
+    return { totalEntradas: entradas, totalSaidas: saidas, saldo: entradas - saidas };
+  }, [filtered]);
+
+  const isAutoLinkedEntry = (item) =>
+    Boolean(item?.isConvenioConsolidado || item?.detalheId || item?.folhaPeriodoStart);
 
   const openNew = () => {
     setEditId(null);
@@ -176,6 +181,16 @@ export default function FluxoCaixaPage() {
   };
 
   const openEdit = (item) => {
+    if (isAutoLinkedEntry(item)) {
+      toast.warning(
+        item.isConvenioConsolidado
+          ? 'Este lançamento é consolidado automaticamente pela tela de Exames (Convênios). Edite os exames na origem.'
+          : item.folhaPeriodoStart
+            ? 'Este lançamento é gerado pela Folha de Pagamento. Atualize-o pela aba Folha.'
+            : 'Este lançamento é vinculado a Detalhes de Exames. Edite o exame na aba Detalhes.'
+      );
+      return;
+    }
     setEditId(item.id);
     setForm({
       data: item.data,
@@ -490,12 +505,24 @@ function formatDescricao(nome) {
                       </td>
                       <td>
                         <div className="action-buttons">
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
-                            ✏️
-                          </button>
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
-                            🗑️
-                          </button>
+                          {isAutoLinkedEntry(item) ? (
+                            <span
+                              className="badge"
+                              style={{ fontSize: '10px', opacity: 0.8 }}
+                              title="Lançamento sincronizado automaticamente com sua tela de origem"
+                            >
+                              🔗 Automático
+                            </span>
+                          ) : (
+                            <>
+                              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)} title="Editar">
+                                ✏️
+                              </button>
+                              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => setDeleteId(item.id)} title="Excluir">
+                                🗑️
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -537,12 +564,12 @@ function formatDescricao(nome) {
         title={editId ? 'Editar Movimentação' : 'Nova Movimentação'}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSave}>{editId ? 'Salvar' : 'Cadastrar'}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" form="fluxo-caixa-form" className="btn btn-primary">{editId ? 'Salvar' : 'Cadastrar'}</button>
           </>
         }
       >
-        <form onSubmit={handleSave} noValidate autoComplete="off">
+        <form id="fluxo-caixa-form" onSubmit={handleSave} noValidate autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group">
               <label className="input-label">Data <span className="required">*</span></label>
@@ -583,7 +610,12 @@ function formatDescricao(nome) {
                 onChange={(e) => setForm({ ...form, categoria: e.target.value })}
                 onBlur={() => markTouched('categoria')}
               >
-                {(form.tipo === 'entrada' ? CATEGORIAS_ENTRADA : CATEGORIAS_SAIDA).map((cat) => (
+                {Array.from(
+                  new Set([
+                    ...(form.tipo === 'entrada' ? CATEGORIAS_ENTRADA : CATEGORIAS_SAIDA),
+                    ...(form.categoria ? [form.categoria] : []),
+                  ])
+                ).map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>

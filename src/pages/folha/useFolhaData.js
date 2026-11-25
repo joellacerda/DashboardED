@@ -51,6 +51,7 @@ export function useFolhaData() {
   const [submitted, setSubmitted] = useState(false);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState(null);
+  const [confirmCopyOpen, setConfirmCopyOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -138,14 +139,53 @@ export function useFolhaData() {
           (e.cargo || '').toLowerCase().includes(q)
       );
     }
-    return items.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    return [...items].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   }, [resolvedEmployees, search]);
 
-  const totalFolha = filtered.reduce((s, f) => s + f.liquido, 0);
-  const totalBase = filtered.reduce((s, f) => s + f.salarioBase, 0);
-  const totalBeneficios = filtered.reduce((s, f) => s + f.valeAlimentacao + f.valeTransporte, 0);
-  const totalVariaveis = filtered.reduce((s, f) => s + f.extras + f.produtividade, 0);
-  const totalDescontos = filtered.reduce((s, f) => s + f.descontos, 0);
+  // Totais exibidos (refletem filtro de busca atual)
+  const {
+    totalFolha,
+    totalBase,
+    totalBeneficios,
+    totalVariaveis,
+    totalDescontos,
+    totalVA,
+    totalVT,
+    totalExtras,
+    totalProdutividade,
+  } = useMemo(() => {
+    return filtered.reduce(
+      (acc, f) => {
+        acc.totalFolha += f.liquido;
+        acc.totalBase += f.salarioBase;
+        acc.totalVA += f.valeAlimentacao;
+        acc.totalVT += f.valeTransporte;
+        acc.totalBeneficios += f.valeAlimentacao + f.valeTransporte;
+        acc.totalExtras += f.extras;
+        acc.totalProdutividade += f.produtividade;
+        acc.totalVariaveis += f.extras + f.produtividade;
+        acc.totalDescontos += f.descontos;
+        return acc;
+      },
+      {
+        totalFolha: 0,
+        totalBase: 0,
+        totalBeneficios: 0,
+        totalVariaveis: 0,
+        totalDescontos: 0,
+        totalVA: 0,
+        totalVT: 0,
+        totalExtras: 0,
+        totalProdutividade: 0,
+      }
+    );
+  }, [filtered]);
+
+  // Total REAL da folha no período (independente da busca), usado no lançamento do Fluxo de Caixa
+  const totalFolhaPeriodo = useMemo(
+    () => resolvedEmployees.reduce((s, f) => s + f.liquido, 0),
+    [resolvedEmployees]
+  );
 
   const totalPages = Math.ceil(filtered.length / pageSize) || 1;
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -244,7 +284,6 @@ export function useFolhaData() {
     const employeeBase = {
       nome: nomeTrimmed,
       cargo: form.cargo ? form.cargo.trim().toUpperCase() : '',
-      salarioBase: salarioBaseNum,
     };
 
     if (editId) {
@@ -258,9 +297,11 @@ export function useFolhaData() {
         [period.start]: periodEntry,
       };
 
+      // Só atualiza salarioBase raiz se estiver editando o período atual (preserva histórico de períodos passados)
       const updatedEmployee = {
         ...existing,
         ...employeeBase,
+        ...(isCurrentPeriod ? { salarioBase: salarioBaseNum } : {}),
         periodos: updatedPeriodos,
       };
 
@@ -269,6 +310,7 @@ export function useFolhaData() {
     } else {
       const newEmployee = {
         ...employeeBase,
+        salarioBase: salarioBaseNum,
         ativo: true,
         periodos: {
           [period.start]: periodEntry,
@@ -283,9 +325,35 @@ export function useFolhaData() {
   };
 
   const handleDelete = () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const existing =
+      data.find((emp) => String(emp.id) === String(deleteId)) ||
+      getItem(MODULES.folhaPagamento, deleteId);
+    const otherPeriodsCount = existing?.periodos
+      ? Object.keys(existing.periodos).filter((k) => k !== period.start).length
+      : 0;
+
+    if (existing && otherPeriodsCount > 0) {
+      // Soft-delete: preserva histórico de competências anteriores e remove apenas do período atual em diante
+      const nextPeriodos = { ...(existing.periodos || {}) };
+      delete nextPeriodos[period.start];
+      updateItem(MODULES.folhaPagamento, deleteId, {
+        ativo: false,
+        periodos: nextPeriodos,
+      });
+      toast.success('Colaborador inativado (histórico de períodos anteriores preservado).');
+    } else {
       deleteItem(MODULES.folhaPagamento, deleteId);
       toast.success('Colaborador removido da folha.');
+    }
+  };
+
+  const requestCopyFromPrevious = () => {
+    const hasExistingInPeriod = data.some((emp) => emp.ativo !== false && emp.periodos?.[period.start]);
+    if (hasExistingInPeriod) {
+      setConfirmCopyOpen(true);
+    } else {
+      handleCopyFromPrevious();
     }
   };
 
@@ -323,8 +391,8 @@ export function useFolhaData() {
   };
 
   const handleLancarFluxo = () => {
-    if (totalFolha <= 0) {
-      toast.warning('O valor total líquido da folha deve ser maior que zero.');
+    if (totalFolhaPeriodo <= 0) {
+      toast.warning('O valor total líquido da folha no período deve ser maior que zero.');
       return;
     }
 
@@ -338,23 +406,23 @@ export function useFolhaData() {
           ? folhaLancamentoNoCaixa.data
           : defaultDate;
       updateItem(MODULES.fluxoCaixa, folhaLancamentoNoCaixa.id, {
-        valor: totalFolha,
+        valor: totalFolhaPeriodo,
         nome: descricao,
         data: existingDate,
         folhaPeriodoStart: period.start,
         updatedAt: new Date().toISOString(),
       });
-      toast.success(`Lançamento no Fluxo de Caixa atualizado para ${formatCurrency(totalFolha)}!`);
+      toast.success(`Lançamento no Fluxo de Caixa atualizado para ${formatCurrency(totalFolhaPeriodo)}!`);
     } else {
       addItem(MODULES.fluxoCaixa, {
         data: defaultDate,
         nome: descricao,
         categoria: 'Folha de Pagamento / Pessoal',
         tipo: 'saida',
-        valor: totalFolha,
+        valor: totalFolhaPeriodo,
         folhaPeriodoStart: period.start,
       });
-      toast.success(`Folha de ${formatCurrency(totalFolha)} lançada com sucesso no Fluxo de Caixa!`);
+      toast.success(`Folha de ${formatCurrency(totalFolhaPeriodo)} lançada com sucesso no Fluxo de Caixa!`);
     }
   };
 
@@ -375,13 +443,21 @@ export function useFolhaData() {
     setPageSize,
     safeCurrentPage,
     totalFolha,
+    totalFolhaPeriodo,
     totalBase,
     totalBeneficios,
     totalVariaveis,
     totalDescontos,
+    totalVA,
+    totalVT,
+    totalExtras,
+    totalProdutividade,
     folhaLancamentoNoCaixa,
     handleLancarFluxo,
     handleCopyFromPrevious,
+    requestCopyFromPrevious,
+    confirmCopyOpen,
+    setConfirmCopyOpen,
     modalOpen,
     setModalOpen,
     editId,

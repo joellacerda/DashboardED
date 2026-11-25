@@ -93,7 +93,7 @@ export default function PartilhaCardsAndAlerts({
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
               {splitCalculations.isPolipectomiaMode
-                ? `Honorários: ${formatCurrency(splitCalculations.honorariosBaseNum)} + 50% Polip: ${formatCurrency(splitCalculations.partePolipMedico)}`
+                ? `Honorários: ${formatCurrency(splitCalculations.honorariosBaseNum)} + ${splitCalculations.pctPolipMedico}% Polip: ${formatCurrency(splitCalculations.partePolipMedico)}`
                 : `Recebido direto: ${formatCurrency(splitCalculations.valMedicoNum)}`}
             </div>
             {splitCalculations.isPolipectomiaMode && splitCalculations.valorDevolverClinica > 0 && (
@@ -119,7 +119,7 @@ export default function PartilhaCardsAndAlerts({
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
               {splitCalculations.isPolipectomiaMode
-                ? `Taxa: ${formatCurrency(splitCalculations.taxaSalaNum)} + 50% Polip: ${formatCurrency(splitCalculations.partePolipClinica)} + Alça: ${formatCurrency(splitCalculations.parteAcessorioClinica)}`
+                ? `Taxa: ${formatCurrency(splitCalculations.taxaSalaNum)} + ${splitCalculations.pctPolipClinica}% Polip: ${formatCurrency(splitCalculations.partePolipClinica)} + Alça: ${formatCurrency(splitCalculations.parteAcessorioClinica)}`
                 : `Recebido direto: ${formatCurrency(splitCalculations.valClinicaNum)}`}
             </div>
             <div
@@ -171,17 +171,16 @@ export default function PartilhaCardsAndAlerts({
                       fontSize: 'var(--text-xs)',
                     }}
                   >
-                    👉 <strong>Compensação Devida à Clínica (Centralizada no Dr. Oliveira):</strong> Como a clínica tem
+                    👉 <strong>Compensação Devida à Clínica:</strong> Como a clínica tem
                     direito a{' '}
-                    <strong>50% da polipectomia ({formatCurrency(splitCalculations.partePolipClinica)})</strong>{' '}
+                    <strong>{splitCalculations.pctPolipClinica}% da polipectomia ({formatCurrency(splitCalculations.partePolipClinica)})</strong>{' '}
                     e{' '}
                     <strong>100% do acessório ({formatCurrency(splitCalculations.parteAcessorioClinica)})</strong>{' '}
                     pela compra do material descartável, o valor de{' '}
                     <strong style={{ color: 'var(--color-emerald)', fontSize: 'var(--text-sm)' }}>
                       {formatCurrency(splitCalculations.valorDevolverClinica)}
                     </strong>{' '}
-                    será lançado automaticamente na coluna de <strong>Compensações</strong> do{' '}
-                    <strong>DR. OLIVEIRA</strong>.
+                    será lançado automaticamente na coluna de <strong>Compensações</strong> do médico titular das compensações de convênio.
                   </div>
                 ) : (
                   <div

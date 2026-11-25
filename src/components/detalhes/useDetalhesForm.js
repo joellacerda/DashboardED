@@ -108,6 +108,42 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
       if (form.divisaoTipo === 'porcentagem') {
         const sumErr = validatePercentageSum(form.porcentagemMedico1, form.porcentagemMedico2);
         if (sumErr) errs.divisao = sumErr;
+      } else if (form.divisaoTipo === 'valor') {
+        const v1 = Number(form.valorMedico1);
+        const v2 = Number(form.valorMedico2);
+        if (!Number.isFinite(v1) || !Number.isFinite(v2) || v1 < 0 || v2 < 0) {
+          errs.divisao = 'Os valores da divisão devem ser números maiores ou iguais a zero.';
+        } else {
+          const totalHon = roundCurrency(Number(form.honorariosMedicos) || 0);
+          const sumVals = roundCurrency(v1 + v2);
+          if (totalHon > 0 && Math.abs(sumVals - totalHon) > 0.02) {
+            errs.divisao = `A soma dos valores (${sumVals.toFixed(2)}) deve coincidir com o total de honorários (${totalHon.toFixed(2)}).`;
+          }
+        }
+      }
+    }
+
+    const nonNegFields = [
+      ['valorRetidoTaxas', 'Taxa de cartão'],
+      ['valorNotaFiscal', 'Valor da Nota Fiscal'],
+      ['valorAnestesista', 'Valor do Anestesista'],
+      ['taxaClinica', 'Taxa Clínica'],
+      ['valorAcessorios', 'Valor de Acessórios'],
+      ['valorBiopsia', 'Valor de Biópsia'],
+      ['honorariosMedicos', 'Honorários Médicos'],
+    ];
+    for (const [key, label] of nonNegFields) {
+      if (form[key] !== '' && form[key] !== null && form[key] !== undefined) {
+        const num = Number(form[key]);
+        if (!Number.isFinite(num) || num < 0) {
+          errs[key] = `${label} não pode ser negativo.`;
+        }
+      }
+    }
+    if (form.notaFiscalPercentual !== '' && form.notaFiscalPercentual !== null && form.notaFiscalPercentual !== undefined) {
+      const nfPct = Number(form.notaFiscalPercentual);
+      if (!Number.isFinite(nfPct) || nfPct < 0 || nfPct > 100) {
+        errs.notaFiscalPercentual = 'O percentual de Nota Fiscal deve estar entre 0% e 100%.';
       }
     }
 
@@ -121,6 +157,10 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
     const validPags = pagamentos.filter((p) => Number(p.valor) > 0);
     if (pagamentos.length === 0 || validPags.length === 0) {
       errs.pagamentos = 'Adicione ao menos uma forma de pagamento com valor maior que R$ 0,00.';
+    } else if (pagamentos.some((p) => Number(p.valor) < 0)) {
+      errs.pagamentos = 'Nenhum pagamento pode ter valor negativo.';
+    } else if (pagamentos.length > 1 && validPags.length < pagamentos.length) {
+      errs.pagamentos = 'Preencha ou remova as linhas de pagamento com valor zerado.';
     }
 
     return errs;
@@ -175,17 +215,17 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
         divisaoTipo: editItem.divisaoTipo || 'porcentagem',
         porcentagemMedico1: editItem.porcentagemMedico1 ?? 50,
         porcentagemMedico2: editItem.porcentagemMedico2 ?? 50,
-        valorMedico1: editItem.valorMedico1 || '',
-        valorMedico2: editItem.valorMedico2 || '',
-        valorRetidoTaxas: editItem.valorRetidoTaxas || '',
+        valorMedico1: editItem.valorMedico1 ?? '',
+        valorMedico2: editItem.valorMedico2 ?? '',
+        valorRetidoTaxas: editItem.valorRetidoTaxas ?? '',
         notaFiscalPercentual: editItem.notaFiscalPercentual ?? 15,
-        valorNotaFiscal: editItem.valorNotaFiscal || '',
-        valorAnestesista: editItem.valorAnestesista || '',
-        taxaClinica: editItem.taxaClinica || '',
-        valorAcessorios: editItem.valorAcessorios || '',
+        valorNotaFiscal: editItem.valorNotaFiscal ?? '',
+        valorAnestesista: editItem.valorAnestesista ?? '',
+        taxaClinica: editItem.taxaClinica ?? '',
+        valorAcessorios: editItem.valorAcessorios ?? '',
         acessorioParaMedico: Boolean(editItem.acessorioParaMedico),
-        valorBiopsia: editItem.valorBiopsia || '',
-        honorariosMedicos: editItem.honorariosMedicos || '',
+        valorBiopsia: editItem.valorBiopsia ?? '',
+        honorariosMedicos: editItem.honorariosMedicos ?? '',
       });
     } else if (prefillData) {
       const examDate = prefillData.data || getTodayISO();
@@ -423,7 +463,8 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
       tipoExame: form.tipoExame.trim().toUpperCase(),
       procedimentoComplementar: allowsCompl ? formatProcedimentosComplementares(form.procedimentoComplementar) : '',
       medico: form.medico.trim().toUpperCase(),
-      medico2: form.medico2 ? form.medico2.trim().toUpperCase() : '',
+      temDivisao: Boolean(form.temDivisao),
+      medico2: form.temDivisao && form.medico2 ? form.medico2.trim().toUpperCase() : '',
       pagamentos: sanitizedPagamentos,
       valorPagamento: roundCurrency(totalPag),
       numParcelas: String(totalParcelas),
@@ -437,10 +478,14 @@ export function useDetalhesForm({ isOpen, editItem, prefillData, onClose, onSucc
       acessorioParaMedico: Boolean(form.acessorioParaMedico),
       valorBiopsia: roundCurrency(form.valorBiopsia),
       honorariosMedicos: roundCurrency(form.honorariosMedicos),
-      valorMedico1: form.valorMedico1 ? roundCurrency(form.valorMedico1) : '',
-      valorMedico2: form.valorMedico2 ? roundCurrency(form.valorMedico2) : '',
-      porcentagemMedico1: form.porcentagemMedico1 !== '' ? Math.round(Number(form.porcentagemMedico1) * 100) / 100 : 50,
-      porcentagemMedico2: form.porcentagemMedico2 !== '' ? Math.round(Number(form.porcentagemMedico2) * 100) / 100 : 50,
+      valorMedico1: form.temDivisao && form.valorMedico1 !== '' ? roundCurrency(form.valorMedico1) : '',
+      valorMedico2: form.temDivisao && form.valorMedico2 !== '' ? roundCurrency(form.valorMedico2) : '',
+      porcentagemMedico1: form.temDivisao
+        ? (form.porcentagemMedico1 !== '' ? Math.round(Number(form.porcentagemMedico1) * 100) / 100 : 50)
+        : 100,
+      porcentagemMedico2: form.temDivisao
+        ? (form.porcentagemMedico2 !== '' ? Math.round(Number(form.porcentagemMedico2) * 100) / 100 : 50)
+        : 0,
     };
 
     let savedItem;

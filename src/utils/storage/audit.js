@@ -1,9 +1,9 @@
 import {
   getData,
   setData,
-  notifyDataChanged,
   getAuditUser,
   registerAuditLogger,
+  generateId,
 } from './core';
 import { enqueueSyncOperation } from '../../services/syncQueue';
 
@@ -15,7 +15,7 @@ export function addAuditLog(entry) {
   try {
     const logs = getData('auditLogs') || [];
     const newEntry = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: new Date().toISOString(),
       acao: entry.acao || 'MODIFICAÇÃO',
       modulo: entry.modulo || 'geral',
@@ -69,7 +69,7 @@ export function getAuditLogs() {
 export function clearAuditLogs() {
   try {
     const resetEntry = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: new Date().toISOString(),
       acao: 'LIMPEZA_CACHE_LOCAL',
       modulo: 'auditLogs',
@@ -77,7 +77,6 @@ export function clearAuditLogs() {
       usuario: getAuditUser(),
     };
     setData('auditLogs', [resetEntry]);
-    notifyDataChanged('auditLogs');
 
     try {
       enqueueSyncOperation({

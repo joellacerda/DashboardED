@@ -60,13 +60,13 @@ export default function DetalhesFormModal({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
+          <button type="submit" form="detalhes-form" className="btn btn-primary">
             {editItem ? 'Salvar' : 'Cadastrar'}
           </button>
         </>
       }
     >
-      <form onSubmit={handleSave} noValidate autoComplete="off">
+      <form id="detalhes-form" onSubmit={handleSave} noValidate autoComplete="off">
         {/* Banner de Sincronização / Personalização do Convênio */}
         <ConvenioOverrideBanner
           isConvenio={Boolean(form.isConvenio || editItem?.origemConvenioId)}

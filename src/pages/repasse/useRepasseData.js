@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useData } from '../../contexts/DataContext';
 import {
   formatCurrency,
@@ -20,7 +20,6 @@ export function useRepasseData() {
     addItem,
     updateItem,
     deleteItem,
-    syncAllConveniosToDetalhes,
   } = useData();
 
   const [period, setPeriod] = useState(() => getAcquisitionPeriod());
@@ -39,10 +38,6 @@ export function useRepasseData() {
   const [newMedicoNome, setNewMedicoNome] = useState('');
   const [newMedicoSocio, setNewMedicoSocio] = useState(true);
   const [deleteMedicoId, setDeleteMedicoId] = useState(null);
-
-  useEffect(() => {
-    syncAllConveniosToDetalhes();
-  }, [syncAllConveniosToDetalhes]);
 
   const repasseCalc = useMemo(
     () =>
@@ -73,14 +68,38 @@ export function useRepasseData() {
     );
   }, [rows]);
 
-  // Summary Totals
-  const totalHonorariosRepassados = repasseRows.reduce((s, r) => s + r.honorarios, 0);
-  const totalCreditos = repasseRows.reduce((s, r) => s + r.creditos, 0);
-  const totalDebitos = repasseRows.reduce((s, r) => s + r.debitos, 0);
-  const totalCompensacoesGeral = repasseRows.reduce((s, r) => s + r.compensacaoConvenios, 0);
-  const totalBNB = repasseRows.reduce((s, r) => s + r.bnb, 0);
-  const totalCotaClinica = repasseRows.reduce((s, r) => s + r.cotaClinica, 0);
-  const totalLiquidoGeral = repasseRows.reduce((s, r) => s + r.total, 0);
+  // Summary Totals (single memoized pass)
+  const {
+    totalHonorariosRepassados,
+    totalCreditos,
+    totalDebitos,
+    totalCompensacoesGeral,
+    totalBNB,
+    totalCotaClinica,
+    totalLiquidoGeral,
+  } = useMemo(() => {
+    return repasseRows.reduce(
+      (acc, r) => {
+        acc.totalHonorariosRepassados += r.honorarios;
+        acc.totalCreditos += r.creditos;
+        acc.totalDebitos += r.debitos;
+        acc.totalCompensacoesGeral += r.compensacaoConvenios;
+        acc.totalBNB += r.bnb;
+        acc.totalCotaClinica += r.cotaClinica;
+        acc.totalLiquidoGeral += r.total;
+        return acc;
+      },
+      {
+        totalHonorariosRepassados: 0,
+        totalCreditos: 0,
+        totalDebitos: 0,
+        totalCompensacoesGeral: 0,
+        totalBNB: 0,
+        totalCotaClinica: 0,
+        totalLiquidoGeral: 0,
+      }
+    );
+  }, [repasseRows]);
 
   const openEditAjuste = (row) => {
     setSelectedMedico(row.medico);
@@ -96,37 +115,55 @@ export function useRepasseData() {
   };
 
   const handleSaveAjuste = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!selectedMedico) return;
+
+    const creditosNum = ajusteForm.creditos === '' ? 0 : Number(ajusteForm.creditos);
+    const debitosNum = ajusteForm.debitos === '' ? 0 : Number(ajusteForm.debitos);
+    const bnbNum = ajusteForm.bnb === '' ? 0 : Number(ajusteForm.bnb);
+
+    if (
+      !Number.isFinite(creditosNum) || creditosNum < 0 ||
+      !Number.isFinite(debitosNum) || debitosNum < 0 ||
+      !Number.isFinite(bnbNum) || bnbNum < 0
+    ) {
+      toast.warning('Créditos, Débitos e BNB devem ser valores numéricos maiores ou iguais a zero.');
+      return;
+    }
 
     const existingMedico = (medicosList || []).find(
       (m) => m.nome && m.nome.trim().toLowerCase() === selectedMedico.nome.trim().toLowerCase()
     );
 
+    let medicoId = existingMedico?.id || null;
     if (existingMedico) {
       if (Boolean(existingMedico.socio !== false) !== Boolean(ajusteForm.isSocio)) {
         updateItem(MODULES.medicos, existingMedico.id, { socio: ajusteForm.isSocio });
       }
     } else {
-      addItem(MODULES.medicos, {
+      const created = addItem(MODULES.medicos, {
         nome: selectedMedico.nome.trim().toUpperCase(),
         socio: ajusteForm.isSocio,
         ativo: true,
       });
+      medicoId = created?.id || null;
     }
 
     const key = `${selectedMedico.nome.trim().toLowerCase()}_${period.start}`;
-    const existingAjuste = (ajustesList || []).find((a) => a.key === key);
+    const existingAjuste = (ajustesList || []).find(
+      (a) => a.key === key || (medicoId && a.medicoId === medicoId && a.periodStart === period.start)
+    );
 
     const ajusteData = {
       key,
+      medicoId,
       medicoNome: selectedMedico.nome.trim().toUpperCase(),
       periodStart: period.start,
       periodEnd: period.end,
-      creditos: ajusteForm.creditos,
-      debitos: ajusteForm.debitos,
-      bnb: ajusteForm.bnb,
-      obs: ajusteForm.obs,
+      creditos: creditosNum,
+      debitos: debitosNum,
+      bnb: bnbNum,
+      obs: ajusteForm.obs || '',
     };
 
     if (existingAjuste) {
@@ -213,11 +250,12 @@ export function useRepasseData() {
       (m) => (medico.id && m.id === medico.id) || m.nome.trim().toUpperCase() === medico.nome.trim().toUpperCase()
     );
     if (index !== -1) {
-      updateItem(MODULES.medicos, currentMedicos[index].id, { socio: !currentMedicos[index].socio });
+      const currentlySocio = currentMedicos[index].socio !== false;
+      updateItem(MODULES.medicos, currentMedicos[index].id, { socio: !currentlySocio });
     } else {
       addItem(MODULES.medicos, {
         nome: medico.nome.trim().toUpperCase(),
-        socio: !medico.socio,
+        socio: !(medico.socio !== false),
         ativo: medico.ativo !== false,
       });
     }

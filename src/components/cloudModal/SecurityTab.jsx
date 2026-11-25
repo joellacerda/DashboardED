@@ -112,12 +112,12 @@ export default function SecurityTab({
           <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
             👥 Restrição de Acesso &amp; Allowlist de E-mails
           </div>
-          <span className="badge badge-success" style={{ fontSize: 'var(--text-xs)' }}>
+          <span className={`badge ${publicRegAllowed ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: 'var(--text-xs)' }}>
             {publicRegAllowed ? 'Cadastro Livre' : 'Cadastro Restrito (LGPD)'}
           </span>
         </div>
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
-          O cadastro público na tela inicial está <strong>desativado</strong> para impedir acesso de estranhos aos dados médicos. Opcionalmente, especifique e-mails ou domínios corporativos autorizados a fazer login (separados por vírgula):
+          O cadastro público na tela inicial está <strong>{publicRegAllowed ? 'ativado' : 'desativado'}</strong>. Opcionalmente, especifique e-mails ou domínios corporativos autorizados a fazer login (separados por vírgula):
         </p>
         <form onSubmit={handleSaveAllowedEmails} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <input
@@ -139,7 +139,7 @@ export default function SecurityTab({
       {/* 4. Regras do Firestore e Imutabilidade */}
       <div className="card" style={{ padding: '1rem', border: '1px solid var(--border-subtle)' }}>
         <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: '0.5rem' }}>
-          🔒 Regras de Segurança do Banco de Dados (`firestore.rules`)
+          🔒 Regras de Segurança do Banco de Dados (<code>firestore.rules</code>)
         </div>
         <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.6 }}>
           <li><strong>Autenticação Obrigatória:</strong> Nenhuma leitura ou escrita na nuvem é aceita sem usuário logado (<code>request.auth != null</code>).</li>

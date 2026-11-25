@@ -3,8 +3,11 @@ import {
   roundCurrency,
   isDateInPeriod,
   isDoctorMatch,
+  isConvenioDetalhe,
+  matchParticularExamToDetalhe,
   getHonorarioMedicoInPeriod,
   navigateAcquisitionPeriod,
+  sanitizeCsvCell,
   downloadBlob,
 } from './helpers';
 import {
@@ -37,32 +40,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
   let totalFaturamentoParticulares = 0;
   const examesList = data.exames || [];
 
-  const isSameParticularExam = (e, d) => {
-    if (!e || !d || d.isConvenio || d.origemConvenioId || String(d.id || '').startsWith('conv_')) {
-      return false;
-    }
-    if (e.id && d.id && String(d.id) === String(e.id)) return true;
-    if (e.id && d.exameId && String(d.exameId) === String(e.id)) return true;
-    if (e.detalheId && d.id && String(e.detalheId) === String(d.id)) return true;
-    if (e.id && d.exameId && String(d.exameId) !== String(e.id)) return false;
-
-    const sameDateAndPatient =
-      d.data === e.data &&
-      d.paciente &&
-      e.paciente &&
-      d.paciente.trim().toLowerCase() === e.paciente.trim().toLowerCase();
-    if (!sameDateAndPatient) return false;
-
-    const eTipo = (e.exame || e.tipoExame || '').trim().toUpperCase();
-    const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
-    if (eTipo && dTipo) {
-      return eTipo === dTipo;
-    }
-    return true;
-  };
-
   detalhesExames.forEach((exam) => {
-    if (exam.isConvenio || exam.origemConvenioId || String(exam.id || '').startsWith('conv_')) {
+    if (isConvenioDetalhe(exam)) {
       return;
     }
 
@@ -73,7 +52,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     const isDoc2 = isDoctorMatch(doctor, exam.medico2, exam.medico2Id);
 
     const isMedicoNesteExame = isDoc1 || isDoc2;
-    const isNoPeriodo = isDateInPeriod(exam.data, period) || honNoPeriodo > 0;
+    const realizadoNoPeriodo = isDateInPeriod(exam.data, period);
+    const isNoPeriodo = realizadoNoPeriodo || honNoPeriodo > 0;
 
     if (isMedicoNesteExame && isNoPeriodo) {
       const isSplit = !!(exam.temDivisao || exam.medico2);
@@ -92,24 +72,29 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
         isSplit,
         outroMedico: isSplit ? outroMedico : null,
         isMainDoctor: isDoc1,
+        realizadoNoPeriodo,
       });
 
-      totalFaturamentoParticulares += valExam;
+      // Só soma faturamento integral no período em que o exame foi realizado (evita inflação em parcelamentos)
+      if (realizadoNoPeriodo) {
+        totalFaturamentoParticulares += valExam;
+      }
     }
   });
 
   // Inclui também exames particulares cadastrados em `exames` que ainda não possuem registro em `detalhesExames`
   examesList.forEach((exam) => {
     if (!exam || !isDateInPeriod(exam.data, period)) return;
-    if (detalhesExames.some((d) => isSameParticularExam(exam, d))) return;
+    if (detalhesExames.some((d) => matchParticularExamToDetalhe(exam, d))) return;
 
-    const doc1 = (exam.medico || '').trim().toUpperCase();
-    const doc2 = (exam.medico2 || '').trim().toUpperCase();
+    const doc1Name = (exam.medico || '').trim().toUpperCase();
+    const doc2Name = (exam.medico2 || '').trim().toUpperCase();
     const isDoc1 = isDoctorMatch(doctor, exam.medico, exam.medicoId);
-    if (!isDoc1) return;
+    const isDoc2 = isDoctorMatch(doctor, exam.medico2, exam.medico2Id);
+    if (!isDoc1 && !isDoc2) return;
 
     const isSplit = !!(exam.temDivisao || exam.medico2);
-    const outroMedico = doc2;
+    const outroMedico = isDoc1 ? doc2Name : doc1Name;
 
     procedimentosParticulares.push({
       id: exam.id || `${exam.data}_${exam.paciente}`,
@@ -122,7 +107,8 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
       honorarioMedico: 0,
       isSplit,
       outroMedico: isSplit ? outroMedico : null,
-      isMainDoctor: true,
+      isMainDoctor: isDoc1,
+      realizadoNoPeriodo: true,
     });
   });
 
@@ -142,14 +128,16 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
       (d) => d.origemConvenioId === c.id || d.id === `conv_${c.id}`
     );
 
+    const honMedicoSynced = syncedDet ? getHonorarioMedicoInPeriod(syncedDet, doctor, period) : 0;
     const dataRef = syncedDet?.data || c.fluxoData || c.data;
-    if (!isDateInPeriod(dataRef, period)) return;
+    const inPeriodByDate = isDateInPeriod(dataRef, period);
+    if (!inPeriodByDate && honMedicoSynced <= 0) return;
 
     let honMedico = 0;
     if (syncedDet) {
-      honMedico = getHonorarioMedicoInPeriod(syncedDet, doctor, period);
+      honMedico = honMedicoSynced;
     } else if (isDoc1) {
-      honMedico = Number(c.valorRepasseMedico1 || (c.temDivisaoMedico2 ? 0 : c.valorRepasse || 0));
+      honMedico = Number(c.valorRepasseMedico1 ?? (c.temDivisaoMedico2 ? 0 : c.valorRepasse || 0));
     } else if (isDoc2) {
       honMedico = Number(c.valorRepasseMedico2 || 0);
     }
@@ -169,20 +157,23 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
       isSplit: !!(c.temDivisaoMedico2 || c.medico2),
       outroMedico: isDoc1 ? doc2 : doc1,
       isMainDoctor: isDoc1,
+      realizadoNoPeriodo: isDateInPeriod(c.data, period),
     });
 
     totalFaturamentoConvenios += valFaturado;
   });
 
-  // --- 3. Extrato Unificado de Procedimentos (ordenado por data mais recente) ---
-  // Nota: `todosProcedimentos` inclui todos os itens com repasse (inclusive quando o médico é 2º médico apenas na divisão de honorários),
-  // mas a contagem de volume realizado (`totalProcedimentos`, `totalParticulares`, `totalConvenios`) considera apenas quando é o médico realizante principal (`isMainDoctor`).
+  // --- 3. Extrato Unificado de Procedimentos (ordenado por data ISO mais recente) ---
   const todosProcedimentos = [...procedimentosParticulares, ...procedimentosConvenios].sort(
-    (a, b) => new Date(b.data || 0) - new Date(a.data || 0)
+    (a, b) => String(b.data || '').localeCompare(String(a.data || ''))
   );
 
-  const countParticularesRealizados = procedimentosParticulares.filter((p) => p.isMainDoctor !== false).length;
-  const countConveniosRealizados = procedimentosConvenios.filter((p) => p.isMainDoctor !== false).length;
+  const countParticularesRealizados = procedimentosParticulares.filter(
+    (p) => p.isMainDoctor !== false && p.realizadoNoPeriodo !== false
+  ).length;
+  const countConveniosRealizados = procedimentosConvenios.filter(
+    (p) => p.isMainDoctor !== false && p.realizadoNoPeriodo !== false
+  ).length;
   const totalProcedimentos = countParticularesRealizados + countConveniosRealizados;
   const totalHonorariosParticulares = repasseInfo.honParticular;
   const totalHonorariosConvenios = repasseInfo.honConvenio;
@@ -198,23 +189,25 @@ export function getDoctorPeriodMetrics(doctorName, period, data = {}) {
     if (!procedimentosPorTipoMap[tipo]) {
       procedimentosPorTipoMap[tipo] = { nome: tipo, quantidade: 0, honorarios: 0 };
     }
-    procedimentosPorTipoMap[tipo].quantidade += 1;
-    procedimentosPorTipoMap[tipo].honorarios += p.honorarioMedico;
+    if (p.realizadoNoPeriodo !== false) {
+      procedimentosPorTipoMap[tipo].quantidade += 1;
+    }
+    procedimentosPorTipoMap[tipo].honorarios = roundCurrency(
+      procedimentosPorTipoMap[tipo].honorarios + p.honorarioMedico
+    );
   });
 
-  const rankingProcedimentos = Object.values(procedimentosPorTipoMap).sort(
-    (a, b) => b.quantidade - a.quantidade || b.honorarios - a.honorarios
-  );
+  const rankingProcedimentos = Object.values(procedimentosPorTipoMap)
+    .filter((item) => item.quantidade > 0 || item.honorarios > 0)
+    .sort((a, b) => b.quantidade - a.quantidade || b.honorarios - a.honorarios);
 
   // --- 6. Participação do médico no volume total da clínica ---
   const examesParticularesClinica = examesList.filter((e) => isDateInPeriod(e.data, period));
   const standaloneDetalhesClinica = detalhesExames.filter(
     (d) =>
-      !d.isConvenio &&
-      !d.origemConvenioId &&
-      !String(d.id || '').startsWith('conv_') &&
+      !isConvenioDetalhe(d) &&
       isDateInPeriod(d.data, period) &&
-      !examesParticularesClinica.some((e) => isSameParticularExam(e, d))
+      !examesParticularesClinica.some((e) => matchParticularExamToDetalhe(e, d))
   );
   const totalExamesClinica =
     examesParticularesClinica.length +
@@ -313,11 +306,7 @@ export function exportDoctorStatementCSV(metrics, period) {
 
   const lines = [];
   const addLine = (row = []) =>
-    lines.push(
-      row
-        .map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`)
-        .join(';')
-    );
+    lines.push(row.map((cell) => sanitizeCsvCell(cell)).join(';'));
 
   // 1. Cabeçalho
   addLine(['CLÍNICA ENDODIAGNOSE — EXTRATO INDIVIDUAL DE REPASSE MÉDICO']);

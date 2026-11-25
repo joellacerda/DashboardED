@@ -2,10 +2,12 @@ import {
   formatCurrency,
   roundCurrency,
   isDateInPeriod,
+  isConvenioDetalhe,
   getHonorarioInPeriod,
   migrateLegacyPayment,
   getInstallmentPeriods,
   getExamAllocationInPeriod,
+  sanitizeCsvCell,
   downloadBlob,
 } from './helpers';
 import { calculateAllDoctorsRepasseInPeriod } from './repasseCalculation';
@@ -50,7 +52,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
 
   detalhesExames.forEach((exam) => {
     // Skip if it is a synchronized convenio record (convenios are handled in the convenio section)
-    if (exam.isConvenio) return;
+    if (isConvenioDetalhe(exam)) return;
 
     const pagamentos = migrateLegacyPayment(exam);
 
@@ -66,21 +68,25 @@ export function getConsolidatedFinancialReport(data = {}, period) {
           const valParcela = (Number(pag.valor) || 0) / n;
           valorRecebidoNoPeriodo += valParcela;
 
-          // Track payment method distribution
-          const formaLower = (pag.forma || '').toLowerCase();
-          if (formaLower.includes('crédito') || formaLower.includes('credito')) {
+          // Track payment method distribution (accent-insensitive)
+          const formaNorm = String(pag.forma || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+          if (formaNorm.includes('credito') || formaNorm === 'cartao') {
             meiosDePagamento.credito.valor += valParcela;
             meiosDePagamento.credito.transacoes++;
-          } else if (formaLower.includes('débito') || formaLower.includes('debito')) {
+          } else if (formaNorm.includes('debito')) {
             meiosDePagamento.debito.valor += valParcela;
             meiosDePagamento.debito.transacoes++;
-          } else if (formaLower.includes('pix')) {
+          } else if (formaNorm.includes('pix')) {
             meiosDePagamento.pix.valor += valParcela;
             meiosDePagamento.pix.transacoes++;
-          } else if (formaLower.includes('dinheiro') || formaLower.includes('espécie')) {
+          } else if (formaNorm.includes('dinheiro') || formaNorm.includes('especie')) {
             meiosDePagamento.dinheiro.valor += valParcela;
             meiosDePagamento.dinheiro.transacoes++;
-          } else if (formaLower.includes('transferência') || formaLower.includes('ted') || formaLower.includes('doc')) {
+          } else if (formaNorm.includes('transferencia') || formaNorm.includes('ted') || formaNorm.includes('doc')) {
             meiosDePagamento.transferencia.valor += valParcela;
             meiosDePagamento.transferencia.transacoes++;
           } else {
@@ -122,7 +128,13 @@ export function getConsolidatedFinancialReport(data = {}, period) {
   let receitaClinicaConvenios = 0;
 
   conveniosFaturados.forEach((c) => {
-    const valFaturado = Number(c.fluxoValorLancado) || (Number(c.valorClinica || 0) + Number(c.valorMedico || 0));
+    const valClinicaExplicit =
+      c.valorClinica !== undefined && c.valorClinica !== null && c.valorClinica !== ''
+        ? Number(c.valorClinica) || 0
+        : null;
+    const valMedicoExplicit = Number(c.valorMedico || 0);
+    const valFaturado =
+      Number(c.fluxoValorLancado) || ((valClinicaExplicit || 0) + valMedicoExplicit);
     const repasseTotal =
       c.valorRepasse !== undefined && Number(c.valorRepasse) >= 0
         ? Number(c.valorRepasse)
@@ -130,7 +142,13 @@ export function getConsolidatedFinancialReport(data = {}, period) {
 
     faturamentoConvenios += valFaturado;
     honorariosConvenios += repasseTotal;
-    receitaClinicaConvenios += Math.max(0, valFaturado - repasseTotal);
+    // Se valorClinica foi definido explicitamente (ou fluxoValorLancado já representa a parte da clínica),
+    // evita subtrair repasseTotal novamente do valor da clínica.
+    const parteClinica =
+      valClinicaExplicit !== null && valClinicaExplicit > 0
+        ? valClinicaExplicit
+        : Math.max(0, valFaturado - repasseTotal);
+    receitaClinicaConvenios += parteClinica;
   });
 
   // 3. Outras Entradas do Fluxo de Caixa (não vinculadas a exames particulares ou convênios)
@@ -139,13 +157,18 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     if (f.tipo !== 'entrada') return false;
     // Exclude linked entries from exam split or convenios to prevent double counting
     if (f.detalheId || f.convenioId || f.isConvenioConsolidado || f.convenioConsolidado) return false;
-    const nomeUpper = (f.nome || '').trim().toUpperCase();
+    const nomeNorm = String(f.nome || '')
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
     if (
-      nomeUpper.startsWith('TAXA DE CLÍNICA') ||
-      nomeUpper.startsWith('REPASSE CONVÊNIO') ||
-      nomeUpper.startsWith('BIÓPSIA') ||
-      nomeUpper === 'UNIMED' ||
-      nomeUpper === 'COOPEND'
+      nomeNorm.startsWith('TAXA DE CLINICA') ||
+      nomeNorm.startsWith('REPASSE CONVENIO') ||
+      nomeNorm.startsWith('BIOPSIA') ||
+      nomeNorm.startsWith('VALOR DE ACESSORIOS') ||
+      nomeNorm === 'UNIMED' ||
+      nomeNorm === 'COOPEND'
     ) {
       return false;
     }
@@ -162,7 +185,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     deducoesTaxasCartao + deducoesImpostosNF + custosBiopsias + custosAcessorios + custosAnestesistas;
 
   // 6. Receita Operacional Líquida (após deduções fiscais e taxas de cartão)
-  const receitaOperacionalLiquida = Math.max(0, faturamentoBrutoTotal - totalDeducoesReceita);
+  const receitaOperacionalLiquida = faturamentoBrutoTotal - totalDeducoesReceita;
 
   // 7. Despesas Operacionais (Saídas do Fluxo de Caixa)
   const categoriasDespesas = {
@@ -273,13 +296,22 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     (m) => m.honTotal > 0 || m.creditos > 0 || m.debitos > 0 || m.compensacaoConvenio > 0 || m.cotaDeficit > 0 || m.isAtivo
   );
 
-  // 10. Resultado Líquido Final da Clínica (DRE)
-  // Receita Líquida - Total de Repasses aos Médicos - Total de Despesas Operacionais
+  // 10. Resultado Operacional Líquido da Clínica (DRE)
+  // Usa repasses médicos ANTES da cota de déficit dos sócios para não inflar lucro operacional com aporte dos sócios
+  const totalRepassesOperacionais = totalHonorariosMedicosGeral + totalAjustesLiquidosGeral;
   const resultadoLiquidoClinica =
-    receitaOperacionalLiquida - totalRepassesLiquidosGeral - totalDespesasOperacionais;
+    receitaOperacionalLiquida - totalRepassesOperacionais - totalDespesasOperacionais;
+  const resultadoAposAporteSocios = resultadoLiquidoClinica + totalCotaDeficitGeral;
 
   const margemLiquidaPercent =
     faturamentoBrutoTotal > 0 ? (resultadoLiquidoClinica / faturamentoBrutoTotal) * 100 : 0;
+
+  Object.keys(categoriasDespesas).forEach((k) => {
+    categoriasDespesas[k] = roundCurrency(categoriasDespesas[k]);
+  });
+  Object.keys(meiosDePagamento).forEach((k) => {
+    meiosDePagamento[k].valor = roundCurrency(meiosDePagamento[k].valor);
+  });
 
   const folhaNaoLancadaNoCaixa =
     roundCurrency(totalFolhaLiquida) > 0 &&
@@ -341,6 +373,7 @@ export function getConsolidatedFinancialReport(data = {}, period) {
     deficitClinica: roundCurrency(deficitClinica),
     cotaDeficitPorSocio: roundCurrency(cotaDeficitPorSocio),
     resultadoLiquidoClinica: roundCurrency(resultadoLiquidoClinica),
+    resultadoAposAporteSocios: roundCurrency(resultadoAposAporteSocios),
     margemLiquidaPercent: Math.round(margemLiquidaPercent * 10) / 10,
     isSuperavit: resultadoLiquidoClinica >= 0,
   };
@@ -356,11 +389,8 @@ export function exportConsolidatedReportCSV(report, period) {
   if (!report || !period) return;
   const lines = [];
   const addLine = (row = []) =>
-    lines.push(
-      row
-        .map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`)
-        .join(';')
-    );
+    lines.push(row.map((cell) => sanitizeCsvCell(cell)).join(';'));
+  const fmtPct = (part, total) => `${((part / (total || 1)) * 100).toFixed(1).replace('.', ',')}%`;
 
   // 1. Header
   addLine(['CLÍNICA ENDODIAGNOSE — RELATÓRIO FINANCEIRO CONSOLIDADO']);
@@ -384,27 +414,27 @@ export function exportConsolidatedReportCSV(report, period) {
   addLine(['DEMONSTRATIVO DE RESULTADO DO EXERCÍCIO (DRE GERENCIAL)']);
   addLine(['Conta / Nível Operacional', 'Valor (R$)', '% Faturamento Bruto']);
   addLine(['1. RECEITA OPERACIONAL BRUTA', formatCurrency(report.faturamentoBrutoTotal), '100,0%']);
-  addLine(['   1.1 Exames Particulares', formatCurrency(report.faturamentoParticulares), `${((report.faturamentoParticulares / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   1.2 Exames de Convênio', formatCurrency(report.faturamentoConvenios), `${((report.faturamentoConvenios / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+  addLine(['   1.1 Exames Particulares', formatCurrency(report.faturamentoParticulares), fmtPct(report.faturamentoParticulares, report.faturamentoBrutoTotal)]);
+  addLine(['   1.2 Exames de Convênio', formatCurrency(report.faturamentoConvenios), fmtPct(report.faturamentoConvenios, report.faturamentoBrutoTotal)]);
   if (report.faturamentoOutrasEntradas > 0) {
-    addLine(['   1.3 Outras Entradas do Caixa', formatCurrency(report.faturamentoOutrasEntradas), `${((report.faturamentoOutrasEntradas / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+    addLine(['   1.3 Outras Entradas do Caixa', formatCurrency(report.faturamentoOutrasEntradas), fmtPct(report.faturamentoOutrasEntradas, report.faturamentoBrutoTotal)]);
   }
-  addLine(['2. DEDUÇÕES DA RECEITA E CUSTOS DIRETOS', `-${formatCurrency(report.totalDeducoesReceita)}`, `${((report.totalDeducoesReceita / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   2.1 Impostos & Notas Fiscais (Particulares)', `-${formatCurrency(report.deducoesImpostosNF)}`, `${((report.deducoesImpostosNF / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   2.2 Taxas de Cartão & Maquininhas', `-${formatCurrency(report.deducoesTaxasCartao)}`, `${((report.deducoesTaxasCartao / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   2.3 Custos Diretos com Biópsias', `-${formatCurrency(report.custosBiopsias)}`, `${((report.custosBiopsias / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   2.4 Custos com Acessórios', `-${formatCurrency(report.custosAcessorios)}`, `${((report.custosAcessorios / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   2.5 Honorários de Anestesistas', `-${formatCurrency(report.custosAnestesistas)}`, `${((report.custosAnestesistas / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['3. RECEITA OPERACIONAL LÍQUIDA', formatCurrency(report.receitaOperacionalLiquida), `${((report.receitaOperacionalLiquida / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+  addLine(['2. DEDUÇÕES DA RECEITA E CUSTOS DIRETOS', `-${formatCurrency(report.totalDeducoesReceita)}`, fmtPct(report.totalDeducoesReceita, report.faturamentoBrutoTotal)]);
+  addLine(['   2.1 Impostos & Notas Fiscais (Particulares)', `-${formatCurrency(report.deducoesImpostosNF)}`, fmtPct(report.deducoesImpostosNF, report.faturamentoBrutoTotal)]);
+  addLine(['   2.2 Taxas de Cartão & Maquininhas', `-${formatCurrency(report.deducoesTaxasCartao)}`, fmtPct(report.deducoesTaxasCartao, report.faturamentoBrutoTotal)]);
+  addLine(['   2.3 Custos Diretos com Biópsias', `-${formatCurrency(report.custosBiopsias)}`, fmtPct(report.custosBiopsias, report.faturamentoBrutoTotal)]);
+  addLine(['   2.4 Custos com Acessórios', `-${formatCurrency(report.custosAcessorios)}`, fmtPct(report.custosAcessorios, report.faturamentoBrutoTotal)]);
+  addLine(['   2.5 Honorários de Anestesistas', `-${formatCurrency(report.custosAnestesistas)}`, fmtPct(report.custosAnestesistas, report.faturamentoBrutoTotal)]);
+  addLine(['3. RECEITA OPERACIONAL LÍQUIDA', formatCurrency(report.receitaOperacionalLiquida), fmtPct(report.receitaOperacionalLiquida, report.faturamentoBrutoTotal)]);
   addLine([
     '4. REPASSES & HONORÁRIOS MÉDICOS TOTAIS',
     report.totalRepassesLiquidos >= 0
       ? `-${formatCurrency(report.totalRepassesLiquidos)}`
       : `+${formatCurrency(Math.abs(report.totalRepassesLiquidos))}`,
-    `${((report.totalRepassesLiquidos / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`,
+    fmtPct(report.totalRepassesLiquidos, report.faturamentoBrutoTotal),
   ]);
-  addLine(['   4.1 Honorários de Exames Particulares', `-${formatCurrency(report.honorariosParticulares)}`, `${((report.honorariosParticulares / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
-  addLine(['   4.2 Honorários de Exames de Convênios', `-${formatCurrency(report.honorariosConvenios)}`, `${((report.honorariosConvenios / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+  addLine(['   4.1 Honorários de Exames Particulares', `-${formatCurrency(report.honorariosParticulares)}`, fmtPct(report.honorariosParticulares, report.faturamentoBrutoTotal)]);
+  addLine(['   4.2 Honorários de Exames de Convênios', `-${formatCurrency(report.honorariosConvenios)}`, fmtPct(report.honorariosConvenios, report.faturamentoBrutoTotal)]);
   if (
     report.totalAjustesDebitos > 0 ||
     report.totalAjustesCreditos > 0 ||
@@ -422,13 +452,16 @@ export function exportConsolidatedReportCSV(report, period) {
   if (report.totalCotaDeficit > 0) {
     addLine(['   4.4 Rateio de Cota de Déficit (Sócios)', `+${formatCurrency(report.totalCotaDeficit)}`, '']);
   }
-  addLine(['5. DESPESAS OPERACIONAIS DO CAIXA', `-${formatCurrency(report.totalDespesasOperacionais)}`, `${((report.totalDespesasOperacionais / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+  addLine(['5. DESPESAS OPERACIONAIS DO CAIXA', `-${formatCurrency(report.totalDespesasOperacionais)}`, fmtPct(report.totalDespesasOperacionais, report.faturamentoBrutoTotal)]);
   Object.entries(report.categoriasDespesas || {}).forEach(([cat, val]) => {
     if (val > 0) {
-      addLine([`   5.x ${cat}`, `-${formatCurrency(val)}`, `${((val / (report.faturamentoBrutoTotal || 1)) * 100).toFixed(1)}%`]);
+      addLine([`   5.x ${cat}`, `-${formatCurrency(val)}`, fmtPct(val, report.faturamentoBrutoTotal)]);
     }
   });
-  addLine(['6. RESULTADO LÍQUIDO FINAL DA CLÍNICA', formatCurrency(report.resultadoLiquidoClinica), `${report.margemLiquidaPercent}%`]);
+  addLine(['6. RESULTADO OPERACIONAL LÍQUIDO DA CLÍNICA', formatCurrency(report.resultadoLiquidoClinica), `${String(report.margemLiquidaPercent).replace('.', ',')}%`]);
+  if (report.totalCotaDeficit > 0) {
+    addLine(['7. RESULTADO APÓS APORTE DOS SÓCIOS (COTA DÉFICIT)', formatCurrency(report.resultadoAposAporteSocios), '']);
+  }
   addLine([]);
 
   // 4. Repasses por Médico

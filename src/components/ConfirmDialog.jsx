@@ -16,10 +16,11 @@ export default function ConfirmDialog({
       title={title || 'Confirmar'}
       footer={
         <div className="confirm-actions">
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
           <button
+            type="button"
             className={`btn btn-${confirmVariant}`}
             onClick={() => {
               onConfirm();

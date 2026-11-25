@@ -3,6 +3,7 @@ import { useData } from '../contexts/DataContext';
 import PeriodSelector from '../components/PeriodSelector';
 import {
   formatCurrency,
+  formatDate,
   getAcquisitionPeriod,
 } from '../utils/helpers';
 import {
@@ -50,14 +51,19 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
     return '';
   });
 
-  // Atualiza seleção caso `initialDoctor` mude externamente
+  // Atualiza seleção apenas quando `initialDoctor` muda externamente (não trava o dropdown!)
   useEffect(() => {
     if (initialDoctor) {
       setSelectedDoctorName(initialDoctor.trim().toUpperCase());
-    } else if (!selectedDoctorName && doctorsList.length > 0) {
+    }
+  }, [initialDoctor]);
+
+  // Se nenhum médico estiver selecionado e a lista carregar, seleciona o primeiro
+  useEffect(() => {
+    if (!selectedDoctorName && doctorsList.length > 0) {
       setSelectedDoctorName(doctorsList[0].nome);
     }
-  }, [initialDoctor, doctorsList, selectedDoctorName]);
+  }, [doctorsList, selectedDoctorName]);
 
   // Métricas do médico no período ativo
   const metrics = useMemo(() => {
@@ -71,9 +77,14 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
     return getDoctorHistoricalEvolution(selectedDoctorName, period, analyticsData, 6);
   }, [selectedDoctorName, period, analyticsData]);
 
-  // Filtros da tabela de atendimentos
+  // Filtros da tabela de atendimentos (reseta ao trocar médico ou período)
   const [searchFilter, setSearchFilter] = useState('');
   const [tipoFilter, setTipoFilter] = useState('todos'); // 'todos' | 'particular' | 'convenio'
+
+  useEffect(() => {
+    setSearchFilter('');
+    setTipoFilter('todos');
+  }, [selectedDoctorName, period]);
 
   const filteredProcedimentos = useMemo(() => {
     if (!metrics?.procedimentos) return [];
@@ -117,6 +128,20 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
     const maxVal = Math.max(...history.map((h) => Math.abs(h.repasseLiquido || 0)));
     return maxVal > 0 ? maxVal : 1;
   }, [history]);
+
+  if (doctorsList.length === 0) {
+    return (
+      <div className="page-container">
+        <div className="table-empty" style={{ padding: '4rem 2rem' }}>
+          <div className="table-empty-icon">👨‍⚕️</div>
+          <h3 style={{ marginBottom: '0.5rem' }}>Nenhum médico cadastrado</h3>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Cadastre médicos em <strong>Repasse Médico → Gerenciar Médicos</strong> ou registre exames para visualizar os indicadores individuais.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!metrics) {
     return (
@@ -174,7 +199,7 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
         </div>
         <div className="print-meta">
           <div>
-            <strong>Competência:</strong> {period.label} ({period.start} a {period.end})
+            <strong>Competência:</strong> {period.label} ({formatDate(period.start)} a {formatDate(period.end)})
           </div>
           <div>
             <strong>Emissão:</strong> {new Date().toLocaleDateString('pt-BR')} às{' '}

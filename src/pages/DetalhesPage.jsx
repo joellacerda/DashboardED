@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import {
   formatCurrency,
@@ -10,6 +10,7 @@ import {
   examHasInstallmentInPeriod,
   getInstallmentLabel,
   migrateLegacyPayment,
+  matchParticularExamToDetalhe,
   exportCSV,
   exportPDF,
   normalizeProcedimentosComplementares,
@@ -30,8 +31,9 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
     detalhesExames: data = [],
     fluxoCaixa = [],
     deleteItem,
-    syncAllConveniosToDetalhes,
   } = useData();
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [search, setSearch] = useState('');
@@ -47,6 +49,8 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
 
   useEffect(() => {
     setCurrentPage(1);
+    setExpandedRows(new Set());
+    setOpenActionMenuId(null);
   }, [period, search]);
 
   useEffect(() => {
@@ -80,46 +84,18 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
   };
 
   useEffect(() => {
-    if (prefillData) {
-      const targetTipo = (prefillData.tipoExame || prefillData.exame || '').trim().toUpperCase();
-      const existing =
-        data.find(
-          (d) =>
-            prefillData.id &&
-            (String(d.id) === String(prefillData.id) || String(d.exameId) === String(prefillData.id))
-        ) ||
-        data.find((d) => {
-          if (d.isConvenio || d.origemConvenioId) return false;
-          if (prefillData.id && d.exameId && String(d.exameId) !== String(prefillData.id)) {
-            return false;
-          }
-          const sameDateAndPatient =
-            d.data === prefillData.data &&
-            d.paciente &&
-            prefillData.paciente &&
-            d.paciente.trim().toUpperCase() === prefillData.paciente.trim().toUpperCase();
-          if (!sameDateAndPatient) return false;
-          const dTipo = (d.tipoExame || d.exame || '').trim().toUpperCase();
-          return !dTipo || !targetTipo || dTipo === targetTipo;
-        });
-      if (existing) {
-        setEditItem(existing);
-      } else {
-        setEditItem(null);
-      }
-      if (prefillData.data) {
-        const dateObj = new Date(prefillData.data + 'T00:00:00');
+    if (!prefillData) return;
+    const currentData = dataRef.current || [];
+    const existing = currentData.find((d) => matchParticularExamToDetalhe(prefillData, d));
+    setEditItem(existing || null);
+    if (prefillData.data) {
+      const dateObj = new Date(String(prefillData.data).slice(0, 10) + 'T00:00:00');
+      if (!Number.isNaN(dateObj.getTime())) {
         setPeriod(getAcquisitionPeriod(dateObj));
       }
-      setModalOpen(true);
     }
-  }, [prefillData, data]);
-
-  useEffect(() => {
-    syncAllConveniosToDetalhes();
-  }, [syncAllConveniosToDetalhes]);
-
-  const refresh = () => {};
+    setModalOpen(true);
+  }, [prefillData]);
 
   // --- Filtered items: exams that either were performed in this period
   //     OR have installments falling in this period ---
@@ -135,6 +111,7 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
           (e.tipoExame || e.exame || '').toLowerCase().includes(q) ||
           (e.procedimentoComplementar || '').toLowerCase().includes(q) ||
           (e.medico || '').toLowerCase().includes(q) ||
+          (e.medico2 || '').toLowerCase().includes(q) ||
           (e.formaPagamento || '').toLowerCase().includes(q) ||
           (e.pagamentos || []).some((p) => (p.forma || '').toLowerCase().includes(q))
       );
@@ -222,7 +199,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
       );
       linked.forEach((entry) => deleteItem(MODULES.fluxoCaixa, entry.id));
       deleteItem(MODULES.detalhesExames, deleteId);
-      refresh();
       toast.success('Registro de detalhes excluído.');
     }
   };
@@ -593,7 +569,6 @@ export default function DetalhesPage({ prefillData, onClearPrefill }) {
           if (onClearPrefill) onClearPrefill();
         }}
         onSuccess={() => {
-          refresh();
           setModalOpen(false);
           setEditItem(null);
           if (onClearPrefill) onClearPrefill();

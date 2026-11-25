@@ -1,9 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 import { exportCSV, exportPDF } from '../utils/helpers';
 import { MODULE_LABELS } from '../utils/storage';
 import { useToast } from '../contexts/ToastContext';
+
+const AUDIT_EXPORT_COLS = [
+  { key: 'timestamp', label: 'Data e Hora', accessor: (l) => new Date(l.timestamp).toLocaleString('pt-BR') },
+  { key: 'acao', label: 'Ação' },
+  { key: 'modulo', label: 'Módulo', accessor: (l) => MODULE_LABELS[l.modulo] || l.modulo },
+  { key: 'descricao', label: 'Descrição' },
+  { key: 'usuario', label: 'Usuário' },
+];
 
 const ACTION_COLORS = {
   CRIAR: { bg: 'oklch(0.25 0.08 145 / 0.4)', text: 'oklch(0.85 0.15 145)', border: 'oklch(0.4 0.1 145 / 0.5)', icon: '✚' },
@@ -22,6 +30,16 @@ export default function AuditLogModal({ isOpen, onClose }) {
   const [selectedAction, setSelectedAction] = useState('todas');
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmClear(false);
+      setSearchTerm('');
+      setSelectedModule('todos');
+      setSelectedAction('todas');
+      setExpandedLogId(null);
+    }
+  }, [isOpen]);
 
   // Filtragem dos registros
   const filteredLogs = useMemo(() => {
@@ -61,14 +79,7 @@ export default function AuditLogModal({ isOpen, onClose }) {
       toast.warning('Nenhum registro para exportar.');
       return;
     }
-    const cols = [
-      { key: 'timestamp', label: 'Data e Hora', accessor: (l) => new Date(l.timestamp).toLocaleString('pt-BR') },
-      { key: 'acao', label: 'Ação' },
-      { key: 'modulo', label: 'Módulo', accessor: (l) => MODULE_LABELS[l.modulo] || l.modulo },
-      { key: 'descricao', label: 'Descrição' },
-      { key: 'usuario', label: 'Usuário' },
-    ];
-    exportCSV(filteredLogs, cols, 'historico_auditoria_endodiagnose');
+    exportCSV(filteredLogs, AUDIT_EXPORT_COLS, 'historico_auditoria_endodiagnose');
     toast.success('Histórico de auditoria exportado em CSV!');
   };
 
@@ -77,14 +88,7 @@ export default function AuditLogModal({ isOpen, onClose }) {
       toast.warning('Nenhum registro para exportar.');
       return;
     }
-    const cols = [
-      { key: 'timestamp', label: 'Data e Hora', accessor: (l) => new Date(l.timestamp).toLocaleString('pt-BR') },
-      { key: 'acao', label: 'Ação' },
-      { key: 'modulo', label: 'Módulo', accessor: (l) => MODULE_LABELS[l.modulo] || l.modulo },
-      { key: 'descricao', label: 'Descrição' },
-      { key: 'usuario', label: 'Usuário' },
-    ];
-    exportPDF(filteredLogs, cols, 'Histórico de Atividades e Auditoria');
+    exportPDF(filteredLogs, AUDIT_EXPORT_COLS, 'Histórico de Atividades e Auditoria');
     toast.success('Relatório de auditoria baixado em PDF!');
   };
 

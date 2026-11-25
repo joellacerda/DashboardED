@@ -26,6 +26,10 @@ export default function FolhaTable({
   totalBase,
   totalDescontos,
   totalFolha,
+  totalVA = 0,
+  totalVT = 0,
+  totalExtras = 0,
+  totalProdutividade = 0,
   safeCurrentPage,
   pageSize,
   setCurrentPage,
@@ -127,7 +131,7 @@ export default function FolhaTable({
                     <td
                       style={{
                         fontWeight: 700,
-                        color: 'var(--color-emerald)',
+                        color: item.liquido < 0 ? 'var(--color-rose)' : 'var(--color-emerald)',
                         fontSize: 'var(--text-sm)',
                       }}
                     >
@@ -161,21 +165,21 @@ export default function FolhaTable({
                     {formatCurrency(totalBase)}
                   </td>
                   <td className="value-currency" style={{ fontWeight: 700 }}>
-                    {formatCurrency(filtered.reduce((s, f) => s + f.valeAlimentacao, 0))}
+                    {formatCurrency(totalVA)}
                   </td>
                   <td className="value-currency" style={{ fontWeight: 700 }}>
-                    {formatCurrency(filtered.reduce((s, f) => s + f.valeTransporte, 0))}
+                    {formatCurrency(totalVT)}
                   </td>
                   <td className="value-positive" style={{ fontWeight: 700 }}>
-                    {formatCurrency(filtered.reduce((s, f) => s + f.extras, 0))}
+                    {formatCurrency(totalExtras)}
                   </td>
                   <td className="value-negative" style={{ fontWeight: 700 }}>
                     {formatCurrency(totalDescontos)}
                   </td>
                   <td className="value-positive" style={{ fontWeight: 700 }}>
-                    {formatCurrency(filtered.reduce((s, f) => s + f.produtividade, 0))}
+                    {formatCurrency(totalProdutividade)}
                   </td>
-                  <td style={{ fontWeight: 800, color: 'var(--color-emerald)' }}>
+                  <td style={{ fontWeight: 800, color: totalFolha < 0 ? 'var(--color-rose)' : 'var(--color-emerald)' }}>
                     {formatCurrency(totalFolha)}
                   </td>
                   <td />

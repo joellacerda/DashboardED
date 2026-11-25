@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import { useToast } from '../contexts/ToastContext';
 
@@ -26,13 +26,16 @@ export default function SalasManagerModal({
   const [newNome, setNewNome] = useState('');
   const [newCor, setNewCor] = useState(DEFAULT_COLORS[0]);
 
+  const salasRef = useRef(salas);
+  salasRef.current = salas;
+
   useEffect(() => {
     if (isOpen) {
-      setList(salas ? JSON.parse(JSON.stringify(salas)) : []);
+      setList(salasRef.current ? JSON.parse(JSON.stringify(salasRef.current)) : []);
       setNewNome('');
       setNewCor(DEFAULT_COLORS[0]);
     }
-  }, [isOpen, salas]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -77,7 +80,11 @@ export default function SalasManagerModal({
       toast.warning('É necessário manter pelo menos uma sala cadastrada.');
       return;
     }
-    setList((prev) => prev.filter((s) => s.id !== id));
+    setList((prev) =>
+      prev
+        .filter((s) => s.id !== id)
+        .map((s, idx) => ({ ...s, ordem: idx + 1 }))
+    );
   };
 
   const handleUpdateRoom = (id, field, value) => {
@@ -87,9 +94,19 @@ export default function SalasManagerModal({
   };
 
   const handleSaveAll = () => {
+    const emptyRoom = list.find((s) => !String(s.nome || '').trim());
+    if (emptyRoom) {
+      toast.warning('Todas as salas devem possuir um nome preenchido.');
+      return;
+    }
+    const normalized = list.map((s, idx) => ({
+      ...s,
+      nome: s.nome.trim(),
+      ordem: idx + 1,
+    }));
     try {
       if (typeof onSaveSalas === 'function') {
-        onSaveSalas(list);
+        onSaveSalas(normalized);
       }
       if (toast?.success) {
         toast.success('Configuração de salas salva com sucesso!');

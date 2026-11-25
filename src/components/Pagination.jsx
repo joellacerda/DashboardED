@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 /**
  * Reusable table pagination component with page numbers windowing,
@@ -38,6 +38,7 @@ export default function Pagination({
   label = 'registro(s)',
   summaryNode = null,
 }) {
+  const selectId = useId();
   if (totalItems === 0) return null;
 
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
@@ -70,11 +71,11 @@ export default function Pagination({
 
           {onPageSizeChange && totalItems > 10 && (
             <div className="table-pagination-size-wrap">
-              <label htmlFor="pagination-page-size" className="table-pagination-size-label">
+              <label htmlFor={selectId} className="table-pagination-size-label">
                 Por pág.:
               </label>
               <select
-                id="pagination-page-size"
+                id={selectId}
                 className="pagination-select"
                 value={pageSize}
                 onChange={(e) => {

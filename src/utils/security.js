@@ -4,6 +4,7 @@ const ALLOWED_EMAILS_KEY = 'endodiagnose_allowed_emails';
 const INACTIVITY_TIMEOUT_KEY = 'endodiagnose_inactivity_timeout_mins';
 const LOCK_PIN_HASH_KEY = 'endodiagnose_lock_pin_hash';
 const LOCK_PIN_SALT_KEY = 'endodiagnose_lock_pin_salt';
+const LOCK_PIN_ALGO_KEY = 'endodiagnose_lock_pin_algo';
 const LOCK_PIN_ATTEMPTS_KEY = 'endodiagnose_lock_pin_attempts';
 const LOCK_PIN_LOCKOUT_UNTIL_KEY = 'endodiagnose_lock_pin_lockout_until';
 const LAST_BACKUP_DATE_KEY = 'endodiagnose_last_backup_date';
@@ -12,36 +13,43 @@ const LAST_BACKUP_DATE_KEY = 'endodiagnose_last_backup_date';
 export const DEFAULT_INACTIVITY_TIMEOUT_MINS = 15;
 export const MAX_PIN_ATTEMPTS = 5;
 export const PIN_LOCKOUT_DURATION_MS = 30 * 1000;
+const PBKDF2_ITERATIONS = 100000;
+const PIN_ALGO_PBKDF2 = 'pbkdf2-sha256-v1';
 
 /**
  * Retorna se o cadastro público de novas contas está habilitado.
  * Por padrão de segurança clínica (LGPD), novas contas públicas são DESATIVADAS.
+ * Controlado exclusivamente por variável de ambiente (não pode ser reabilitado via localStorage).
  */
 export function isPublicRegistrationAllowed() {
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ALLOW_PUBLIC_REGISTRATION === 'true') {
     return true;
-  }
-  if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('endodiagnose_allow_public_registration') === 'true';
   }
   return false;
 }
 
 /**
  * Obtém a lista de e-mails ou domínios explicitamente autorizados.
+ * Se VITE_AUTH_ALLOWED_EMAILS estiver configurada no ambiente, ela prevalece exclusivamente
+ * (impedindo ampliação indevida via localStorage).
  */
 export function getAllowedEmailsList() {
-  const allowed = new Set();
+  const envAllowed = new Set();
 
   // 1. Variável de ambiente (ex: "admin@endodiagnose.com,medico@endodiagnose.com,@endodiagnose.com.br")
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AUTH_ALLOWED_EMAILS) {
     import.meta.env.VITE_AUTH_ALLOWED_EMAILS.split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean)
-      .forEach((e) => allowed.add(e));
+      .forEach((e) => envAllowed.add(e));
   }
 
-  // 2. Configuração local do navegador
+  if (envAllowed.size > 0) {
+    return Array.from(envAllowed);
+  }
+
+  // 2. Fallback: Configuração local do navegador (quando não há política via env)
+  const localAllowed = new Set();
   if (typeof localStorage !== 'undefined') {
     const raw = localStorage.getItem(ALLOWED_EMAILS_KEY);
     if (raw) {
@@ -51,7 +59,7 @@ export function getAllowedEmailsList() {
           parsed
             .map((e) => String(e).trim().toLowerCase())
             .filter(Boolean)
-            .forEach((e) => allowed.add(e));
+            .forEach((e) => localAllowed.add(e));
         }
       } catch {
         // Ignora JSON malformado
@@ -59,7 +67,7 @@ export function getAllowedEmailsList() {
     }
   }
 
-  return Array.from(allowed);
+  return Array.from(localAllowed);
 }
 
 /**
@@ -77,6 +85,12 @@ export function setAllowedEmailsList(emails) {
 export function isEmailAllowed(email) {
   if (!email) return false;
   const cleanEmail = String(email).trim().toLowerCase();
+  // Exige estrutura mínima de e-mail válido (parte local + @ + domínio)
+  const atIdx = cleanEmail.indexOf('@');
+  if (atIdx <= 0 || atIdx !== cleanEmail.lastIndexOf('@') || atIdx === cleanEmail.length - 1) {
+    return false;
+  }
+
   const allowedList = getAllowedEmailsList();
 
   // Se não houver restrição explícita configurada, permite o usuário autenticado
@@ -84,9 +98,11 @@ export function isEmailAllowed(email) {
     return true;
   }
 
+  const emailDomain = cleanEmail.slice(atIdx); // ex: "@endodiagnose.com.br"
+
   return allowedList.some((pattern) => {
     if (pattern.startsWith('@')) {
-      return cleanEmail.endsWith(pattern);
+      return emailDomain === pattern;
     }
     return cleanEmail === pattern;
   });
@@ -101,19 +117,25 @@ export function getInactivityTimeoutMinutes() {
   const saved = localStorage.getItem(INACTIVITY_TIMEOUT_KEY);
   if (saved === null) return DEFAULT_INACTIVITY_TIMEOUT_MINS;
   const parsed = parseInt(saved, 10);
-  return Number.isFinite(parsed) ? parsed : DEFAULT_INACTIVITY_TIMEOUT_MINS;
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_INACTIVITY_TIMEOUT_MINS;
+  return parsed;
 }
 
 /**
- * Define o tempo de inatividade para bloqueio de tela.
+ * Define o tempo de inatividade para bloqueio de tela (>= 0).
  */
 export function setInactivityTimeoutMinutes(mins) {
   if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(INACTIVITY_TIMEOUT_KEY, String(mins));
+  const parsed = parseInt(mins, 10);
+  const safeMins = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_INACTIVITY_TIMEOUT_MINS;
+  localStorage.setItem(INACTIVITY_TIMEOUT_KEY, String(safeMins));
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('endodiagnose:inactivity-timeout-changed', { detail: { mins: safeMins } }));
+  }
 }
 
 /**
- * Gera um hash SHA-256 de uma string para não persistir o PIN puro.
+ * Gera um hash SHA-256 de uma string (mantido para compatibilidade com hashes legados).
  */
 export async function hashString(value) {
   if (!value) return '';
@@ -123,13 +145,37 @@ export async function hashString(value) {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
-  // Fallback simples para ambientes sem Web Crypto
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
+  throw new Error('Web Crypto API (crypto.subtle) indisponível neste contexto. Acesse via HTTPS ou localhost.');
+}
+
+/**
+ * Deriva hash criptográfico forte com PBKDF2-SHA256 (100.000 iterações) para o PIN.
+ */
+async function derivePinHash(pin, salt) {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error('Web Crypto API indisponível neste navegador/contexto. Use HTTPS ou localhost para configurar PIN.');
   }
-  return `fallback_${hash}`;
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(String(pin)),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(String(salt)),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  );
+  return Array.from(new Uint8Array(derivedBits))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function generatePinSalt() {
@@ -210,24 +256,26 @@ export function recordFailedPinAttempt(now = Date.now()) {
 }
 
 /**
- * Define o PIN de desbloqueio rápido (de 4 a 8 dígitos) com salt criptográfico.
+ * Define o PIN de desbloqueio rápido (de 4 a 8 dígitos numéricos) usando PBKDF2-SHA256 com salt.
  */
 export async function setQuickLockPin(pin) {
   if (typeof localStorage === 'undefined') return false;
   if (!pin) {
     localStorage.removeItem(LOCK_PIN_HASH_KEY);
     localStorage.removeItem(LOCK_PIN_SALT_KEY);
+    localStorage.removeItem(LOCK_PIN_ALGO_KEY);
     resetPinAttempts();
     return true;
   }
   const cleanPin = String(pin).trim();
-  if (cleanPin.length < 4 || cleanPin.length > 8) {
-    throw new Error('O PIN deve conter entre 4 e 8 dígitos.');
+  if (!/^\d{4,8}$/.test(cleanPin)) {
+    throw new Error('O PIN deve conter entre 4 e 8 dígitos numéricos.');
   }
   const salt = generatePinSalt();
-  const hashed = await hashString(`${salt}:${cleanPin}`);
+  const hashed = await derivePinHash(cleanPin, salt);
   localStorage.setItem(LOCK_PIN_SALT_KEY, salt);
   localStorage.setItem(LOCK_PIN_HASH_KEY, hashed);
+  localStorage.setItem(LOCK_PIN_ALGO_KEY, PIN_ALGO_PBKDF2);
   resetPinAttempts();
   return true;
 }
@@ -247,11 +295,13 @@ export function clearQuickLockPin() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(LOCK_PIN_HASH_KEY);
   localStorage.removeItem(LOCK_PIN_SALT_KEY);
+  localStorage.removeItem(LOCK_PIN_ALGO_KEY);
   resetPinAttempts();
 }
 
 /**
  * Valida o PIN inserido com o hash armazenado, respeitando rate-limit (backoff de 30s após 5 erros).
+ * Migra automaticamente hashes SHA-256 legados para PBKDF2-SHA256 ao validar com sucesso.
  */
 export async function verifyQuickLockPin(enteredPin) {
   if (typeof localStorage === 'undefined') return false;
@@ -265,13 +315,21 @@ export async function verifyQuickLockPin(enteredPin) {
 
   const cleanPin = String(enteredPin).trim();
   const storedSalt = localStorage.getItem(LOCK_PIN_SALT_KEY);
+  const storedAlgo = localStorage.getItem(LOCK_PIN_ALGO_KEY);
 
   let isMatch = false;
-  if (storedSalt) {
-    const enteredHash = await hashString(`${storedSalt}:${cleanPin}`);
+  if (storedSalt && storedAlgo === PIN_ALGO_PBKDF2) {
+    const enteredHash = await derivePinHash(cleanPin, storedSalt);
     isMatch = storedHash === enteredHash;
+  } else if (storedSalt) {
+    // Compatibilidade com hash SHA-256 com salt legado: migra para PBKDF2 ao acertar
+    const legacySaltedHash = await hashString(`${storedSalt}:${cleanPin}`);
+    isMatch = storedHash === legacySaltedHash;
+    if (isMatch) {
+      await setQuickLockPin(cleanPin);
+    }
   } else {
-    // Compatibilidade com hash legado sem salt: migra automaticamente ao acertar
+    // Compatibilidade com hash legado sem salt: migra automaticamente para PBKDF2 ao acertar
     const legacyHash = await hashString(cleanPin);
     isMatch = storedHash === legacyHash;
     if (isMatch) {

@@ -61,7 +61,13 @@ function getCutoffDateString(type, customDate) {
   return now.toISOString().slice(0, 10);
 }
 
-export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initialTab = 'storage' }) {
+export default function CloudSyncModal({
+  isOpen,
+  onClose,
+  onDataUpdated,
+  initialTab = 'storage',
+  unauthenticated = false,
+}) {
   const toast = useToast();
   const {
     storageInfo,
@@ -122,12 +128,13 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
 
   const handleSavePin = async (e) => {
     e?.preventDefault();
-    if (pinInput.length < 4 || pinInput.length > 8) {
-      toast.error('O PIN deve conter entre 4 e 8 dígitos numéricos.');
+    const cleanPin = String(pinInput).trim();
+    if (!/^\d{4,8}$/.test(cleanPin)) {
+      toast.error('O PIN deve conter entre 4 e 8 dígitos numéricos (apenas números).');
       return;
     }
     try {
-      await setQuickLockPin(pinInput);
+      await setQuickLockPin(cleanPin);
       setHasPin(true);
       setPinInput('');
       toast.success('PIN de acesso rápido salvo com sucesso!');
@@ -175,7 +182,9 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       } else {
         setConfigured(false);
       }
-      if (initialTab) {
+      if (unauthenticated) {
+        setActiveTab(initialTab === 'tutorial' ? 'tutorial' : 'config');
+      } else if (initialTab) {
         setActiveTab(initialTab);
       } else if (!stored) {
         setActiveTab('tutorial');
@@ -184,11 +193,16 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       }
       setStatusMessage(null);
       setShowArchiveConfirm(false);
+      setPasteSnippet('');
+      setPinInput('');
+      setInactivityMins(getInactivityTimeoutMinutes());
+      setHasPin(hasQuickLockPin());
+      setAllowedEmailsText(getAllowedEmailsList().join(', '));
       if (refreshStorageInfo) refreshStorageInfo();
       setPendingQueue(getPendingQueue());
       refreshBackupStatus();
     }
-  }, [isOpen, initialTab, refreshStorageInfo, refreshBackupStatus]);
+  }, [isOpen, initialTab, unauthenticated, refreshStorageInfo, refreshBackupStatus]);
 
   useEffect(() => {
     refreshBackupStatus();
@@ -432,17 +446,13 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
   };
 
   const handleExportJSON = () => {
-    const data = getAllData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const today = new Date().toISOString().split('T')[0];
-    a.href = url;
-    a.download = `backup_endodiagnose_${today}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    recordBackupDone();
-    refreshBackupStatus();
+    try {
+      exportAllDataAsJSON();
+      refreshBackupStatus();
+      toast.success('Backup JSON baixado com sucesso!');
+    } catch (err) {
+      toast.error('Erro ao gerar backup: ' + err.message);
+    }
   };
 
   const handleImportJSON = (e) => {
@@ -476,14 +486,20 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
     e.target.value = '';
   };
 
+  const isBusy = isLoading || isArchiving;
+  const safeClose = () => {
+    if (pendingConfirm || isBusy) return;
+    onClose();
+  };
+
   return (
     <>
     <Modal
       isOpen={isOpen}
-      onClose={pendingConfirm ? () => {} : onClose}
-      title="Armazenamento, Nuvem & Backup"
+      onClose={safeClose}
+      title={unauthenticated ? 'Configuração de Conexão Firebase' : 'Armazenamento, Nuvem & Backup'}
       footer={
-        <button className="btn btn-secondary" onClick={onClose}>
+        <button type="button" className="btn btn-secondary" onClick={safeClose} disabled={isBusy}>
           Fechar
         </button>
       }
@@ -524,20 +540,24 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
 
         {/* Tab Buttons */}
         <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${activeTab === 'storage' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('storage')}
-          >
-            💾 Armazenamento & Limpeza
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${activeTab === 'sync' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('sync')}
-          >
-            🔄 Sincronização & Nuvem
-          </button>
+          {!unauthenticated && (
+            <>
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === 'storage' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setActiveTab('storage')}
+              >
+                💾 Armazenamento & Limpeza
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === 'sync' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setActiveTab('sync')}
+              >
+                🔄 Sincronização & Nuvem
+              </button>
+            </>
+          )}
           <button
             type="button"
             className={`btn btn-sm ${activeTab === 'tutorial' ? 'btn-primary' : 'btn-secondary'}`}
@@ -552,13 +572,15 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
           >
             ⚙️ Configurar Chaves
           </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${activeTab === 'security' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('security')}
-          >
-            🛡️ Segurança & LGPD
-          </button>
+          {!unauthenticated && (
+            <button
+              type="button"
+              className={`btn btn-sm ${activeTab === 'security' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveTab('security')}
+            >
+              🛡️ Segurança & LGPD
+            </button>
+          )}
         </div>
 
         {statusMessage && (
@@ -587,7 +609,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
         )}
 
         {/* Tab 1: Armazenamento & Limpeza */}
-        {activeTab === 'storage' && (
+        {!unauthenticated && activeTab === 'storage' && (
           <StorageTab
             storageInfo={storageInfo}
             refreshStorageInfo={refreshStorageInfo}
@@ -608,7 +630,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
         )}
 
         {/* Tab 2: Sincronização & Nuvem */}
-        {activeTab === 'sync' && (
+        {!unauthenticated && activeTab === 'sync' && (
           <SyncTab
             configured={configured}
             isLoading={isLoading}
@@ -638,11 +660,12 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
             handleDisconnect={handleDisconnect}
             configured={configured}
             isLoading={isLoading}
+            allowDisconnect={!unauthenticated}
           />
         )}
 
         {/* Tab 5: Segurança & LGPD */}
-        {activeTab === 'security' && (
+        {!unauthenticated && activeTab === 'security' && (
           <SecurityTab
             inactivityMins={inactivityMins}
             handleSaveInactivity={handleSaveInactivity}
@@ -670,6 +693,7 @@ export default function CloudSyncModal({ isOpen, onClose, onDataUpdated, initial
       onConfirm={() => pendingConfirm?.action?.()}
       title={pendingConfirm?.title}
       confirmLabel={pendingConfirm?.confirmLabel}
+      confirmVariant={pendingConfirm?.confirmVariant}
       message={pendingConfirm?.message}
     />
     </>

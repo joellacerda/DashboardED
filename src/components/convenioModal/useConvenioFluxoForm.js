@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext';
 import {
+  roundCurrency,
   getTodayISO,
   getAcquisitionPeriod,
   navigateAcquisitionPeriod,
@@ -80,6 +81,23 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
         item.medico.trim().toUpperCase() === (fluxoForm.medico2 || '').trim().toUpperCase()
       ) {
         errs.medico2 = 'O 2º médico deve ser diferente do médico realizante.';
+      }
+    }
+
+    const numericFields = [
+      ['valorTaxaSala', 'Taxa de Sala'],
+      ['valorHonorariosBase', 'Honorários Base'],
+      ['valorPolipectomia', 'Valor de Polipectomia'],
+      ['valorAcessorio', 'Valor de Acessório'],
+      ['valorClinica', 'Valor Clínica'],
+      ['valorMedico', 'Valor Médico'],
+    ];
+    for (const [k, label] of numericFields) {
+      if (fluxoForm[k] !== '' && fluxoForm[k] !== null && fluxoForm[k] !== undefined) {
+        const n = Number(fluxoForm[k]);
+        if (!Number.isFinite(n) || n < 0) {
+          errs[k] = `${label} não pode ser negativo.`;
+        }
       }
     }
 
@@ -171,10 +189,9 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
 
     let initPeriod = getAcquisitionPeriod();
     if (initialData) {
-      try {
-        initPeriod = getAcquisitionPeriod(new Date(initialData.replace(/-/g, '/')));
-      } catch {
-        // fallback
+      const parsed = new Date(String(initialData).slice(0, 10) + 'T00:00:00');
+      if (!Number.isNaN(parsed.getTime())) {
+        initPeriod = getAcquisitionPeriod(parsed);
       }
     }
     setFluxoPeriod(initPeriod);
@@ -239,13 +256,12 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
   const handleFluxoDateChange = (dateVal) => {
     setFluxoForm((prev) => ({ ...prev, data: dateVal }));
     if (dateVal) {
-      try {
-        const p = getAcquisitionPeriod(new Date(dateVal.replace(/-/g, '/')));
+      const parsed = new Date(String(dateVal).slice(0, 10) + 'T00:00:00');
+      if (!Number.isNaN(parsed.getTime())) {
+        const p = getAcquisitionPeriod(parsed);
         if (p && p.start && p.end) {
           setFluxoPeriod(p);
         }
-      } catch {
-        // ignore invalid date parsing
       }
     }
   };
@@ -268,40 +284,40 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
     const pctPolipClinica = Number(fluxoForm.pctPolipectomiaClinica ?? 50);
     const pctPolipMedico = Math.max(0, 100 - pctPolipClinica);
 
-    const partePolipClinica = (polipectomiaNum * pctPolipClinica) / 100;
-    const partePolipMedico = (polipectomiaNum * pctPolipMedico) / 100;
-    const parteAcessorioClinica = acessorioNum;
+    const partePolipClinica = roundCurrency((polipectomiaNum * pctPolipClinica) / 100);
+    const partePolipMedico = roundCurrency(polipectomiaNum - partePolipClinica);
+    const parteAcessorioClinica = roundCurrency(acessorioNum);
 
     if (isPolipectomiaMode) {
-      total = taxaSalaNum + honorariosBaseNum + polipectomiaNum + acessorioNum;
-      valClinicaNum = taxaSalaNum;
-      valMedicoNum = honorariosBaseNum + polipectomiaNum + acessorioNum;
+      total = roundCurrency(taxaSalaNum + honorariosBaseNum + polipectomiaNum + acessorioNum);
+      valClinicaNum = roundCurrency(taxaSalaNum);
+      valMedicoNum = roundCurrency(honorariosBaseNum + polipectomiaNum + acessorioNum);
 
-      direitoClinica = taxaSalaNum + partePolipClinica + parteAcessorioClinica;
-      totalHonorariosMedicos = honorariosBaseNum + partePolipMedico;
+      direitoClinica = roundCurrency(taxaSalaNum + partePolipClinica + parteAcessorioClinica);
+      totalHonorariosMedicos = roundCurrency(honorariosBaseNum + partePolipMedico);
 
       pctMedicoTotal = total > 0 ? Math.round((totalHonorariosMedicos / total) * 100) : 0;
       pctClinica = total > 0 ? 100 - pctMedicoTotal : 0;
     } else {
-      valClinicaNum = parseFloat(fluxoForm.valorClinica) || 0;
-      valMedicoNum = parseFloat(fluxoForm.valorMedico) || 0;
-      total = valClinicaNum + valMedicoNum;
+      valClinicaNum = roundCurrency(parseFloat(fluxoForm.valorClinica) || 0);
+      valMedicoNum = roundCurrency(parseFloat(fluxoForm.valorMedico) || 0);
+      total = roundCurrency(valClinicaNum + valMedicoNum);
       pctMedicoTotal = Number(fluxoForm.percentualMedico) || 0;
       pctClinica = Math.max(0, 100 - pctMedicoTotal);
-      totalHonorariosMedicos = (total * pctMedicoTotal) / 100;
-      direitoClinica = (total * pctClinica) / 100;
+      totalHonorariosMedicos = roundCurrency((total * pctMedicoTotal) / 100);
+      direitoClinica = roundCurrency(total - totalHonorariosMedicos);
     }
 
     const temDivisao2 = Boolean(fluxoForm.temDivisaoMedico2);
     const pctMed1 = temDivisao2 ? Number(fluxoForm.porcentagemMedico1) || 0 : 100;
     const pctMed2 = temDivisao2 ? Number(fluxoForm.porcentagemMedico2) || 0 : 0;
 
-    const direitoMedico1 = (totalHonorariosMedicos * pctMed1) / 100;
-    const direitoMedico2 = temDivisao2 ? (totalHonorariosMedicos * pctMed2) / 100 : 0;
+    const direitoMedico1 = roundCurrency((totalHonorariosMedicos * pctMed1) / 100);
+    const direitoMedico2 = temDivisao2 ? roundCurrency(totalHonorariosMedicos - direitoMedico1) : 0;
 
-    const diferencaMedico1 = direitoMedico1 - valMedicoNum;
-    const valorDevolverClinica = diferencaMedico1 < 0 ? Math.abs(diferencaMedico1) : 0;
-    const repasseTotalMedicos = Math.max(0, diferencaMedico1) + direitoMedico2;
+    const diferencaMedico1 = roundCurrency(direitoMedico1 - valMedicoNum);
+    const valorDevolverClinica = diferencaMedico1 < 0 ? roundCurrency(Math.abs(diferencaMedico1)) : 0;
+    const repasseTotalMedicos = roundCurrency(Math.max(0, diferencaMedico1) + direitoMedico2);
 
     return {
       isPolipectomiaMode,
@@ -350,26 +366,26 @@ export function useConvenioFluxoForm({ isOpen, item, onClose, onSuccess }) {
       valorMedico: splitCalculations.valMedicoNum,
       percentualMedico: splitCalculations.pctMedicoTotal,
       modoPartilha: fluxoForm.modoPartilha,
-      valorTaxaSala: fluxoForm.valorTaxaSala,
-      valorHonorariosBase: fluxoForm.valorHonorariosBase,
-      valorPolipectomia: fluxoForm.valorPolipectomia,
-      valorAcessorio: fluxoForm.valorAcessorio,
-      pctPolipectomiaClinica: fluxoForm.pctPolipectomiaClinica,
-      valorCompensacaoClinica: splitCalculations.valorDevolverClinica,
-      direitoClinica: splitCalculations.direitoClinica,
-      direitoMedico: splitCalculations.totalHonorariosMedicos,
+      valorTaxaSala: roundCurrency(splitCalculations.taxaSalaNum),
+      valorHonorariosBase: roundCurrency(splitCalculations.honorariosBaseNum),
+      valorPolipectomia: roundCurrency(splitCalculations.polipectomiaNum),
+      valorAcessorio: roundCurrency(splitCalculations.acessorioNum),
+      pctPolipectomiaClinica: Number(fluxoForm.pctPolipectomiaClinica ?? 50),
+      valorCompensacaoClinica: roundCurrency(splitCalculations.valorDevolverClinica),
+      direitoClinica: roundCurrency(splitCalculations.direitoClinica),
+      direitoMedico: roundCurrency(splitCalculations.totalHonorariosMedicos),
       temDivisaoMedico2: fluxoForm.temDivisaoMedico2,
       medico2: fluxoForm.temDivisaoMedico2 ? (fluxoForm.medico2 || '').trim().toUpperCase() : '',
-      porcentagemMedico1: fluxoForm.temDivisaoMedico2 ? fluxoForm.porcentagemMedico1 : 100,
-      porcentagemMedico2: fluxoForm.temDivisaoMedico2 ? fluxoForm.porcentagemMedico2 : 0,
+      porcentagemMedico1: fluxoForm.temDivisaoMedico2 ? Number(fluxoForm.porcentagemMedico1) || 0 : 100,
+      porcentagemMedico2: fluxoForm.temDivisaoMedico2 ? Number(fluxoForm.porcentagemMedico2) || 0 : 0,
       valorRepasseMedico1:
-        splitCalculations.diferencaMedico1 > 0 ? splitCalculations.diferencaMedico1 : 0,
+        splitCalculations.diferencaMedico1 > 0 ? roundCurrency(splitCalculations.diferencaMedico1) : 0,
       valorRepasseMedico2:
-        splitCalculations.direitoMedico2 > 0 ? splitCalculations.direitoMedico2 : 0,
+        splitCalculations.direitoMedico2 > 0 ? roundCurrency(splitCalculations.direitoMedico2) : 0,
       valorRepasse:
-        splitCalculations.repasseTotalMedicos > 0 ? splitCalculations.repasseTotalMedicos : 0,
+        splitCalculations.repasseTotalMedicos > 0 ? roundCurrency(splitCalculations.repasseTotalMedicos) : 0,
       fluxoLancado: true,
-      fluxoValorLancado: valorLancado,
+      fluxoValorLancado: roundCurrency(valorLancado),
       fluxoData: fluxoForm.data,
       fluxoPeriodoLabel: fluxoPeriod.label,
       fluxoPeriodoStart: fluxoPeriod.start,

@@ -29,17 +29,14 @@ export default function TutorialTab({ onGoToConfig }) {
         </div>
 
         <div>
-          <strong>3. Configurar Regras de Segurança do Firestore:</strong>
-          <div>Na aba <strong>Regras (Rules)</strong> do Firestore Database, cole a regra segura abaixo e clique em <strong>Publicar</strong> (permite acesso apenas a usuários autenticados):</div>
+          <strong>3. Configurar Regras de Segurança do Firestore (LGPD):</strong>
+          <div>
+            Utilize o arquivo <code>firestore.rules</code> versionado no repositório via{' '}
+            <code>firebase deploy --only firestore:rules</code> (ele exige e-mail verificado, autorização explícita em{' '}
+            <code>authorizedUsers/&#123;uid&#125;</code> e mantém <code>auditLogs</code> imutável/append-only).
+          </div>
           <pre style={{ background: 'var(--bg-surface)', padding: '0.6rem', borderRadius: '4px', fontSize: '11px', overflowX: 'auto', border: '1px solid var(--border-subtle)', color: 'var(--accent-emerald)' }}>
-            {`rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}`}
+            {`firebase deploy --only firestore:rules`}
           </pre>
         </div>
 
@@ -67,6 +64,7 @@ service cloud.firestore {
       </div>
 
       <button
+        type="button"
         className="btn btn-primary"
         style={{ alignSelf: 'flex-start' }}
         onClick={onGoToConfig}

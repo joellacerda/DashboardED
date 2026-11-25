@@ -14,16 +14,14 @@ export function getSalasConfig() {
   if (saved && Array.isArray(saved) && saved.length > 0) {
     return [...saved].sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   }
-  // Inicializa salas padrão se estiver vazio
-  setData(MODULES.salasConfig, [...DEFAULT_SALAS]);
-  return [...DEFAULT_SALAS];
+  return DEFAULT_SALAS.map((s) => ({ ...s }));
 }
 
 export function saveSalasConfig(salas) {
   const prevSalas = getData(MODULES.salasConfig) || [];
   const now = new Date().toISOString();
   const normalizedSalas = Array.isArray(salas)
-    ? salas.map((s) => ({ ...s, updatedAt: s.updatedAt || now }))
+    ? salas.map((s) => ({ ...s, updatedAt: now }))
     : [];
 
   setData(MODULES.salasConfig, normalizedSalas);
@@ -60,9 +58,11 @@ export function saveCronogramaSlot(slot) {
   if (!slot || !slot.data || !slot.salaId || !slot.turno) return null;
   const list = getData(MODULES.cronogramaSalas) || [];
 
-  // Busca se já existe o slot por ID ou chave composta (data + salaId + turno)
+  // Busca se já existe o slot por ID (quando presente) ou chave composta (data + salaId + turno)
   const existingIdx = list.findIndex(
-    (item) => item.id === slot.id || (item.data === slot.data && item.salaId === slot.salaId && item.turno === slot.turno)
+    (item) =>
+      (slot.id && item.id && String(item.id) === String(slot.id)) ||
+      (item.data === slot.data && item.salaId === slot.salaId && item.turno === slot.turno)
   );
 
   if (existingIdx !== -1) {

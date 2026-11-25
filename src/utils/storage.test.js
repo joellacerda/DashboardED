@@ -78,7 +78,7 @@ describe('Storage Layer — Fase 4', () => {
 
       const updated = getData(MODULES.medicos);
       expect(updated).toEqual([
-        { id: '1', nome: 'DR. JOAO' },
+        expect.objectContaining({ id: '1', nome: 'DR. JOAO', updatedAt: expect.any(String) }),
         { id: '2', nome: 'DRA. MARIA' },
       ]);
     });
@@ -197,6 +197,40 @@ describe('Storage Layer — Fase 4', () => {
       expect(preview.modules.exames.keepCount).toBe(1);
       expect(preview.modules.fluxoCaixa.archiveCount).toBe(1);
       expect(preview.modules.fluxoCaixa.keepCount).toBe(1);
+    });
+
+    it('previewArchiveData preserva exames parcelados com parcelas futuras e convênios com recebimento posterior ao corte', () => {
+      setData(MODULES.detalhesExames, [
+        {
+          id: 'det_parcelado',
+          data: '2025-11-20',
+          paciente: 'PARCELADO',
+          pagamentos: [{ forma: 'Cartão de Crédito', valor: 1000, parcelas: 6 }],
+        },
+        {
+          id: 'det_antigo',
+          data: '2024-06-10',
+          paciente: 'ANTIGO',
+          pagamentos: [{ forma: 'Pix', valor: 500, parcelas: 1 }],
+        },
+      ]);
+      setData(MODULES.examesConvenio, [
+        { id: 'conv_tardio', data: '2025-12-01', fluxoData: '2026-02-10', paciente: 'TARDIO' },
+        { id: 'conv_antigo', data: '2024-05-01', fluxoData: '2024-06-01', paciente: 'ANTIGO' },
+      ]);
+
+      const preview = previewArchiveData('2026-01-01');
+      expect(preview.modules.detalhesExames.archiveCount).toBe(1);
+      expect(preview.modules.detalhesExames.keepCount).toBe(1);
+      expect(preview.modules.examesConvenio.archiveCount).toBe(1);
+      expect(preview.modules.examesConvenio.keepCount).toBe(1);
+    });
+
+    it('getData retorna cópia isolada (mutação externa não corrompe memoryCache)', () => {
+      setData(MODULES.medicos, [{ id: 'm1', nome: 'DR. ORIGINAL' }]);
+      const copy = getData(MODULES.medicos);
+      copy[0].nome = 'MUTADO';
+      expect(getData(MODULES.medicos)[0].nome).toBe('DR. ORIGINAL');
     });
 
     it('calcLiquido calcula salário líquido somando proventos e subtraindo descontos', () => {

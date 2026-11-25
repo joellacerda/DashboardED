@@ -22,6 +22,7 @@ import {
   addAuditLog as storageAddAuditLog,
   getAuditLogs as storageGetAuditLogs,
   clearAuditLogs as storageClearAuditLogs,
+  runDataMigrations,
   MODULES,
 } from '../utils/storage';
 import { getActiveMedicosOptions } from '../utils/helpers';
@@ -37,12 +38,19 @@ export const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
   const [data, setDataState] = useState(() => {
+    // Executa migrações ANTES da primeira leitura para garantir estado inicial já migrado
+    runDataMigrations();
     const initial = getAllData();
     initial.salasConfig = getSalasConfig();
     return initial;
   });
 
   const [storageVersion, setStorageVersion] = useState(0);
+
+  // Sincronização inicial centralizada de convênios → detalhes (evita chamadas redundantes em 3 páginas)
+  useEffect(() => {
+    storageSyncAllConveniosToDetalhes();
+  }, []);
 
   // Atualiza um módulo específico no estado React a partir do localStorage/cache
   const refreshModule = useCallback((module) => {
@@ -225,10 +233,21 @@ export function DataProvider({ children }) {
   }, []);
 
   const storageInfo = useMemo(() => {
-    void data;
     void storageVersion;
+    void data.exames?.length;
+    void data.detalhesExames?.length;
+    void data.examesConvenio?.length;
+    void data.fluxoCaixa?.length;
+    void data.folhaPagamento?.length;
     return getStorageUsageInfo();
-  }, [data, storageVersion]);
+  }, [
+    storageVersion,
+    data.exames?.length,
+    data.detalhesExames?.length,
+    data.examesConvenio?.length,
+    data.fluxoCaixa?.length,
+    data.folhaPagamento?.length,
+  ]);
 
   const archiveAndPurge = useCallback(
     async (cutoffDate) => {

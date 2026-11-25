@@ -210,11 +210,18 @@ function AppContent() {
   if (isConfigured && !user) {
     return (
       <>
-        <LoginPage onOpenConfigModal={() => setCloudModalOpen(true)} />
+        <LoginPage
+          onOpenConfigModal={() => {
+            setCloudModalTab('config');
+            setCloudModalOpen(true);
+          }}
+        />
         <CloudSyncModal
           isOpen={cloudModalOpen}
           onClose={handleCloudModalClose}
           onDataUpdated={handleDataUpdated}
+          initialTab="config"
+          unauthenticated
         />
       </>
     );

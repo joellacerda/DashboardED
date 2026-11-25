@@ -24,9 +24,16 @@ export default function FolhaPage() {
     totalBeneficios,
     totalVariaveis,
     totalDescontos,
+    totalVA,
+    totalVT,
+    totalExtras,
+    totalProdutividade,
     folhaLancamentoNoCaixa,
     handleLancarFluxo,
     handleCopyFromPrevious,
+    requestCopyFromPrevious,
+    confirmCopyOpen,
+    setConfirmCopyOpen,
     modalOpen,
     setModalOpen,
     editId,
@@ -57,7 +64,7 @@ export default function FolhaPage() {
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={handleCopyFromPrevious}
+            onClick={requestCopyFromPrevious}
             title={`Copiar lançamentos do período anterior (${navigateAcquisitionPeriod(period, -1).label})`}
           >
             📋 Copiar Mês Anterior
@@ -66,7 +73,7 @@ export default function FolhaPage() {
           {/* Action to launch into Fluxo de Caixa */}
           <button
             type="button"
-            className={`btn btn-sm ${folhaLancamentoNoCaixa ? 'btn-secondary' : 'btn-secondary'}`}
+            className="btn btn-sm btn-secondary"
             onClick={handleLancarFluxo}
             style={
               folhaLancamentoNoCaixa
@@ -110,6 +117,10 @@ export default function FolhaPage() {
           totalBase={totalBase}
           totalDescontos={totalDescontos}
           totalFolha={totalFolha}
+          totalVA={totalVA}
+          totalVT={totalVT}
+          totalExtras={totalExtras}
+          totalProdutividade={totalProdutividade}
           safeCurrentPage={safeCurrentPage}
           pageSize={pageSize}
           setCurrentPage={setCurrentPage}
@@ -135,7 +146,16 @@ export default function FolhaPage() {
         isOpen={Boolean(deleteId)}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        message="Tem certeza que deseja excluir este colaborador?"
+        message="Tem certeza que deseja remover/inativar este colaborador? Se houver histórico em períodos anteriores, ele será preservado."
+      />
+
+      <ConfirmDialog
+        isOpen={confirmCopyOpen}
+        onClose={() => setConfirmCopyOpen(false)}
+        onConfirm={handleCopyFromPrevious}
+        title="Sobrescrever lançamentos do período?"
+        confirmLabel="Sim, copiar mês anterior"
+        message="Já existem lançamentos gravados neste período. Copiar do mês anterior irá sobrescrever horas extras, descontos e produtividade já informados. Deseja continuar?"
       />
     </>
   );

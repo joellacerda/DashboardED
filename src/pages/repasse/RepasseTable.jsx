@@ -21,7 +21,7 @@ export default function RepasseTable({
   return (
     <div className="table-container">
       <div className="table-header">
-        <h3 className="table-title">Demostrativo de Repasse por Médico</h3>
+        <h3 className="table-title">Demonstrativo de Repasse por Médico</h3>
         <div className="table-actions">
           <ExportMenu
             onExportCSV={() => exportCSV(repasseRows, exportColumns, `repasses_medicos_${period.start}`)}
@@ -207,6 +207,7 @@ export default function RepasseTable({
 
                     <td style={{ textAlign: 'center', width: '70px' }}>
                       <button
+                        type="button"
                         className="btn btn-ghost btn-icon btn-sm"
                         onClick={() => openEditAjuste(row)}
                         title="Editar débitos, créditos, BNB e sócio"

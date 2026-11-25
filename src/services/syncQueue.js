@@ -1,8 +1,9 @@
-import { getLocalStorage } from '../utils/storage/core';
+import { getLocalStorage, generateId } from '../utils/storage/core';
 import { isCloudConfigured, initFirebase, sanitizeForFirestore } from './firebase';
 
 export const PENDING_SYNC_KEY = 'endodiagnose_pending_sync';
 export const LAST_SYNC_KEY = 'endodiagnose_last_sync_timestamp';
+export const MAX_SYNC_ATTEMPTS = 10;
 
 let isProcessing = false;
 let currentSyncPromise = null;
@@ -99,7 +100,7 @@ export function enqueueSyncOperation({ module, entityId, type, payload }) {
   );
 
   const operation = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     module,
     entityId: String(entityId),
     type: type || 'UPSERT',
@@ -204,40 +205,87 @@ export async function processPendingQueue(options = {}) {
       const { db, sdk } = instance;
       const { doc, setDoc, getDoc } = sdk.firestoreMod;
 
-      const queue = getPendingQueue();
-      if (queue.length === 0) {
+      const snapshotQueue = getPendingQueue();
+      if (snapshotQueue.length === 0) {
         return { total: 0, processed: 0, remaining: 0, lastError: null };
       }
 
-      const remainingQueue = [];
+      const succeededOpIds = new Set();
+      const updatedOpsById = new Map();
       const now = Date.now();
       let processedCount = 0;
 
-      for (let i = 0; i < queue.length; i++) {
-        const op = queue[i];
+      // Mescla com a fila atual em disco para NUNCA perder mutações enfileiradas durante chamadas assíncronas
+      const commitQueueDelta = () => {
+        const latestQueue = getPendingQueue();
+        const merged = [];
+        for (const item of latestQueue) {
+          if (succeededOpIds.has(item.id)) continue;
+          if (updatedOpsById.has(item.id)) {
+            merged.push(updatedOpsById.get(item.id));
+          } else {
+            merged.push(item);
+          }
+        }
+        savePendingQueue(merged);
+        return merged;
+      };
+
+      for (let i = 0; i < snapshotQueue.length; i++) {
+        const op = { ...snapshotQueue[i] };
+
+        if (!op.entityId || !op.module) {
+          succeededOpIds.add(op.id);
+          continue;
+        }
+
+        // Ignora falhas permanentes em modo automático (só tenta novamente quando force=true)
+        if (!force && (op.permanentFailure || (op.attempts || 0) >= MAX_SYNC_ATTEMPTS)) {
+          continue;
+        }
 
         // Se não for forçado, respeita o backoff exponencial
         if (!force && op.lastAttempt && op.attempts > 0) {
           const delay = Math.min(60000, Math.pow(2, op.attempts) * 1000);
           const elapsed = now - new Date(op.lastAttempt).getTime();
           if (elapsed < delay) {
-            remainingQueue.push(op);
             continue;
           }
         }
 
-        if (!op.entityId || !op.module) {
-          // Entrada corrompida ou sem ID/módulo: descarta para não bloquear a fila indefinidamente
-          continue;
-        }
-
         try {
           const docRef = doc(db, op.module, String(op.entityId));
+          const isAuditModule = op.module === 'auditLogs' || op.module === 'audit_logs';
 
-          if (op.type === 'DELETE') {
+          if (isAuditModule) {
+            // Conformidade LGPD: auditLogs é estritamente append-only (create apenas)
+            if (op.type === 'DELETE') {
+              succeededOpIds.add(op.id);
+              processedCount++;
+              continue;
+            }
+            const cloudSnap = await getDoc(docRef);
+            if (!cloudSnap.exists()) {
+              const cleanPayload = sanitizeForFirestore(op.payload) || {};
+              await setDoc(docRef, cleanPayload);
+            }
+          } else if (op.type === 'DELETE') {
+            const cloudSnap = await getDoc(docRef);
+            const cloudData = cloudSnap.exists() ? cloudSnap.data() : null;
             const tombstone = sanitizeForFirestore(
               op.payload || { id: String(op.entityId), _deleted: true, deletedAt: new Date().toISOString() }
             );
+            if (cloudData) {
+              const conflict = resolveConflict(tombstone, cloudData);
+              if (conflict.winner === 'cloud') {
+                console.warn(
+                  `[SyncQueue] DELETE ignorado pois versão na nuvem é mais recente para ${op.module}/${op.entityId}`
+                );
+                succeededOpIds.add(op.id);
+                processedCount++;
+                continue;
+              }
+            }
             await setDoc(docRef, tombstone, { merge: true });
           } else {
             // Verifica versão na nuvem para resolução de conflito
@@ -250,46 +298,59 @@ export async function processPendingQueue(options = {}) {
                 console.warn(
                   `[SyncQueue] Conflito resolvido em favor da nuvem para ${op.module}/${op.entityId}`
                 );
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                  window.dispatchEvent(
+                    new CustomEvent('endodiagnose:cloud-conflict-resolved', {
+                      detail: { module: op.module, entityId: op.entityId, cloudData },
+                    })
+                  );
+                }
+                succeededOpIds.add(op.id);
                 processedCount++;
                 continue;
               }
             }
 
-            // Sanitiza para garantir que campos com valor `undefined` não causem erro no Firestore
             const cleanPayload = sanitizeForFirestore(op.payload) || {};
             await setDoc(docRef, cleanPayload, { merge: true });
           }
 
+          succeededOpIds.add(op.id);
           processedCount++;
-          // Operação bem-sucedida! Não vai para remainingQueue.
 
-          // Notifica progresso a cada 20 itens para a UI atualizar o contador em tempo real
           if (processedCount % 20 === 0) {
-            const currentRemaining = [...remainingQueue, ...queue.slice(i + 1)];
-            savePendingQueue(currentRemaining);
+            commitQueueDelta();
           }
         } catch (err) {
           console.warn(`[SyncQueue] Falha ao sincronizar ${op.module}/${op.entityId}:`, err);
+          const errCode = err?.code || '';
+          const isPermissionError =
+            errCode === 'permission-denied' || errCode === 'firestore/permission-denied';
           op.attempts = (op.attempts || 0) + 1;
           op.lastAttempt = new Date().toISOString();
           op.error = err?.message || String(err);
-          remainingQueue.push(op);
+          if (isPermissionError || op.attempts >= MAX_SYNC_ATTEMPTS) {
+            op.permanentFailure = true;
+          }
+          updatedOpsById.set(op.id, op);
         }
       }
 
-      savePendingQueue(remainingQueue);
+      const finalRemaining = commitQueueDelta();
 
-      // Se a fila esvaziou ou teve progresso, atualiza o timestamp de última sincronização
-      const storage = getLocalStorage();
-      if (storage) {
-        storage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+      // Só atualiza o timestamp de última sincronização se houve progresso real
+      if (processedCount > 0) {
+        const storage = getLocalStorage();
+        if (storage) {
+          storage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+        }
       }
 
-      const lastError = remainingQueue.find((item) => item.error)?.error || null;
+      const lastError = finalRemaining.find((item) => item.error)?.error || null;
       return {
-        total: queue.length,
+        total: snapshotQueue.length,
         processed: processedCount,
-        remaining: remainingQueue.length,
+        remaining: finalRemaining.length,
         lastError,
       };
     } catch (globalErr) {

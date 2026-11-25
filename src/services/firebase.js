@@ -301,22 +301,37 @@ export async function uploadAllLocalToCloud(modulesData) {
   const services = await getServices();
   if (!services?.db) throw new Error('Firebase não configurado ou chaves inválidas');
   const { db, sdk } = services;
-  const { doc, writeBatch } = sdk.firestoreMod;
+  const { doc, writeBatch, collection, getDocs } = sdk.firestoreMod;
 
   let totalUploaded = 0;
   for (const [module, items] of Object.entries(modulesData)) {
     if (!Array.isArray(items) || items.length === 0) continue;
-    
+
+    // auditLogs é append-only no Firestore (allow update: if false): envia apenas logs ainda inexistentes
+    let itemsToUpload = items;
+    const isAudit = module === 'auditLogs' || module === 'audit_logs';
+    if (isAudit) {
+      const existingSnap = await getDocs(collection(db, module));
+      const existingIds = new Set();
+      existingSnap.forEach((d) => existingIds.add(d.id));
+      itemsToUpload = items.filter((item) => item?.id && !existingIds.has(String(item.id)));
+      if (itemsToUpload.length === 0) continue;
+    }
+
     // Process in batches of up to 400 (Firestore limit is 500)
     const chunkSize = 400;
-    for (let i = 0; i < items.length; i += chunkSize) {
-      const chunk = items.slice(i, i + chunkSize);
+    for (let i = 0; i < itemsToUpload.length; i += chunkSize) {
+      const chunk = itemsToUpload.slice(i, i + chunkSize);
       const batch = writeBatch(db);
       for (const item of chunk) {
         if (!item.id) continue;
         const cleanItem = sanitizeForFirestore(item);
-        const ref = doc(db, module, item.id);
-        batch.set(ref, cleanItem, { merge: true });
+        const ref = doc(db, module, String(item.id));
+        if (isAudit) {
+          batch.set(ref, cleanItem);
+        } else {
+          batch.set(ref, cleanItem, { merge: true });
+        }
         totalUploaded++;
       }
       await batch.commit();

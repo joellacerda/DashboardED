@@ -25,13 +25,13 @@ export default function FolhaModal({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
+          <button type="submit" form="folha-form" className="btn btn-primary">
             {editId ? 'Salvar Alterações' : 'Cadastrar'}
           </button>
         </>
       }
     >
-      <form onSubmit={handleSave} noValidate autoComplete="off">
+      <form id="folha-form" onSubmit={handleSave} noValidate autoComplete="off">
         <div
           style={{
             marginBottom: '0.85rem',
@@ -191,7 +191,7 @@ export default function FolhaModal({
             <span
               style={{
                 fontWeight: 700,
-                color: 'var(--color-emerald)',
+                color: calcLiquido(form) < 0 ? 'var(--color-rose)' : 'var(--color-emerald)',
                 fontSize: 'var(--text-lg)',
               }}
             >

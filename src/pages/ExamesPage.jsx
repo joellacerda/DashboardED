@@ -107,11 +107,11 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
     exames: particularesData = [],
     examesConvenio: conveniosData = [],
     detalhesExames = [],
+    fluxoCaixa = [],
     addItem,
     updateItem,
     deleteItem,
     syncConvenioToDetalhes,
-    syncAllConveniosToDetalhes,
     removeConvenioFromDetalhes,
     syncConveniosFluxoConsolidado,
     activeMedicosOptions,
@@ -130,9 +130,43 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
   const [pageSize, setPageSize] = useState(20);
   const [fluxoModalItem, setFluxoModalItem] = useState(null);
 
-  useEffect(() => {
-    syncAllConveniosToDetalhes();
-  }, [syncAllConveniosToDetalhes]);
+  // Remove detalhe(s) particular(es) e seus lançamentos vinculados no Fluxo de Caixa (evita receitas fantasmas)
+  const deleteParticularCascade = (examId) => {
+    const existingInExames = getItem(MODULES.exames, examId);
+    if (existingInExames) {
+      deleteItem(MODULES.exames, examId);
+    }
+
+    const linkedDetalhes = (detalhesExames || []).filter(
+      (d) =>
+        d &&
+        !d.isConvenio &&
+        !d.origemConvenioId &&
+        (String(d.id) === String(examId) ||
+          (d.exameId && String(d.exameId) === String(examId)) ||
+          (existingInExames?.detalheId && String(d.id) === String(existingInExames.detalheId)))
+    );
+
+    const detalheIdsToClean = new Set([String(examId), ...linkedDetalhes.map((d) => String(d.id))]);
+    linkedDetalhes.forEach((det) => {
+      deleteItem(MODULES.detalhesExames, det.id);
+    });
+
+    (fluxoCaixa || []).forEach((f) => {
+      if (!f || !f.detalheId) return;
+      for (const dId of detalheIdsToClean) {
+        if (
+          f.detalheId === dId ||
+          f.detalheId === `${dId}_taxa` ||
+          f.detalheId === `${dId}_acessorios` ||
+          f.detalheId === `${dId}_biopsia`
+        ) {
+          deleteItem(MODULES.fluxoCaixa, f.id);
+          break;
+        }
+      }
+    });
+  };
 
   const markTouched = (field) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -507,10 +541,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       } else {
         // Creating new convênio (or converting from Particular to Convênio)
         if (editItem && !editItem.isConvenio) {
-          const existingInExames = getItem(MODULES.exames, editItem.id);
-          if (existingInExames) deleteItem(MODULES.exames, editItem.id);
-          const existingInDetalhes = getItem(MODULES.detalhesExames, editItem.id);
-          if (existingInDetalhes) deleteItem(MODULES.detalhesExames, editItem.id);
+          deleteParticularCascade(editItem.id);
         }
         const isConsulta = isConsultaExam(exameUpper);
         const sanitizedForm = {
@@ -633,15 +664,8 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
       syncConveniosFluxoConsolidado();
       toast.success('Exame de convênio excluído.');
     } else {
-      const existingInExames = getItem(MODULES.exames, deleteTarget.id);
-      if (existingInExames) {
-        deleteItem(MODULES.exames, deleteTarget.id);
-      }
-      const existingInDetalhes = getItem(MODULES.detalhesExames, deleteTarget.id);
-      if (existingInDetalhes) {
-        deleteItem(MODULES.detalhesExames, deleteTarget.id);
-      }
-      toast.success('Exame particular excluído.');
+      deleteParticularCascade(deleteTarget.id);
+      toast.success('Exame particular e lançamentos vinculados excluídos.');
     }
     setDeleteTarget(null);
   };
@@ -766,7 +790,6 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
           <div
             className="table-scroll"
-            style={{ overflowX: 'hidden' }}
             tabIndex={0}
             role="region"
             aria-labelledby="exames-table-title"
@@ -979,16 +1002,16 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         title={editItem ? 'Editar Exame' : 'Novo Exame'}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+            <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
               Cancelar
             </button>
-            <button className="btn btn-primary" onClick={handleSave}>
+            <button type="submit" form="exame-form" className="btn btn-primary">
               {editItem ? 'Salvar' : 'Cadastrar'}
             </button>
           </>
         }
       >
-        <form onSubmit={handleSave} noValidate autoComplete="off">
+        <form id="exame-form" onSubmit={handleSave} noValidate autoComplete="off">
           <div className="modal-form-grid">
             <div className="input-group full-width">
               <label className="input-label">Modalidade do Atendimento</label>

@@ -59,14 +59,14 @@ export default function ConvenioFluxoModal({ isOpen, item, onClose, onSuccess })
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancelar
             </button>
-            <button type="button" className="btn btn-primary" onClick={handleSave}>
+            <button type="submit" form="convenio-fluxo-form" className="btn btn-primary">
               Salvar Partilha & Consolidar no Fluxo
             </button>
           </div>
         </div>
       }
     >
-      <form onSubmit={handleSave} noValidate autoComplete="off">
+      <form id="convenio-fluxo-form" onSubmit={handleSave} noValidate autoComplete="off">
         <div
           style={{
             background: 'var(--color-dark-800)',

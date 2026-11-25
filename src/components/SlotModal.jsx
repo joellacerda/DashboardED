@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Modal from './Modal';
 import { MOTIVOS_TRANCA } from '../utils/helpers';
+import { generateId } from '../utils/storage/core';
 import { useData } from '../contexts/DataContext';
+import { useToast } from '../contexts/ToastContext';
 
 export default function SlotModal({
   isOpen,
@@ -16,6 +18,9 @@ export default function SlotModal({
   salas = [],
 }) {
   const { activeMedicosOptions = [] } = useData();
+  const toast = useToast();
+  const activeMedicosRef = useRef(activeMedicosOptions);
+  activeMedicosRef.current = activeMedicosOptions;
   const [isTrancado, setIsTrancado] = useState(false);
   const [motivoTranca, setMotivoTranca] = useState(MOTIVOS_TRANCA[0]);
   const [motivoCustom, setMotivoCustom] = useState('');
@@ -49,7 +54,8 @@ export default function SlotModal({
         const m1 = parts[0] || '';
         const m2 = parts[1] || (slot.medico2 || '').trim().toUpperCase();
 
-        if (m1 && !activeMedicos.includes(m1)) {
+        const knownMedicos = activeMedicosRef.current || [];
+        if (m1 && !knownMedicos.includes(m1)) {
           setIsCustomMedico(true);
           setNovoMedico(m1);
           setMedico('');
@@ -61,7 +67,7 @@ export default function SlotModal({
 
         if (m2) {
           setShowSecondDoctor(true);
-          if (!activeMedicos.includes(m2)) {
+          if (!knownMedicos.includes(m2)) {
             setIsCustomMedico2(true);
             setNovoMedico2(m2);
             setMedico2('');
@@ -90,7 +96,7 @@ export default function SlotModal({
         setIsCustomMedico2(false);
       }
     }
-  }, [isOpen, slot, sala, turnoInfo, activeMedicos]);
+  }, [isOpen, slot, sala, turnoInfo]);
 
   // Selected doctors effective names
   const effectiveMedico1 = useMemo(() => {
@@ -121,8 +127,13 @@ export default function SlotModal({
       const conflictSlot = allSlotsInPeriod.find((s) => {
         if (s.id && slot && s.id === slot.id) return false;
         if (s.data === day.date && s.turno === turnoInfo.id && !s.trancado) {
-          if (s.salaId !== sala?.id && s.medico) {
-            const slotDocs = s.medico.split(/\s*(?:\/|,)\s*/).map((d) => d.trim().toUpperCase());
+          if (s.salaId !== sala?.id && (s.medico || s.medico2)) {
+            const slotDocs = [
+              ...(s.medico ? s.medico.split(/\s*(?:\/|,)\s*/) : []),
+              ...(s.medico2 ? [s.medico2] : []),
+            ]
+              .map((d) => d.trim().toUpperCase())
+              .filter(Boolean);
             return slotDocs.includes(docName);
           }
         }
@@ -146,6 +157,17 @@ export default function SlotModal({
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    if (!isTrancado) {
+      if (!effectiveMedico1) {
+        toast.warning('Selecione ou informe o médico responsável para este turno.');
+        return;
+      }
+      if (effectiveMedico2 && effectiveMedico1 === effectiveMedico2) {
+        toast.warning('O 2º médico deve ser diferente do médico principal.');
+        return;
+      }
+    }
+
     let finalMotivo = '';
     if (isTrancado) {
       finalMotivo = motivoTranca === 'Outro' ? motivoCustom.trim() || 'Trancado' : motivoTranca;
@@ -153,7 +175,7 @@ export default function SlotModal({
 
     const payload = {
       ...(slot || {}),
-      id: slot?.id || crypto.randomUUID(),
+      id: slot?.id || generateId(),
       data: day.date,
       salaId: sala.id,
       turno: turnoInfo.id,

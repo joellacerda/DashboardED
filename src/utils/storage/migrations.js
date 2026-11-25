@@ -1,6 +1,6 @@
-import { getData, setData, MODULES, getLocalStorage } from './core';
+import { getData, setData, MODULES, getLocalStorage, generateId } from './core';
 import { enqueueSyncOperation } from '../../services/syncQueue';
-import { getAcquisitionPeriod, isDateInPeriod } from '../helpers';
+import { getAcquisitionPeriod, isDateInPeriod, PROCEDIMENTOS_COMPLEMENTARES } from '../helpers';
 
 export const SCHEMA_VERSION_KEY = 'endodiagnose_schema_version';
 export const CURRENT_SCHEMA_VERSION = 4;
@@ -39,15 +39,16 @@ export function migrate(module, transformFn) {
       if (JSON.stringify(transformed) !== JSON.stringify(item)) {
         changed = true;
         updatedCount++;
-        if (transformed.id) {
+        const withTimestamp = { ...transformed, updatedAt: now };
+        if (withTimestamp.id) {
           enqueueSyncOperation({
             module,
-            entityId: transformed.id,
+            entityId: withTimestamp.id,
             type: 'UPSERT',
-            payload: { ...transformed, updatedAt: transformed.updatedAt || now },
+            payload: withTimestamp,
           });
         }
-        return transformed;
+        return withTimestamp;
       }
       return item;
     });
@@ -68,7 +69,6 @@ export function migrate(module, transformFn) {
  */
 export function runDataMigrations(convenioSyncFns = {}) {
   if (_hasRunMigrations) return;
-  _hasRunMigrations = true;
 
   try {
     const storage = getLocalStorage();
@@ -88,7 +88,7 @@ export function runDataMigrations(convenioSyncFns = {}) {
       });
 
       // 2. Convênios
-      const PROC_COMPL = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
+      const PROC_COMPL = PROCEDIMENTOS_COMPLEMENTARES;
       migrate(MODULES.examesConvenio, (cItem) => {
         const item = { ...cItem };
         if (item.convenio === 'BRADESCO 421715') {
@@ -182,7 +182,7 @@ export function runDataMigrations(convenioSyncFns = {}) {
     if (storedVersion < 3) {
       const doctorMap = {};
       migrate(MODULES.medicos, (m) => {
-        const id = m.id || crypto.randomUUID();
+        const id = m.id || generateId();
         if (m.nome) {
           doctorMap[m.nome.trim().toUpperCase()] = id;
         }
@@ -214,30 +214,34 @@ export function runDataMigrations(convenioSyncFns = {}) {
       migrate(MODULES.detalhesExames, assignDoctorIds);
     }
 
-    // Migração V4: Realinhar fluxoData e período de competência de examesConvenio com a data do exame (item.data)
-    // para que o acumulado consolidado de COOPEND e UNIMED seja separado corretamente mês a mês
+    // Migração V4: Garantir consistência entre fluxoData e fluxoPeriodoStart em examesConvenio
+    // sem sobrescrever datas legítimas de recebimento posterior de convênios.
     if (storedVersion < 4) {
       migrate(MODULES.examesConvenio, (cItem) => {
-        if (!cItem || !cItem.data) return cItem;
-        try {
-          const examPeriod = getAcquisitionPeriod(new Date(cItem.data.replace(/-/g, '/')));
-          if (!examPeriod || !examPeriod.start) return cItem;
+        if (!cItem) return cItem;
+        const refDateStr = cItem.fluxoData || cItem.data;
+        if (!refDateStr) return cItem;
+        const parsed = new Date(String(refDateStr).slice(0, 10) + 'T00:00:00');
+        if (Number.isNaN(parsed.getTime())) return cItem;
 
-          const needsPeriodFix =
-            (cItem.fluxoData && !isDateInPeriod(cItem.fluxoData, examPeriod)) ||
-            (cItem.fluxoPeriodoStart && cItem.fluxoPeriodoStart !== examPeriod.start);
+        const targetPeriod = getAcquisitionPeriod(parsed);
+        if (!targetPeriod || !targetPeriod.start) return cItem;
 
-          if (needsPeriodFix) {
-            return {
-              ...cItem,
-              fluxoData: cItem.data,
-              fluxoPeriodoStart: examPeriod.start,
-              fluxoPeriodoEnd: examPeriod.end,
-              fluxoPeriodoLabel: examPeriod.label,
-            };
-          }
-        } catch {
-          // ignore invalid dates
+        const needsPeriodFix =
+          !cItem.fluxoPeriodoStart ||
+          !cItem.fluxoPeriodoEnd ||
+          !isDateInPeriod(String(refDateStr).slice(0, 10), {
+            start: cItem.fluxoPeriodoStart,
+            end: cItem.fluxoPeriodoEnd,
+          });
+
+        if (needsPeriodFix) {
+          return {
+            ...cItem,
+            fluxoPeriodoStart: targetPeriod.start,
+            fluxoPeriodoEnd: targetPeriod.end,
+            fluxoPeriodoLabel: targetPeriod.label,
+          };
         }
         return cItem;
       });
@@ -251,6 +255,7 @@ export function runDataMigrations(convenioSyncFns = {}) {
     }
 
     storage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION));
+    _hasRunMigrations = true;
   } catch (err) {
     console.error('Migration error:', err);
   }

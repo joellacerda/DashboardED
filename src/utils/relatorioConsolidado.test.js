@@ -126,9 +126,11 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
           origemConvenioId: 'c1',
           isConvenio: true,
           manualOverride: true,
-          data: '2026-03-01',
+          data: '2026-03-22',
           fluxoLancado: true,
           fluxoData: '2026-03-22',
+          formaPagamento: 'Convênio (UNIMED)',
+          pagamentos: [{ forma: 'Convênio (UNIMED)', valor: 400, parcelas: 1 }],
           medico: 'DRA. CAMILA',
           convenio: 'UNIMED',
           valorPago: 400,
@@ -241,7 +243,9 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
           id: 'f1',
           nome: 'MARIA',
           salarioBase: 2500,
-          entries: [{ periodStart: p.start, faltas: 0, horasExtras: 0, bonus: 0 }],
+          periodos: {
+            [p.start]: { salarioBase: 2500, valeAlimentacao: 0, valeTransporte: 0, extras: 0, produtividade: 0, descontos: 0 },
+          },
         },
       ],
       fluxoCaixa: [],
@@ -348,5 +352,52 @@ describe('receita da clínica (fluxo de caixa × honorários)', () => {
       'DR. ALBERTO',
       'DR. RAPHAEL',
     ]);
+  });
+
+  it('médicos auto-descobertos não entram como sócios (evita diluir cota de déficit dos sócios)', () => {
+    const p = period('2026-03-16');
+    const data = {
+      medicos: [{ id: 'm1', nome: 'DR. SOCIO', socio: true, ativo: true }],
+      detalhesExames: [
+        {
+          id: 'd1',
+          data: '2026-03-20',
+          medico: 'DR. CONVIDADO NAO CADASTRADO',
+          pagamentos: [{ forma: 'Pix', valor: 500, parcelas: 1 }],
+          honorariosMedicos: 300,
+        },
+      ],
+      fluxoCaixa: [
+        { id: 'f1', data: '2026-03-20', tipo: 'saida', categoria: 'Aluguel / Condomínio', valor: 1000 },
+      ],
+    };
+    const report = getConsolidatedFinancialReport(data, p);
+    expect(report.cotaDeficitPorSocio).toBe(1000);
+    const guest = report.repassesPorMedico.find((r) => r.nome === 'DR. CONVIDADO NAO CADASTRADO');
+    expect(guest.isSocio).toBe(false);
+    expect(guest.cotaDeficit).toBe(0);
+  });
+
+  it('DRE não infla resultado operacional com cota de déficit dos sócios', () => {
+    const p = period('2026-03-16');
+    const data = {
+      medicos: [{ id: 'm1', nome: 'DR. SOCIO', socio: true, ativo: true }],
+      detalhesExames: [
+        {
+          id: 'd1',
+          data: '2026-03-20',
+          medico: 'DR. SOCIO',
+          pagamentos: [{ forma: 'Pix', valor: 1000, parcelas: 1 }],
+          honorariosMedicos: 400,
+        },
+      ],
+      fluxoCaixa: [
+        { id: 'f1', data: '2026-03-20', tipo: 'saida', categoria: 'Aluguel / Condomínio', valor: 2000 },
+      ],
+    };
+    const report = getConsolidatedFinancialReport(data, p);
+    // Receita líquida (1000) - honorários (400) - despesas (2000) = -1400 (não somado à cotaDeficit de 2000)
+    expect(report.resultadoLiquidoClinica).toBe(-1400);
+    expect(report.resultadoAposAporteSocios).toBe(600);
   });
 });

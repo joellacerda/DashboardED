@@ -18,6 +18,7 @@ export const PROCEDIMENTOS_COMPLEMENTARES = ['POLIPECTOMIA', 'MUCOSECTOMIA'];
 export function examePermiteComplementar(tipoExame) {
   if (!tipoExame) return false;
   const clean = tipoExame.trim().toUpperCase();
+  if (clean.includes('ECOENDOSCOPIA')) return false;
   return (
     EXAMES_COM_COMPLEMENTAR.includes(clean) ||
     clean.includes('COLONOSCOPIA') ||
@@ -48,8 +49,9 @@ export function formatProcedimentosComplementares(val) {
 }
 
 export function roundCurrency(value) {
-  const num = Number(value) || 0;
-  return Math.round((num + Number.EPSILON) * 100) / 100;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num === 0) return 0;
+  return (Math.sign(num) * Math.round((Math.abs(num) + 1e-9) * 100)) / 100;
 }
 
 export function formatCurrency(value) {
@@ -59,12 +61,18 @@ export function formatCurrency(value) {
 
 export function formatDate(dateStr) {
   if (!dateStr) return '—';
-  const date = new Date(dateStr + 'T00:00:00');
+  const isoDate = String(dateStr).trim().slice(0, 10);
+  const date = new Date(isoDate + 'T00:00:00');
+  if (Number.isNaN(date.getTime())) return String(dateStr);
   return date.toLocaleDateString('pt-BR');
 }
 
 export function formatDateISO(date) {
-  const d = new Date(date);
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+    return date.trim();
+  }
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -130,17 +138,9 @@ export function navigateAcquisitionPeriod(currentPeriod, direction) {
   if (!currentPeriod || typeof currentPeriod.startMonth !== 'number' || typeof currentPeriod.startYear !== 'number') {
     currentPeriod = getAcquisitionPeriod();
   }
-  let { startMonth, startYear } = currentPeriod;
-  startMonth += direction;
-  if (startMonth > 11) {
-    startMonth = 0;
-    startYear++;
-  } else if (startMonth < 0) {
-    startMonth = 11;
-    startYear--;
-  }
-
-  const refDate = new Date(startYear, startMonth, 16);
+  const { startMonth, startYear } = currentPeriod;
+  const step = Number(direction) || 0;
+  const refDate = new Date(startYear, startMonth + step, 16);
   return getAcquisitionPeriod(refDate);
 }
 
@@ -218,9 +218,10 @@ export function migrateLegacyPayment(exam) {
 export function getInstallmentPeriods(examDate, numParcelas, formaPagamento) {
   if (!examDate) return [];
   const n = Math.max(1, Number(numParcelas) || 1);
-  const isCredit = isCreditCardPayment(formaPagamento || examDate, numParcelas);
+  const isCredit = isCreditCardPayment(formaPagamento, numParcelas);
   const periods = [];
-  const baseDate = new Date(examDate + 'T00:00:00');
+  const isoDate = String(examDate).trim().slice(0, 10);
+  const baseDate = new Date(isoDate + 'T00:00:00');
   if (isNaN(baseDate.getTime())) return [];
   const monthOffset = isCredit ? 1 : 0;
 
@@ -476,9 +477,51 @@ export function parsePercentOrDefault(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function normalizeComparableText(str) {
+  return String(str || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Verifica se um registro de `detalhesExames` representa um exame sincronizado de convênio.
+ */
+export function isConvenioDetalhe(exam) {
+  if (!exam) return false;
+  return Boolean(exam.isConvenio || exam.origemConvenioId || String(exam.id || '').startsWith('conv_'));
+}
+
+/**
+ * Verifica se um registro de `exames` (particular) corresponde a um registro de `detalhesExames`.
+ */
+export function matchParticularExamToDetalhe(exam, detalhe) {
+  if (!exam || !detalhe || isConvenioDetalhe(detalhe)) return false;
+  if (exam.id && detalhe.id && String(detalhe.id) === String(exam.id)) return true;
+  if (exam.id && detalhe.exameId && String(detalhe.exameId) === String(exam.id)) return true;
+  if (exam.detalheId && detalhe.id && String(exam.detalheId) === String(detalhe.id)) return true;
+  if (exam.id && detalhe.exameId && String(detalhe.exameId) !== String(exam.id)) return false;
+
+  const sameDateAndPatient =
+    detalhe.data === exam.data &&
+    detalhe.paciente &&
+    exam.paciente &&
+    normalizeComparableText(detalhe.paciente) === normalizeComparableText(exam.paciente);
+  if (!sameDateAndPatient) return false;
+
+  const eTipo = normalizeComparableText(exam.exame || exam.tipoExame);
+  const dTipo = normalizeComparableText(detalhe.tipoExame || detalhe.exame);
+  if (eTipo && dTipo) {
+    return eTipo === dTipo;
+  }
+  return true;
+}
+
 /**
  * Compara se uma referência a médico (objeto, ID ou nome) corresponde ao médico do registro.
- * Permite match tanto por medicoId quanto por nome normalizado para máxima compatibilidade.
+ * Permite match tanto por medicoId quanto por nome normalizado (sem acentos) para máxima compatibilidade.
  * @param {string|object} doctorRef - Nome, ID ou objeto médico { id, nome }
  * @param {string} [recordDocName] - Nome registrado no exame/item
  * @param {string} [recordDocId] - ID registrado no exame/item
@@ -489,23 +532,22 @@ export function isDoctorMatch(doctorRef, recordDocName, recordDocId) {
   const targetId =
     typeof doctorRef === 'object' && doctorRef !== null
       ? doctorRef.id
-      : typeof doctorRef === 'string' &&
-        (doctorRef.startsWith('auto_') || /^[0-9a-f-]{36}$/i.test(doctorRef))
-        ? doctorRef
+      : typeof doctorRef === 'string'
+        ? doctorRef.trim()
         : null;
 
   const targetName =
     typeof doctorRef === 'object' && doctorRef !== null
-      ? (doctorRef.nome || '').trim().toLowerCase()
+      ? normalizeComparableText(doctorRef.nome)
       : typeof doctorRef === 'string'
-        ? doctorRef.trim().toLowerCase()
+        ? normalizeComparableText(doctorRef)
         : '';
 
   if (targetId && recordDocId && String(targetId) === String(recordDocId)) {
     return true;
   }
 
-  if (targetName && recordDocName && targetName === String(recordDocName).trim().toLowerCase()) {
+  if (targetName && recordDocName && targetName === normalizeComparableText(recordDocName)) {
     return true;
   }
 
@@ -534,33 +576,37 @@ export function getHonorarioMedicoInPeriod(exam, doctorName, targetPeriod) {
     return isDoc1 ? roundCurrency(periodHonorario) : 0;
   }
 
-  if (isDoc1) {
-    if (exam.divisaoTipo === 'valor') {
-      const val1 = Number(exam.valorMedico1) || 0;
-      return roundCurrency(
-        totalHonorarios > 0
-          ? (periodHonorario * val1) / totalHonorarios
-          : periodHonorario * 0.5
-      );
-    }
+  let doc1Share = 0;
+  let doc2Share = 0;
+
+  if (exam.divisaoTipo === 'valor') {
+    const val1 = Number(exam.valorMedico1) || 0;
+    const val2 = Number(exam.valorMedico2) || 0;
+    doc1Share = roundCurrency(
+      totalHonorarios > 0
+        ? (periodHonorario * val1) / totalHonorarios
+        : periodHonorario * 0.5
+    );
+    doc2Share = roundCurrency(
+      totalHonorarios > 0
+        ? (periodHonorario * val2) / totalHonorarios
+        : roundCurrency(periodHonorario - doc1Share)
+    );
+  } else {
     const pct1 = parsePercentOrDefault(exam.porcentagemMedico1, 50);
-    return roundCurrency((periodHonorario * pct1) / 100);
-  }
-
-  if (isDoc2) {
-    if (exam.divisaoTipo === 'valor') {
-      const val2 = Number(exam.valorMedico2) || 0;
-      return roundCurrency(
-        totalHonorarios > 0
-          ? (periodHonorario * val2) / totalHonorarios
-          : periodHonorario * 0.5
-      );
-    }
     const pct2 = parsePercentOrDefault(exam.porcentagemMedico2, 50);
-    return roundCurrency((periodHonorario * pct2) / 100);
+    doc1Share = roundCurrency((periodHonorario * pct1) / 100);
+    // Se a soma fecha 100%, ajusta eventual centavo residual no 2º médico para preservar soma exata
+    doc2Share =
+      Math.abs(pct1 + pct2 - 100) < 0.01
+        ? roundCurrency(periodHonorario - doc1Share)
+        : roundCurrency((periodHonorario * pct2) / 100);
   }
 
-  return 0;
+  let earned = 0;
+  if (isDoc1) earned += doc1Share;
+  if (isDoc2) earned += doc2Share;
+  return roundCurrency(earned);
 }
 
 /**
@@ -576,28 +622,33 @@ export function examHasDoctorInPeriod(exam, doctorName, targetPeriod) {
 }
 
 /**
- * Verifica se o médico informado é o DR. OLIVEIRA (titular que centraliza o recebimento
- * dos proventos da Unimed/convênios e, portanto, responde pelas compensações à clínica).
+ * Verifica se o médico informado é o titular que centraliza o recebimento dos proventos
+ * de convênios e responde pelas compensações à clínica.
+ * Prioriza a flag explícita `recebeCompensacaoConvenio` no cadastro do médico;
+ * caso ausente, faz match exato para o titular padrão (DR. OLIVEIRA), evitando falsos positivos por substring.
  */
 export function isCompensacaoTargetDoctor(doctorNameOrObj) {
   if (!doctorNameOrObj) return false;
+  if (typeof doctorNameOrObj === 'object' && doctorNameOrObj !== null) {
+    if (typeof doctorNameOrObj.recebeCompensacaoConvenio === 'boolean') {
+      return doctorNameOrObj.recebeCompensacaoConvenio;
+    }
+  }
   const rawName =
     typeof doctorNameOrObj === 'object' ? doctorNameOrObj.nome : String(doctorNameOrObj);
   const clean = (rawName || '')
     .trim()
     .toUpperCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  return clean === 'DR. OLIVEIRA' || clean === 'DR OLIVEIRA' || clean.includes('OLIVEIRA');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+  return clean === 'DR. OLIVEIRA' || clean === 'DR OLIVEIRA' || clean === 'OLIVEIRA';
 }
 
 /**
  * Calcula as compensações devidas à clínica decorrentes de convênios no período aquisitivo
  * (ex: 50% de polipectomias e 100% de acessórios/alças descartáveis).
- * Regra de Negócio: Todas as compensações registradas entram exclusivamente para o DR. OLIVEIRA,
- * independentemente de qual médico realizou o exame, pois ele recebe todos os proventos da Unimed
- * e realiza o repasse aos demais médicos.
- * @param {string|object} doctorName - Nome do médico
+ * @param {string|object} doctorName - Nome ou objeto do médico
  * @param {object} targetPeriod - Período financeiro { start, end }
  * @param {Array} examesConvenio - Lista de exames de convênio
  * @returns {{ total: number, count: number, items: Array }}
@@ -619,10 +670,15 @@ export function getDoctorCompensacaoInPeriod(doctorName, targetPeriod, examesCon
     const comp = Number(c.valorCompensacaoClinica) || 0;
     if (comp <= 0) continue;
 
-    const dataRef = c.fluxoData || c.data;
-    const inPeriod =
-      (c.fluxoPeriodoStart && c.fluxoPeriodoStart === targetPeriod.start) ||
-      (dataRef && isDateInPeriod(dataRef, targetPeriod));
+    // Prioridade exclusiva: fluxoData > fluxoPeriodoStart > data (evita dupla dedução se fluxoData mudar)
+    let inPeriod = false;
+    if (c.fluxoData) {
+      inPeriod = isDateInPeriod(c.fluxoData, targetPeriod);
+    } else if (c.fluxoPeriodoStart) {
+      inPeriod = c.fluxoPeriodoStart === targetPeriod.start;
+    } else if (c.data) {
+      inPeriod = isDateInPeriod(c.data, targetPeriod);
+    }
 
     if (inPeriod) {
       total += comp;
@@ -697,16 +753,26 @@ export function getInstallmentLabel(examDate, numParcelasOrPagamentos, formaPaga
 }
 
 /**
+ * Sanitiza uma célula de CSV contra Formula Injection (Excel/LibreOffice DDE) e escapa aspas.
+ */
+export function sanitizeCsvCell(value) {
+  let str = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+/**
  * Export data to CSV
  */
 export function exportCSV(data, columns, filename) {
-  const header = columns.map((c) => c.label).join(',');
+  const header = columns.map((c) => sanitizeCsvCell(c.label)).join(',');
   const rows = data.map((item) =>
     columns
       .map((c) => {
-        let val = c.accessor ? c.accessor(item) : item[c.key] || '';
-        val = String(val).replace(/"/g, '""');
-        return `"${val}"`;
+        const val = c.accessor ? c.accessor(item) : (item[c.key] ?? '');
+        return sanitizeCsvCell(val);
       })
       .join(',')
   );
@@ -740,7 +806,7 @@ function fallbackHtmlPrint(data, columns, title) {
         '<tr>' +
         columns
           .map((c) => {
-            const val = c.accessor ? c.accessor(item) : item[c.key] || '';
+            const val = c.accessor ? c.accessor(item) : (item[c.key] ?? '');
             return `<td style="padding:6px 10px;border:1px solid #ddd;font-size:11px">${escapeHtml(val)}</td>`;
           })
           .join('') +
@@ -893,7 +959,7 @@ export async function exportPDF(data, columns, title) {
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9_-]/g, '_')}_${now.toISOString().slice(0, 10)}.pdf`;
+      .replace(/[^a-z0-9_-]/g, '_')}_${formatDateISO(now)}.pdf`;
 
     doc.save(safeFilename);
   } catch (err) {
@@ -999,7 +1065,10 @@ export function getActiveMedicosOptions({ medicos = [], exames = [], detalhesExa
     addIfActive(d.medico);
     addIfActive(d.medico2);
   });
-  examesConvenio.forEach((c) => addIfActive(c.medico));
+  examesConvenio.forEach((c) => {
+    addIfActive(c.medico);
+    addIfActive(c.medico2);
+  });
 
   return Array.from(active).sort((a, b) => {
     const aHasOrd = orderMap.has(a);
@@ -1010,6 +1079,6 @@ export function getActiveMedicosOptions({ medicos = [], exames = [], detalhesExa
     if (aHasOrd !== bHasOrd) {
       return aHasOrd ? -1 : 1;
     }
-    return a.localeCompare(b);
+    return a.localeCompare(b, 'pt-BR');
   });
 }

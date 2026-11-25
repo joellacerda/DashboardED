@@ -57,16 +57,49 @@ export function clearMemoryCache(module) {
   }
 }
 
-// Invalidação reativa quando o storage é alterado por outra aba
+/**
+ * Gera um identificador único com fallback seguro para contextos HTTP/LAN
+ * onde crypto.randomUUID não está disponível.
+ */
+export function generateId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `id_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function deepClone(val) {
+  if (val === null || typeof val !== 'object') return val;
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(val);
+    } catch {
+      // fallback JSON
+    }
+  }
+  return JSON.parse(JSON.stringify(val));
+}
+
+// Invalidação reativa quando o storage é alterado por outra aba (inclusive localStorage.clear())
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('storage', (e) => {
-    if (e && e.key) {
-      const matchedMod = Object.keys(STORAGE_KEYS).find((m) => STORAGE_KEYS[m] === e.key);
-      if (matchedMod) {
-        memoryCache.delete(matchedMod);
-      } else if (e.key.startsWith('endodiagnose_')) {
-        memoryCache.clear();
-      }
+    if (!e || e.key === null) {
+      memoryCache.clear();
+      return;
+    }
+    const matchedMod = Object.keys(STORAGE_KEYS).find((m) => STORAGE_KEYS[m] === e.key);
+    if (matchedMod) {
+      memoryCache.delete(matchedMod);
+    } else if (e.key.startsWith('endodiagnose_')) {
+      memoryCache.clear();
     }
   });
 }
@@ -103,8 +136,7 @@ export function getLocalStorage() {
  */
 export function getData(module) {
   if (memoryCache.has(module)) {
-    const cached = memoryCache.get(module);
-    return Array.isArray(cached) ? [...cached] : cached;
+    return deepClone(memoryCache.get(module));
   }
 
   try {
@@ -115,28 +147,31 @@ export function getData(module) {
     const raw = storage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
     const result = Array.isArray(parsed) ? parsed : [];
-    memoryCache.set(module, result);
-    return Array.isArray(result) ? [...result] : result;
+    memoryCache.set(module, deepClone(result));
+    return deepClone(result);
   } catch {
     return [];
   }
 }
 
 /**
- * Grava dados de um módulo no localStorage e sincroniza o cache em memória.
+ * Grava dados de um módulo no localStorage ANTES de atualizar o cache em memória,
+ * evitando envenenamento do cache em caso de QuotaExceededError.
  */
 export function setData(module, data) {
   try {
-    const normalized = Array.isArray(data) ? [...data] : data;
-    memoryCache.set(module, normalized);
+    const normalized = Array.isArray(data) ? deepClone(data) : deepClone(data);
+    const serialized = JSON.stringify(normalized);
 
     const storage = getLocalStorage();
     if (storage) {
       const storageKey = STORAGE_KEYS[module];
       if (storageKey) {
-        storage.setItem(storageKey, JSON.stringify(normalized));
+        storage.setItem(storageKey, serialized);
       }
     }
+
+    memoryCache.set(module, normalized);
     notifyDataChanged(module);
   } catch (err) {
     if (
@@ -202,7 +237,7 @@ export function addItem(module, item) {
   const now = new Date().toISOString();
   const newItem = {
     ...item,
-    id: item.id || crypto.randomUUID(),
+    id: item.id || generateId(),
     createdAt: item.createdAt || now,
     updatedAt: item.updatedAt || now,
   };
@@ -297,21 +332,43 @@ export function deleteItem(module, id) {
 export function restoreAllData(allData) {
   if (!allData || typeof allData !== 'object') return;
   const payload = allData.backupCompletoDeTodasAsColecoes || allData.dados || allData;
+  if (!payload || typeof payload !== 'object') return;
   const now = new Date().toISOString();
 
   MODULE_KEYS.forEach((m) => {
     if (Array.isArray(payload[m])) {
-      setData(m, payload[m]);
+      const previousList = getData(m) || [];
+      const sanitizedList = payload[m]
+        .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+        .map((item) => ({
+          ...item,
+          id: item.id || generateId(),
+          updatedAt: now,
+        }));
+
+      setData(m, sanitizedList);
+
       if (m !== MODULES.auditLogs) {
-        payload[m].forEach((item) => {
-          if (item && item.id) {
+        const nextIds = new Set(sanitizedList.map((item) => String(item.id)));
+        // Enfileira tombstones para registros locais removidos na restauração (evita ressurreição na nuvem)
+        previousList.forEach((oldItem) => {
+          if (oldItem?.id && !nextIds.has(String(oldItem.id))) {
             enqueueSyncOperation({
               module: m,
-              entityId: item.id,
-              type: 'UPSERT',
-              payload: { ...item, updatedAt: item.updatedAt || now },
+              entityId: oldItem.id,
+              type: 'DELETE',
+              payload: { id: oldItem.id, _deleted: true, deletedAt: now, updatedAt: now },
             });
           }
+        });
+
+        sanitizedList.forEach((item) => {
+          enqueueSyncOperation({
+            module: m,
+            entityId: item.id,
+            type: 'UPSERT',
+            payload: item,
+          });
         });
       }
     }

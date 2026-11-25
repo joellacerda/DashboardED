@@ -95,8 +95,18 @@ describe('Security & LGPD — Fase 6', () => {
       expect(hasQuickLockPin()).toBe(false);
     });
 
-    it('rejeita PINs com tamanho menor que 4 dígitos', async () => {
+    it('rejeita PINs com tamanho menor que 4 dígitos ou caracteres não numéricos', async () => {
       await expect(setQuickLockPin('12')).rejects.toThrow();
+      await expect(setQuickLockPin('12ab')).rejects.toThrow();
+      await expect(setQuickLockPin('12 34')).rejects.toThrow();
+    });
+
+    it('rejeita domínio malformado na allowlist e ignora timeout negativo', () => {
+      setAllowedEmailsList(['@endodiagnose.com.br']);
+      expect(isEmailAllowed('@endodiagnose.com.br')).toBe(false);
+      expect(isEmailAllowed('fake@sub.endodiagnose.com.br')).toBe(false);
+      setInactivityTimeoutMinutes(-10);
+      expect(getInactivityTimeoutMinutes()).toBe(DEFAULT_INACTIVITY_TIMEOUT_MINS);
     });
 
     it('gera hashes diferentes com salt para o mesmo PIN e migra hash legado sem salt', async () => {

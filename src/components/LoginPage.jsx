@@ -69,12 +69,19 @@ export default function LoginPage({ onOpenConfigModal }) {
         const msg = getAuthErrorMessage(err);
         setErrorMsg(msg);
         toast.error(msg);
+      } finally {
         setLoading(false);
       }
       return;
     }
 
-    // Default mode: login
+    // Default mode: login — valida allowlist ANTES de autenticar para evitar race condition
+    if (!isEmailAllowed(email)) {
+      setErrorMsg(`Acesso não autorizado: o e-mail "${email.trim()}" não possui permissão de acesso à Clínica Endodiagnose.`);
+      toast.error('Acesso não autorizado para este e-mail.');
+      return;
+    }
+
     setLoading(true);
     try {
       const cred = await login(email, password);
@@ -83,7 +90,6 @@ export default function LoginPage({ onOpenConfigModal }) {
         await logout();
         setErrorMsg(`Acesso não autorizado: o e-mail "${userEmail}" não possui permissão de acesso à Clínica Endodiagnose.`);
         toast.error('Acesso não autorizado para este e-mail.');
-        setLoading(false);
         return;
       }
     } catch (err) {
@@ -91,6 +97,7 @@ export default function LoginPage({ onOpenConfigModal }) {
       const msg = getAuthErrorMessage(err);
       setErrorMsg(msg);
       toast.error(msg);
+    } finally {
       setLoading(false);
     }
   };
@@ -106,7 +113,6 @@ export default function LoginPage({ onOpenConfigModal }) {
         await logout();
         setErrorMsg(`Acesso não autorizado: a conta Google "${userEmail}" não possui permissão de acesso à Clínica Endodiagnose.`);
         toast.error('Acesso não autorizado para esta conta Google.');
-        setLoading(false);
         return;
       }
     } catch (err) {
@@ -114,6 +120,7 @@ export default function LoginPage({ onOpenConfigModal }) {
       const msg = getAuthErrorMessage(err);
       setErrorMsg(msg);
       toast.error(msg);
+    } finally {
       setLoading(false);
     }
   };

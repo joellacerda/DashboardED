@@ -7,6 +7,8 @@ import {
 } from '../utils/helpers';
 import SlotModal from '../components/SlotModal';
 import SalasManagerModal from '../components/SalasManagerModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { generateId } from '../utils/storage/core';
 import { useToast } from '../contexts/ToastContext';
 
 export default function CronogramaPage() {
@@ -23,6 +25,7 @@ export default function CronogramaPage() {
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [activeSlotTarget, setActiveSlotTarget] = useState(null); // { slot, sala, day, turnoInfo }
   const [salasModalOpen, setSalasModalOpen] = useState(false);
+  const [pendingLockTarget, setPendingLockTarget] = useState(null);
 
   // Visible active rooms sorted by ordem
   const visibleSalas = useMemo(() => {
@@ -128,38 +131,42 @@ export default function CronogramaPage() {
     }
   };
 
-  // 1-Click quick lock toggle
+  const executeLockSlot = (sala, day, turnoInfo, existing) => {
+    const newSlot = {
+      ...(existing || {}),
+      id: existing?.id || generateId(),
+      data: day.id,
+      dia: day.id,
+      salaId: sala.id,
+      turno: turnoInfo.id,
+      trancado: true,
+      motivoTranca: 'Sem Expediente',
+      medico: '',
+      procedimento: '',
+      status: 'trancado',
+      updatedAt: new Date().toISOString(),
+    };
+    saveCronogramaSlot(newSlot);
+    if (toast?.show) {
+      toast.show(`Turno trancado (${sala.nome})`, 'info');
+    }
+  };
+
+  // 1-Click quick lock toggle (pede confirmação se houver médico escalado no turno)
   const handleQuickToggleLock = (e, sala, day, turnoInfo) => {
     e.stopPropagation();
     const key = `${day.id}_${sala.id}_${turnoInfo.id}`;
     const existing = slotMap.get(key);
 
     if (existing?.trancado) {
-      // Unlock
       deleteCronogramaSlot(existing.id);
       if (toast?.show) {
         toast.show(`Turno destrancado (${sala.nome})`, 'success');
       }
+    } else if (existing?.medico && existing.medico.trim()) {
+      setPendingLockTarget({ sala, day, turnoInfo, existing });
     } else {
-      // Lock
-      const newSlot = {
-        ...(existing || {}),
-        id: existing?.id || crypto.randomUUID(),
-        data: day.id,
-        dia: day.id,
-        salaId: sala.id,
-        turno: turnoInfo.id,
-        trancado: true,
-        motivoTranca: 'Sem Expediente',
-        medico: '',
-        procedimento: '',
-        status: 'trancado',
-        updatedAt: new Date().toISOString(),
-      };
-      saveCronogramaSlot(newSlot);
-      if (toast?.show) {
-        toast.show(`Turno trancado (${sala.nome})`, 'info');
-      }
+      executeLockSlot(sala, day, turnoInfo, existing);
     }
   };
 
@@ -202,8 +209,8 @@ export default function CronogramaPage() {
                 {conflicts.length > 1 ? 's' : ''}:
               </strong>
               <ul className="conflict-banner-list">
-                {conflicts.map((c, idx) => (
-                  <li key={idx}>
+                {conflicts.map((c) => (
+                  <li key={`${c.diaId || c.dayName}_${c.turno}_${c.medico}`}>
                     <strong>{c.medico}</strong> está escalado(a) simultaneamente em{' '}
                     <strong>{c.rooms.join(' e ')}</strong> na{' '}
                     <strong>
@@ -388,6 +395,28 @@ export default function CronogramaPage() {
           onSaveSalas={handleSaveSalas}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingLockTarget)}
+        onClose={() => setPendingLockTarget(null)}
+        onConfirm={() => {
+          if (pendingLockTarget) {
+            executeLockSlot(
+              pendingLockTarget.sala,
+              pendingLockTarget.day,
+              pendingLockTarget.turnoInfo,
+              pendingLockTarget.existing
+            );
+          }
+        }}
+        title="Trancar turno ocupado?"
+        confirmLabel="Trancar turno"
+        message={
+          pendingLockTarget
+            ? `O turno ${pendingLockTarget.turnoInfo?.label} (${pendingLockTarget.day?.short}) da sala "${pendingLockTarget.sala?.nome}" está alocado para ${pendingLockTarget.existing?.medico}. Trancar o turno removerá essa escala. Deseja continuar?`
+            : ''
+        }
+      />
     </>
   );
 }

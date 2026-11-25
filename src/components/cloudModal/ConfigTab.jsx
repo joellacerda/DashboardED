@@ -7,6 +7,7 @@ export default function ConfigTab({
   handleDisconnect,
   configured,
   isLoading,
+  allowDisconnect = true,
 }) {
   return (
     <form onSubmit={handleSaveConfig} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
@@ -95,7 +96,7 @@ export default function ConfigTab({
       </div>
 
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem', justifyContent: 'flex-end' }}>
-        {configured && (
+        {configured && allowDisconnect && (
           <button
             type="button"
             className="btn btn-danger"

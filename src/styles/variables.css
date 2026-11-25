@@ -36,6 +36,7 @@
   --color-blue-dim: oklch(50% 0.14 250);
   --color-red: oklch(65% 0.22 25);
   --color-red-dim: oklch(45% 0.16 25);
+  --color-rose: oklch(65% 0.22 15);
   --color-amber: oklch(78% 0.16 80);
   --color-amber-dim: oklch(55% 0.12 80);
   --color-purple: oklch(68% 0.18 300);
@@ -44,6 +45,8 @@
   --bg-app: var(--color-dark-950);
   --bg-sidebar: var(--color-dark-900);
   --bg-surface: var(--color-dark-850);
+  --bg-card: var(--color-dark-850);
+  --surface-sunken: var(--color-dark-900);
   --bg-surface-hover: var(--color-dark-800);
   --bg-surface-elevated: var(--color-dark-800);
   --bg-input: var(--color-dark-800);
@@ -53,14 +56,21 @@
   --border-medium: oklch(100% 0 0 / 0.1);
   --border-strong: oklch(100% 0 0 / 0.15);
   --border-accent: var(--color-emerald);
+  --border-focus: var(--color-emerald);
 
   --text-primary: var(--color-dark-50);
   --text-secondary: var(--color-dark-300);
   --text-muted: var(--color-dark-400);
   --text-accent: var(--color-emerald);
+  --text-danger: var(--color-red);
 
   --accent-primary: var(--color-emerald);
+  --color-primary: var(--color-emerald);
   --accent-secondary: var(--color-blue);
+  --accent-emerald: var(--color-emerald);
+  --accent-blue: var(--color-blue);
+  --accent-red: var(--color-red);
+  --accent-amber: var(--color-amber);
   --color-success: var(--color-emerald);
   --color-danger: var(--color-red);
   --color-warning: var(--color-amber);
@@ -159,5 +169,191 @@ input, select, textarea {
 table {
   border-collapse: collapse;
   width: 100%;
+}
+
+/* === Shared Keyframes & Spinners === */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.spinner-inline {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid oklch(100% 0 0 / 0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  vertical-align: middle;
+}
+
+/* === LockScreen Styles === */
+.lock-screen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(10, 15, 29, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.lock-screen-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  padding: 2.25rem 2rem;
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(59, 130, 246, 0.15);
+  text-align: center;
+  animation: fadeInScale 0.25s ease-out;
+}
+
+.lock-screen-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.4));
+  border: 2px solid rgba(96, 165, 250, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.lock-screen-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+}
+
+.lock-screen-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0 0 1.25rem;
+  line-height: 1.5;
+}
+
+.lock-screen-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+}
+
+.lock-screen-user-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-emerald);
+}
+
+.lock-screen-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+  color: #fca5a5;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.lock-screen-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lock-screen-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.lock-screen-pin-input {
+  width: 100%;
+  text-align: center;
+  font-size: 1.75rem;
+  letter-spacing: 0.4em;
+  padding: 0.65rem;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.lock-screen-pin-input:focus {
+  border-color: var(--border-focus);
+}
+
+.lock-screen-pin-input:disabled {
+  opacity: 0.5;
+}
+
+.lock-screen-submit {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.lock-screen-footer {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.lock-screen-logout-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-rose);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 

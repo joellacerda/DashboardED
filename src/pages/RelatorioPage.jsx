@@ -482,11 +482,11 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                     </strong>
                   </td>
                 </tr>
-                {Object.entries(categoriasDespesas).map(([catNome, catValor]) => {
-                  if (catValor <= 0) return null;
-                  return (
+                {Object.entries(categoriasDespesas)
+                  .filter(([, catValor]) => catValor > 0)
+                  .map(([catNome, catValor], idx) => (
                     <tr key={catNome} className="dre-row-item">
-                      <td style={{ paddingLeft: '28px' }}>5.{catNome}</td>
+                      <td style={{ paddingLeft: '28px' }}>5.{idx + 1} {catNome}</td>
                       <td style={{ textAlign: 'right', color: 'var(--color-red)' }}>
                         -{formatCurrency(catValor)}
                       </td>
@@ -496,8 +496,7 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
                           : '0,0%'}
                       </td>
                     </tr>
-                  );
-                })}
+                  ))}
 
                 {/* NÍVEL 6: RESULTADO LÍQUIDO FINAL */}
                 <tr
@@ -776,7 +775,7 @@ export default function RelatorioPage({ onNavigateToDoctor = null }) {
               <strong>{formatCurrency(folhaResumo.totalFolhaLiquida)}</strong> calculada na aba{' '}
               <em>Folha de Pagamento</em> para este período, mas ainda não há despesa lançada na categoria{' '}
               <strong>Folha de Pagamento / Pessoal</strong> no Fluxo de Caixa. Use o botão{' '}
-              <strong>&ldquo;Lançar no Fluxo de Caixa&rdquo;</strong> na guia de Folha para contabilizar esse custo no DRE.
+              <strong>&ldquo;Lançar no Caixa&rdquo;</strong> na guia de Folha para contabilizar esse custo no DRE.
             </div>
           )}
           <div className="folha-summary-grid">

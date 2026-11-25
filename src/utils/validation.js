@@ -43,11 +43,14 @@ export function validateRequired(val, fieldName = 'Este campo') {
 }
 
 export function validatePositiveNumber(val, fieldName = 'Valor', allowZero = false) {
-  if (val === '' || val === null || val === undefined) {
+  if (val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) {
     return `${fieldName} é obrigatório.`;
   }
+  if (typeof val === 'boolean') {
+    return `${fieldName} deve ser um número válido.`;
+  }
   const num = Number(val);
-  if (isNaN(num)) {
+  if (!Number.isFinite(num)) {
     return `${fieldName} deve ser um número válido.`;
   }
   if (allowZero) {
@@ -59,8 +62,21 @@ export function validatePositiveNumber(val, fieldName = 'Valor', allowZero = fal
 }
 
 export function validatePercentageSum(pct1, pct2) {
-  const p1 = Number(pct1) || 0;
-  const p2 = Number(pct2) || 0;
+  if (
+    pct1 === '' || pct1 === null || pct1 === undefined ||
+    pct2 === '' || pct2 === null || pct2 === undefined ||
+    typeof pct1 === 'boolean' || typeof pct2 === 'boolean'
+  ) {
+    return 'Informe percentuais válidos para ambos os médicos.';
+  }
+  const p1 = Number(pct1);
+  const p2 = Number(pct2);
+  if (!Number.isFinite(p1) || !Number.isFinite(p2)) {
+    return 'Os percentuais devem ser números válidos.';
+  }
+  if (p1 < 0 || p2 < 0) {
+    return 'Os percentuais não podem ser negativos.';
+  }
   const sum = Math.round((p1 + p2) * 100) / 100;
   if (sum !== 100) {
     return `A soma dos percentuais (${sum}%) deve totalizar exatamente 100%.`;

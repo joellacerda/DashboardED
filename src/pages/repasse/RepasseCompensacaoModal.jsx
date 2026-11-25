@@ -28,12 +28,11 @@ export default function RepasseCompensacaoModal({ viewingCompensacao, onClose })
             color: 'var(--color-amber)',
           }}
         >
-          💡 <strong>Dedução Automática de Materiais & Procedimentos (Centralizada no Dr. Oliveira):</strong>
+          💡 <strong>Dedução Automática de Materiais &amp; Procedimentos ({viewingCompensacao?.doctor || 'Titular'}):</strong>
           <div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)' }}>
-            Como o <strong>Dr. Oliveira</strong> centraliza o recebimento dos proventos da Unimed e
-            os repassa aos demais médicos, todas as compensações de materiais descartáveis (100% da
-            alça) e 50% de polipectomias registradas nos exames do período (inclusive de outros
-            médicos realizantes) são lançadas no demonstrativo dele. O total de{' '}
+            Como <strong>{viewingCompensacao?.doctor || 'o médico titular'}</strong> centraliza o recebimento dos proventos de convênio,
+            todas as compensações de materiais descartáveis (alça) e percentual de polipectomias registradas nos exames do período
+            são lançadas neste demonstrativo. O total de{' '}
             <strong style={{ color: 'var(--color-amber)' }}>
               {formatCurrency(viewingCompensacao?.total || 0)}
             </strong>{' '}

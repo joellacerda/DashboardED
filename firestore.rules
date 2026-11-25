@@ -1,9 +1,83 @@
 rules_version = '2';
+
+// =============================================================================
+// Dashboard Endodiagnose — Cloud Firestore Security Rules (LGPD & RBAC)
+// =============================================================================
+//
+// COMO AUTORIZAR USUÁRIOS DA CLÍNICA (FAIL-CLOSED POR PADRÃO):
+// -----------------------------------------------------------------------------
+// Qualquer usuário autenticado no Firebase Auth tem acesso NEGADO por padrão,
+// mesmo com e-mail verificado, até ser explicitamente autorizado por UM dos
+// dois mecanismos abaixo (gerenciáveis apenas via Firebase Console ou Admin SDK):
+//
+// OPÇÃO A — Coleção de Controle de Acesso (`/authorizedUsers/{uid}`):
+//   1. No Firebase Console > Authentication > Users, copie o UID do usuário.
+//   2. Em Firestore Database, crie a coleção `authorizedUsers`.
+//   3. Crie um documento com ID igual ao UID do usuário, ex.:
+//        Document ID: "<UID_DO_USUARIO>"
+//        Campos sugeridos:
+//          {
+//            "email": "nome@endodiagnose.com.br",
+//            "role": "staff",   // ou "admin"
+//            "active": true
+//          }
+//   4. Para revogar o acesso imediatamente, altere `"active": false` ou exclua
+//      o documento em `authorizedUsers/{uid}`.
+//   (Nota: a escrita cliente em `authorizedUsers` é estritamente bloqueada.)
+//
+// OPÇÃO B — Custom Claims via Firebase Admin SDK (zero leitura extra no Firestore):
+//   admin.auth().setCustomUserClaims(uid, { authorized: true, role: 'staff' });
+//   // Papéis aceitos: 'admin' ou 'staff' (ou flag booleana authorized: true).
+//
+// =============================================================================
+// Assumed Data Model
+// =============================================================================
+//
+// Collection: authorizedUsers
+// Document ID: {userId} (Firebase Auth UID)
+// Fields:
+//   - email: string (optional) - e-mail institucional do colaborador
+//   - role: string (optional, 'admin' | 'staff') - perfil de acesso
+//   - active: bool (optional, default true) - permite revogação rápida
+// Access: read only by owner (`request.auth.uid == userId`); write denied to clients.
+//
+// Collections: auditLogs, audit_logs (Append-Only LGPD)
+// Document ID: {logId} (UUID, <= 128 chars)
+// Fields:
+//   - id: string (optional, must match logId, <= 128 chars)
+//   - timestamp: string (<= 64 chars) | timestamp (required)
+//   - updatedAt: string (<= 64 chars) | timestamp (optional)
+//   - acao: string (required, 1..100 chars)
+//   - modulo: string (required, 1..100 chars)
+//   - descricao: string (optional, <= 2000 chars)
+//   - detalhes: map (<= 30 keys) | string (<= 2000 chars) | null (optional)
+//   - usuario: string (optional, <= 200 chars)
+// Access: read & create by authorized users; update & delete strictly denied.
+//
+// Main Collections:
+//   exames, fluxoCaixa, detalhesExames, folhaPagamento, medicos,
+//   repassesAjustes, examesConvenio, cronogramaSalas, salasConfig
+// Document ID: {docId} (UUID or entity ID, 1..128 chars)
+// Fields:
+//   - Dynamic clinic domain fields (1..80 keys per document)
+//   - id: string (optional, if present must match docId, immutable on update)
+//   - createdAt: string (<= 64 chars) | timestamp | null (optional, immutable on update)
+//   - updatedAt: string (<= 64 chars) | timestamp | null (optional)
+//   - deletedAt: string (<= 64 chars) | timestamp | null (optional, soft-delete tombstone)
+//   - _deleted: bool (optional, soft-delete tombstone)
+// Access: read, create, update, delete by authorized users with payload validation.
+//
+// Legacy Collections (Read-Only for Migration):
+//   detalhes, convenios, folha, cronograma, consultas, categorias, metadata
+// Access: read only by authorized users; write strictly denied.
+//
+// =============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // Funções Auxiliares de Segurança e Conformidade LGPD
+    // Helper Functions — Autenticação, Autorização e Validação
     // =========================================================================
 
     // Verifica se o usuário está autenticado no Firebase Authentication
@@ -11,121 +85,255 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
-    // Verifica se o e-mail do usuário foi verificado (quando aplicável)
+    // Verifica se o usuário autenticado é o proprietário do recurso pelo UID
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verifica se o e-mail do usuário foi verificado (ou login via Google)
     function isEmailVerified() {
-      return isAuthenticated() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+      return isAuthenticated() && (
+        ('email_verified' in request.auth.token && request.auth.token.email_verified == true) ||
+        ('firebase' in request.auth.token &&
+         'sign_in_provider' in request.auth.token.firebase &&
+         request.auth.token.firebase.sign_in_provider == 'google.com')
+      );
+    }
+
+    // Verifica autorização via Custom Claims assinados pelo Firebase Admin SDK
+    function hasAuthorizedClaim() {
+      return isEmailVerified() && (
+        ('authorized' in request.auth.token && request.auth.token.authorized == true) ||
+        ('role' in request.auth.token && request.auth.token.role in ['admin', 'staff'])
+      );
+    }
+
+    // Verifica autorização via documento ativo na coleção /authorizedUsers/{uid}
+    function isInAuthorizedUsers() {
+      return isEmailVerified() &&
+        exists(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.get('active', true) == true;
+    }
+
+    // Autorização efetiva (Fail-Closed): exige e-mail verificado + claim ou registro em authorizedUsers
+    function isAuthorized() {
+      return hasAuthorizedClaim() || isInAuthorizedUsers();
+    }
+
+    // Valida presença de campos obrigatórios
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Valida lista estrita de campos permitidos
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Valida string opcional com limite de tamanho
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+        (data[field] is string &&
+         data[field].size() >= minLen &&
+         data[field].size() <= maxLen);
+    }
+
+    // Valida data/timestamp opcional (ISO string <= 64 chars, timestamp ou null)
+    function isValidOptionalDateValue(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        data[field] is timestamp ||
+        (data[field] is string && data[field].size() <= 64);
     }
 
     // =========================================================================
-    // Coleção de Auditoria (auditLogs / audit_logs)
-    // Conformidade LGPD: Append-Only imutável.
-    // Qualquer usuário autenticado pode registrar ações e ler registros de auditoria,
-    // mas NINGUÉM pode alterar ou deletar logs existentes na nuvem.
+    // Domain Validators (aplicados em create e update)
+    // =========================================================================
+
+    // Valida registros de auditoria (append-only LGPD)
+    function isValidAuditLog(logId) {
+      let data = request.resource.data;
+      return logId.size() > 0 && logId.size() <= 128 &&
+        data.keys().size() >= 3 && data.keys().size() <= 15 &&
+        hasRequiredFields(['acao', 'modulo', 'timestamp']) &&
+        hasOnlyAllowedFields(['id', 'timestamp', 'updatedAt', 'acao', 'modulo', 'descricao', 'detalhes', 'usuario']) &&
+        (!('id' in data) || (data.id is string && data.id == logId && data.id.size() > 0 && data.id.size() <= 128)) &&
+        data.acao is string && data.acao.size() > 0 && data.acao.size() <= 100 &&
+        data.modulo is string && data.modulo.size() > 0 && data.modulo.size() <= 100 &&
+        (data.timestamp is timestamp || (data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 64)) &&
+        isValidOptionalDateValue(data, 'updatedAt') &&
+        isValidOptionalString(data, 'descricao', 0, 2000) &&
+        isValidOptionalString(data, 'usuario', 0, 200) &&
+        (!('detalhes' in data) ||
+          data.detalhes == null ||
+          (data.detalhes is map && data.detalhes.keys().size() <= 30) ||
+          (data.detalhes is string && data.detalhes.size() <= 2000));
+    }
+
+    // Valida registros das coleções principais da clínica (create e update)
+    function isValidClinicRecord(docId) {
+      let data = request.resource.data;
+      return docId.size() > 0 && docId.size() <= 128 &&
+        data.keys().size() > 0 && data.keys().size() <= 80 &&
+        (!('id' in data) || (data.id is string && data.id == docId)) &&
+        isValidOptionalDateValue(data, 'createdAt') &&
+        isValidOptionalDateValue(data, 'updatedAt') &&
+        isValidOptionalDateValue(data, 'deletedAt') &&
+        (!('_deleted' in data) || data._deleted is bool);
+    }
+
+    // Garante imutabilidade de metadados estruturais (id e createdAt) em updates
+    function isImmutableMetadataUnchanged() {
+      return (!('id' in resource.data) ||
+              ('id' in request.resource.data && request.resource.data.id == resource.data.id)) &&
+        (!('createdAt' in resource.data) ||
+         ('createdAt' in request.resource.data && request.resource.data.createdAt == resource.data.createdAt));
+    }
+
+    // =========================================================================
+    // Controle de Acesso (/authorizedUsers/{userId})
+    // Apenas o próprio usuário pode ler seu registro; escrita cliente bloqueada.
+    // =========================================================================
+    match /authorizedUsers/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Coleções de Auditoria (auditLogs / audit_logs)
+    // Conformidade LGPD: estritamente Append-Only e imutáveis na nuvem.
     // =========================================================================
     match /auditLogs/{logId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidAuditLog(logId);
       allow update, delete: if false; // Imutabilidade estrita
     }
 
     match /audit_logs/{logId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidAuditLog(logId);
       allow update, delete: if false; // Imutabilidade estrita
     }
 
     // =========================================================================
-    // Coleções Principais do Sistema (MODULES - src/utils/storage/core.js)
-    // Acesso permitido a usuários devidamente autenticados
+    // Coleções Principais do Sistema (MODULES — src/utils/storage/core.js)
+    // Acesso restrito a usuários autorizados + validação de payload em create/update
     // =========================================================================
 
     // Pacientes e Exames
     match /exames/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Fluxo de Caixa Consolidado
     match /fluxoCaixa/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Detalhes dos Exames e Repasses
     match /detalhesExames/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Folha de Pagamento
     match /folhaPagamento/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Corpo Clínico (Médicos e Honorários)
     match /medicos/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Ajustes e Histórico de Repasses
     match /repassesAjustes/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Exames por Convênio e Tabelas de Procedimentos
     match /examesConvenio/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Cronograma e Escalas de Salas
     match /cronogramaSalas/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // Configuração de Salas e Recursos Físicos
     match /salasConfig/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidClinicRecord(docId);
+      allow update: if isAuthorized() && isValidClinicRecord(docId) && isImmutableMetadataUnchanged();
+      allow delete: if isAuthorized();
     }
 
     // =========================================================================
-    // Coleções Legadas (Compatibilidade Regressiva)
-    // Mantidas para suporte a versões anteriores do esquema
+    // Coleções Legadas (Somente-Leitura para Migração)
+    // Escrita cliente bloqueada; leitura restrita a usuários autorizados.
     // =========================================================================
 
-    // Detalhes Financeiros dos Exames (legado)
     match /detalhes/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Convênios e Fluxos de Recebimento (legado)
     match /convenios/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Folha de Pagamento (legado)
     match /folha/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Cronograma de Exames e Escalas (legado)
     match /cronograma/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Consultas Clínicas (legado)
     match /consultas/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Categorias Financeiras (legado)
     match /categorias/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
-    // Metadados do Sistema e Versão do Esquema (legado)
     match /metadata/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
     // =========================================================================
-    // Regra Padrão: Bloqueia qualquer acesso a coleções não declaradas
+    // Regra Padrão (Default Deny): Bloqueia qualquer coleção não declarada
     // =========================================================================
     match /{document=**} {
       allow read, write: if false;

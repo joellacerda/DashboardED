@@ -94,6 +94,7 @@ export default function DivisaoMedicosSection({
                     placeholder="50.00"
                     value={form.porcentagemMedico1}
                     onChange={(e) => {
+                      markTouched('divisao');
                       const raw = e.target.value;
                       if (raw === '') {
                         setForm((f) => ({ ...f, porcentagemMedico1: '', porcentagemMedico2: '' }));
@@ -105,6 +106,7 @@ export default function DivisaoMedicosSection({
                       const other = Math.round((100 - clamped) * 100) / 100;
                       setForm((f) => ({ ...f, porcentagemMedico1: raw, porcentagemMedico2: other }));
                     }}
+                    onBlur={() => markTouched('divisao')}
                   />
                 </div>
                 <div className="input-group">
@@ -118,6 +120,7 @@ export default function DivisaoMedicosSection({
                     placeholder="50.00"
                     value={form.porcentagemMedico2}
                     onChange={(e) => {
+                      markTouched('divisao');
                       const raw = e.target.value;
                       if (raw === '') {
                         setForm((f) => ({ ...f, porcentagemMedico2: '', porcentagemMedico1: '' }));
@@ -129,10 +132,11 @@ export default function DivisaoMedicosSection({
                       const other = Math.round((100 - clamped) * 100) / 100;
                       setForm((f) => ({ ...f, porcentagemMedico2: raw, porcentagemMedico1: other }));
                     }}
+                    onBlur={() => markTouched('divisao')}
                   />
                 </div>
               </div>
-              {hasError('divisao') ? (
+              {validationErrors.divisao ? (
                 <div className="input-feedback-error" style={{ marginTop: '-0.25rem' }}>
                   <span>⚠</span> {validationErrors.divisao}
                 </div>
@@ -145,32 +149,47 @@ export default function DivisaoMedicosSection({
               )}
             </>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div className="input-group">
-                <label className="input-label">R$ {form.medico || 'Médico 1'}</label>
-                <input
-                  type="number"
-                  className="input-field"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                  value={form.valorMedico1}
-                  onChange={(e) => updateField('valorMedico1', e.target.value)}
-                />
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="input-group">
+                  <label className="input-label">R$ {form.medico || 'Médico 1'}</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    min="0"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={form.valorMedico1}
+                    onChange={(e) => {
+                      markTouched('divisao');
+                      updateField('valorMedico1', e.target.value);
+                    }}
+                    onBlur={() => markTouched('divisao')}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">R$ {form.medico2 || 'Médico 2'}</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    min="0"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={form.valorMedico2}
+                    onChange={(e) => {
+                      markTouched('divisao');
+                      updateField('valorMedico2', e.target.value);
+                    }}
+                    onBlur={() => markTouched('divisao')}
+                  />
+                </div>
               </div>
-              <div className="input-group">
-                <label className="input-label">R$ {form.medico2 || 'Médico 2'}</label>
-                <input
-                  type="number"
-                  className="input-field"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                  value={form.valorMedico2}
-                  onChange={(e) => updateField('valorMedico2', e.target.value)}
-                />
-              </div>
-            </div>
+              {hasError('divisao') && (
+                <div className="input-feedback-error" style={{ marginTop: '-0.25rem' }}>
+                  <span>⚠</span> {validationErrors.divisao}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

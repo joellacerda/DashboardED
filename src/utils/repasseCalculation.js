@@ -2,6 +2,7 @@ import {
   roundCurrency,
   isDateInPeriod,
   isDoctorMatch,
+  isConvenioDetalhe,
   getHonorarioMedicoInPeriod,
   getDoctorCompensacaoInPeriod,
   isCompensacaoTargetDoctor,
@@ -29,7 +30,7 @@ export function getAllDoctors(data = {}) {
 
   const registeredNames = new Set(list.map((m) => m.nome));
 
-  const addIfMissing = (name) => {
+  const addIfMissing = (name, defaultSocio = false) => {
     if (!name) return;
     const clean = name.trim().toUpperCase();
     if (!clean || registeredNames.has(clean)) return;
@@ -37,7 +38,7 @@ export function getAllDoctors(data = {}) {
     list.push({
       id: `auto_${clean}`,
       nome: clean,
-      socio: true,
+      socio: defaultSocio,
       ativo: true,
       auto: true,
     });
@@ -51,8 +52,8 @@ export function getAllDoctors(data = {}) {
   examesConvenio.forEach((c) => {
     addIfMissing(c.medico);
     addIfMissing(c.medico2);
-    if (Number(c.valorCompensacaoClinica) > 0 && !list.some((d) => isCompensacaoTargetDoctor(d.nome))) {
-      addIfMissing('DR. OLIVEIRA');
+    if (Number(c.valorCompensacaoClinica) > 0 && !list.some((d) => isCompensacaoTargetDoctor(d))) {
+      addIfMissing('DR. OLIVEIRA', false);
     }
   });
 
@@ -78,7 +79,7 @@ export function getAllDoctors(data = {}) {
     if (aHasOrd !== bHasOrd) {
       return aHasOrd ? -1 : 1;
     }
-    return a.nome.localeCompare(b.nome);
+    return a.nome.localeCompare(b.nome, 'pt-BR');
   });
 }
 
@@ -132,10 +133,11 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
         ativo: doctorOrName.ativo !== false,
       }
       : allDoctors.find((d) => isDoctorMatch(doctorOrName, d.nome, d.id))) || {
-    id: targetName,
+    id: `auto_${targetName}`,
     nome: targetName,
-    socio: true,
+    socio: false,
     ativo: true,
+    auto: true,
   };
 
   const isSocio = doctor.socio !== false;
@@ -154,7 +156,7 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
 
   detalhesExames.forEach((exam) => {
     if (!exam) return;
-    const isConv = Boolean(exam.isConvenio || exam.origemConvenioId || String(exam.id || '').startsWith('conv_'));
+    const isConv = isConvenioDetalhe(exam);
     if (isConv) {
       const originId = exam.origemConvenioId || String(exam.id || '').replace(/^conv_/, '');
       if (originId) syncedConvenioIds.add(String(originId));
@@ -187,12 +189,20 @@ export function calculateDoctorRepasseInPeriod(doctorOrName, period, data = {}, 
   const honTotal = honParticular + honConvenio;
 
   // 3. Compensações de materiais/alças/polipectomia devidas à clínica
-  const compensacaoInfo = getDoctorCompensacaoInPeriod(doctor.nome, period, examesConvenio);
+  const compensacaoInfo = getDoctorCompensacaoInPeriod(doctor, period, examesConvenio);
   const compensacaoConvenios = compensacaoInfo.total;
 
-  // 4. Ajustes manuais do período
+  // 4. Ajustes manuais do período (busca por chave exata, medicoId ou nome normalizado sem acentos)
   const key = `${doctor.nome.toLowerCase()}_${period.start}`;
-  const ajuste = repassesAjustes.find((a) => a.key === key) || {};
+  const ajuste =
+    repassesAjustes.find(
+      (a) =>
+        a &&
+        (a.key === key ||
+          (a.periodStart === period.start &&
+            ((doctor.id && !doctor.auto && a.medicoId && String(a.medicoId) === String(doctor.id)) ||
+              isDoctorMatch(doctor, a.medicoNome, a.medicoId))))
+    ) || {};
 
   const creditos = Number(ajuste.creditos) || 0;
   const debitos = Number(ajuste.debitos) || 0;
@@ -278,7 +288,7 @@ export function calculateAllDoctorsRepasseInPeriod(period, data = {}) {
     totalSaidasFluxo,
     deficitClinica,
     countSocios,
-    cotaPorSocio,
+    cotaPorSocio: roundCurrency(cotaPorSocio),
     rows,
   };
 }
