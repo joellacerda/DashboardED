@@ -572,6 +572,13 @@
     border-bottom: 2px solid #000000 !important;
   }
 
+  .dre-row-obs td {
+    background: #f9fafb !important;
+    color: #1f2937 !important;
+    padding: 6px 10px !important;
+    font-size: 7.5pt !important;
+  }
+
   .table-total-row td {
     background: #f3f4f6 !important;
     font-weight: bold !important;

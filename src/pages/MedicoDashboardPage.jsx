@@ -89,6 +89,10 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
   const filteredProcedimentos = useMemo(() => {
     if (!metrics?.procedimentos) return [];
     return metrics.procedimentos.filter((p) => {
+      // Exibe apenas procedimentos com honorário acima de R$ 0,00
+      const honorarioMedico = Number(p.honorarioMedico) || 0;
+      if (honorarioMedico <= 0) return false;
+
       // Filtro de Tipo
       if (tipoFilter === 'particular' && p.tipo !== 'Particular') return false;
       if (tipoFilter === 'convenio' && p.tipo !== 'Convênio') return false;
@@ -386,7 +390,7 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
         </div>
 
         {/* Evolução Histórica dos Repasses (Últimos 6 Períodos) */}
-        <div className="chart-card" style={{ marginBottom: '1.75rem' }}>
+        <div className="chart-card no-print" style={{ marginBottom: '1.75rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <div>
               <h3 className="chart-card-title" style={{ margin: 0 }}>
@@ -674,8 +678,8 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                 </tr>
 
                 {obs && (
-                  <tr>
-                    <td colSpan="2" style={{ padding: '12px 20px', background: 'var(--bg-surface-hover)', fontSize: 'var(--text-xs)' }}>
+                  <tr className="dre-row-obs">
+                    <td colSpan="2">
                       <strong>Observações do Fechamento:</strong> {obs}
                     </td>
                   </tr>
@@ -691,7 +695,7 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
             <div>
               <h3 className="table-title">Extrato Detalhado de Procedimentos ({filteredProcedimentos.length})</h3>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Todos os exames realizados ou com repasses apropriados nesta competência
+                Exames com valor acima de R$ 0,00 ou com repasses apropriados nesta competência
               </div>
             </div>
 
@@ -737,21 +741,20 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
           </div>
 
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table medico-extrato-table">
               <thead>
                 <tr>
-                  <th style={{ width: '10%' }}>Data</th>
-                  <th style={{ width: '25%' }}>Paciente</th>
-                  <th style={{ width: '25%' }}>Procedimento</th>
-                  <th style={{ width: '12%' }}>Origem</th>
-                  <th style={{ width: '13%', textAlign: 'right' }}>Valor Total</th>
+                  <th style={{ width: '12%' }}>Data</th>
+                  <th style={{ width: '32%' }}>Paciente</th>
+                  <th style={{ width: '26%' }}>Procedimento</th>
+                  <th style={{ width: '15%' }}>Origem</th>
                   <th style={{ width: '15%', textAlign: 'right' }}>Honorário</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProcedimentos.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
                       Nenhum procedimento encontrado para os filtros selecionados.
                     </td>
                   </tr>
@@ -759,11 +762,11 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                   filteredProcedimentos.map((proc) => (
                     <tr key={proc.id}>
                       <td>{proc.data}</td>
-                      <td>
+                      <td title={proc.paciente}>
                         <strong>{proc.paciente}</strong>
                       </td>
-                      <td>
-                        <span title={proc.exame}>{proc.exame}</span>
+                      <td title={proc.exame}>
+                        <span>{proc.exame}</span>
                         {proc.isSplit && (
                           <span
                             className="badge badge-warning"
@@ -783,9 +786,6 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                           </span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                        {formatCurrency(proc.valorTotal)}
-                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-emerald)' }}>
                         {formatCurrency(proc.honorarioMedico)}
                       </td>
@@ -798,13 +798,6 @@ export default function MedicoDashboardPage({ initialDoctor = null }) {
                   <tr className="table-total-row">
                     <td colSpan="4">
                       <strong>TOTAL DOS PROCEDIMENTOS FILTRADOS ({filteredProcedimentos.length})</strong>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <strong>
-                        {formatCurrency(
-                          filteredProcedimentos.reduce((s, p) => s + (p.valorTotal || 0), 0)
-                        )}
-                      </strong>
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--color-emerald)', fontSize: '0.98rem' }}>
                       <strong>

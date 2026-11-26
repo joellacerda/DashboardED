@@ -152,3 +152,57 @@
   border-radius: var(--radius-sm);
 }
 
+.dre-row-obs td {
+  padding: 12px 20px;
+  background: var(--bg-surface-hover);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+/* Tabela de Extrato Detalhado de Procedimentos — todas as colunas visíveis na tela */
+.medico-extrato-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.medico-extrato-table th,
+.medico-extrato-table td {
+  padding: 0.7rem 0.6rem;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.medico-extrato-table th:first-child,
+.medico-extrato-table td:first-child {
+  padding-inline-start: 1rem;
+}
+
+.medico-extrato-table th:last-child,
+.medico-extrato-table td:last-child {
+  padding-inline-end: 1rem;
+}
+
+.medico-extrato-table td:nth-child(5) {
+  font-variant-numeric: tabular-nums;
+}
+
+.medico-extrato-table .badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+  .medico-extrato-table {
+    min-width: 640px;
+  }
+}
+
