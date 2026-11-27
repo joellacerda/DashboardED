@@ -14,6 +14,7 @@ import {
   PROCEDIMENTOS_COMPLEMENTARES,
   normalizeProcedimentosComplementares,
   formatProcedimentosComplementares,
+  matchParticularExamToDetalhe,
 } from '../utils/helpers';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -21,6 +22,7 @@ import ExportMenu from '../components/ExportMenu';
 import AutoCompleteInput from '../components/AutoCompleteInput';
 import Pagination from '../components/Pagination';
 import ConvenioFluxoModal from '../components/ConvenioFluxoModal';
+import DetalhesFormModal from '../components/DetalhesFormModal';
 import PeriodSelector from '../components/PeriodSelector';
 import { useToast } from '../contexts/ToastContext';
 import { validateDate, validateRequired } from '../utils/validation';
@@ -56,7 +58,7 @@ const DEFAULT_CONVENIOS = [
 ];
 
 const emptyForm = {
-  modalidade: 'PARTICULAR', // 'PARTICULAR' | 'CONVENIO'
+  modalidade: 'CONVENIO', // 'PARTICULAR' | 'CONVENIO'
   data: '',
   paciente: '',
   medico: '',
@@ -101,7 +103,7 @@ const columns = [
   },
 ];
 
-export default function ExamesPage({ onNavigateToDetalhes }) {
+export default function ExamesPage() {
   const toast = useToast();
   const {
     exames: particularesData = [],
@@ -129,6 +131,24 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [fluxoModalItem, setFluxoModalItem] = useState(null);
+  const [detalhesModalOpen, setDetalhesModalOpen] = useState(false);
+  const [detalhesEditItem, setDetalhesEditItem] = useState(null);
+  const [detalhesPrefillData, setDetalhesPrefillData] = useState(null);
+
+  const openDetalhesModal = (examData) => {
+    const existing = (detalhesExames || []).find((d) =>
+      matchParticularExamToDetalhe(examData, d)
+    );
+    setDetalhesEditItem(existing || null);
+    setDetalhesPrefillData(existing ? null : examData);
+    setDetalhesModalOpen(true);
+  };
+
+  const closeDetalhesModal = () => {
+    setDetalhesModalOpen(false);
+    setDetalhesEditItem(null);
+    setDetalhesPrefillData(null);
+  };
 
   // Remove detalhe(s) particular(es) e seus lançamentos vinculados no Fluxo de Caixa (evita receitas fantasmas)
   const deleteParticularCascade = (examId) => {
@@ -456,10 +476,7 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
 
   const openNew = () => {
     setEditItem(null);
-    const defaultModalidade =
-      tipoFilter === '__CONVENIOS__' || (tipoFilter && tipoFilter !== '__PARTICULAR__')
-        ? 'CONVENIO'
-        : 'PARTICULAR';
+    const defaultModalidade = tipoFilter === '__PARTICULAR__' ? 'PARTICULAR' : 'CONVENIO';
     const defaultConvenio =
       tipoFilter && tipoFilter !== '__PARTICULAR__' && tipoFilter !== '__CONVENIOS__'
         ? tipoFilter
@@ -643,8 +660,8 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         : 'Exame particular cadastrado com sucesso!'
     );
 
-    if (isNew && onNavigateToDetalhes) {
-      onNavigateToDetalhes({
+    if (isNew) {
+      openDetalhesModal({
         id: savedItem?.id,
         data: sanitizedParticular.data,
         paciente: sanitizedParticular.paciente,
@@ -944,18 +961,21 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
                               <button
                                 className={`btn btn-ghost btn-icon btn-sm ${item.caixaLancado ? 'btn-active-success' : ''}`}
                                 onClick={() => {
-                                  if (onNavigateToDetalhes) {
-                                    onNavigateToDetalhes({
-                                      id: item.id,
-                                      data: item.data,
-                                      paciente: item.paciente,
-                                      tipoExame: item.exame,
-                                      medico: item.medico,
-                                      procedimentoComplementar: item.procedimentoComplementar || '',
-                                    });
-                                  }
+                                  openDetalhesModal({
+                                    id: item.id,
+                                    detalheId: item.detalheId,
+                                    data: item.data,
+                                    paciente: item.paciente,
+                                    tipoExame: item.exame,
+                                    medico: item.medico,
+                                    procedimentoComplementar: item.procedimentoComplementar || '',
+                                  });
                                 }}
-                                title="Preencher / Ver Dados Financeiros em Detalhes"
+                                title={
+                                  item.caixaLancado
+                                    ? 'Ver / Editar Valores Financeiros do Exame'
+                                    : 'Preencher Valores Financeiros do Exame'
+                                }
                               >
                                 💳
                               </button>
@@ -1198,6 +1218,14 @@ export default function ExamesPage({ onNavigateToDetalhes }) {
         item={fluxoModalItem}
         onClose={() => setFluxoModalItem(null)}
         onSuccess={() => {}}
+      />
+
+      <DetalhesFormModal
+        isOpen={detalhesModalOpen}
+        editItem={detalhesEditItem}
+        prefillData={detalhesPrefillData}
+        onClose={closeDetalhesModal}
+        onSuccess={closeDetalhesModal}
       />
 
       <ConfirmDialog
